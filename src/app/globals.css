@@ -169,6 +169,87 @@ html, body {
   border-color: #9fcafb;
 }
 
+/* Store product theatre and live volume-pricing control */
+.product-stage {
+  background:
+    radial-gradient(circle at 50% 44%, rgba(54, 117, 168, 0.24), transparent 38%),
+    radial-gradient(circle at 50% 76%, rgba(247, 187, 35, 0.12), transparent 32%),
+    linear-gradient(145deg, #0b263a 0%, #061724 55%, #04111b 100%);
+}
+
+.product-stage-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(circle at center, black, transparent 75%);
+  -webkit-mask-image: radial-gradient(circle at center, black, transparent 75%);
+}
+
+.studio-image-mask {
+  mask-image: linear-gradient(to right, transparent 0%, black 20%, black 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 20%, black 80%, transparent 100%);
+}
+
+.quantity-slider {
+  height: 22px;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  background: transparent;
+}
+
+.quantity-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    #f7bb23 0%,
+    #f7bb23 var(--slider-progress),
+    rgba(255, 255, 255, 0.12) var(--slider-progress),
+    rgba(255, 255, 255, 0.12) 100%
+  );
+}
+
+.quantity-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.quantity-slider::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: #f7bb23;
+}
+
+.quantity-slider::-webkit-slider-thumb {
+  width: 22px;
+  height: 22px;
+  margin-top: -8px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 4px solid #f7bb23;
+  border-radius: 999px;
+  background: #071724;
+  box-shadow: 0 0 0 4px rgba(247, 187, 35, 0.14), 0 3px 12px rgba(0, 0, 0, 0.45);
+}
+
+.quantity-slider::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border: 4px solid #f7bb23;
+  border-radius: 999px;
+  background: #071724;
+  box-shadow: 0 0 0 4px rgba(247, 187, 35, 0.14), 0 3px 12px rgba(0, 0, 0, 0.45);
+}
+
+.quantity-slider:focus-visible {
+  outline: 2px solid #9fcafb;
+  outline-offset: 4px;
+  border-radius: 999px;
+}
+
 /* Material Symbols configuration */
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined', sans-serif;

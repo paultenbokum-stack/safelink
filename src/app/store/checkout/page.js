@@ -1,10 +1,17 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { getHousehold, createOrder, createDevice } from '@/lib/db';
 import AuthGuard from '@/app/components/AuthGuard';
+import {
+  SENTINEL_PRODUCTS,
+  VAT_RATE,
+  formatZAR,
+  getLinePriceBreakdown,
+  roundCurrency,
+} from '@/lib/products';
 
 const PAYSTACK_KEY = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || '';
 
@@ -26,8 +33,6 @@ function CheckoutContent() {
   const [busy, setBusy]       = useState(false);
   const [error, setError]     = useState('');
   const [orderId, setOrderId] = useState(null);
-  const [refCode, setRefCode] = useState('');
-
   const [delivery, setDelivery] = useState({
     name: '', phone: '', addressLine1: '',
     suburb: '', city: '', province: '', postalCode: '',
@@ -36,7 +41,8 @@ function CheckoutContent() {
   useEffect(() => {
     const stored = sessionStorage.getItem('safelink_cart');
     if (!stored) { router.replace('/store'); return; }
-    setCart(JSON.parse(stored));
+    const timer = window.setTimeout(() => setCart(JSON.parse(stored)), 0);
+    return () => window.clearTimeout(timer);
   }, [router]);
 
   useEffect(() => {
@@ -57,9 +63,13 @@ function CheckoutContent() {
     });
   }, [user]);
 
-  const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
-  const vat      = Math.round(subtotal * 0.15);
-  const total    = subtotal + vat;
+  const pricedCart = cart.map((item) => {
+    const product = SENTINEL_PRODUCTS.find((candidate) => candidate.id === item.id) ?? item;
+    return { ...item, ...getLinePriceBreakdown(product, item.qty) };
+  });
+  const subtotal = roundCurrency(pricedCart.reduce((sum, item) => sum + item.subtotalExVat, 0));
+  const vat      = roundCurrency(subtotal * VAT_RATE);
+  const total    = roundCurrency(subtotal + vat);
 
   const updateDelivery = (field) => (e) =>
     setDelivery(d => ({ ...d, [field]: e.target.value }));
@@ -74,8 +84,10 @@ function CheckoutContent() {
     const handler = window.PaystackPop.setup({
       key:       PAYSTACK_KEY,
       email:     user.email,
-      amount:    total * 100, // Paystack uses kobo/cents
+      amount:    Math.round(total * 100), // Paystack uses kobo/cents
       currency:  'ZAR',
+      // A unique reference must be created at the moment payment is initiated.
+      // eslint-disable-next-line react-hooks/purity
       ref:       `SBSec-${Date.now()}`,
       metadata: {
         household_id: user.uid,
@@ -97,7 +109,7 @@ function CheckoutContent() {
     setError('');
     try {
       const newOrderId = await createOrder(user.uid, {
-        items:       cart,
+        items:       pricedCart,
         subtotal,
         vat,
         total,
@@ -172,18 +184,20 @@ function CheckoutContent() {
       {step === 1 && (
         <div className="checkout-body">
           <h2 className="section-head">Order Summary</h2>
-          {cart.map(item => (
+          {pricedCart.map(item => (
             <div key={item.id} className="cart-line">
               <div className="cart-line-name">
                 <div style={{ fontWeight: 700 }}>{item.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Qty: {item.qty}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  Qty: {item.qty.toLocaleString('en-ZA')} at {formatZAR(item.unitPriceExVat)} ex VAT
+                </div>
               </div>
-              <div className="cart-line-price">R{(item.price * item.qty).toLocaleString()}</div>
+              <div className="cart-line-price">{formatZAR(item.subtotalExVat)}</div>
             </div>
           ))}
-          <div className="price-row"><span>Subtotal</span><span>R{subtotal.toLocaleString()}</span></div>
-          <div className="price-row"><span>VAT (15%)</span><span>R{vat.toLocaleString()}</span></div>
-          <div className="price-row total"><span>Total</span><span>R{total.toLocaleString()}</span></div>
+          <div className="price-row"><span>Subtotal ex VAT</span><span>{formatZAR(subtotal)}</span></div>
+          <div className="price-row"><span>VAT (15%)</span><span>{formatZAR(vat)}</span></div>
+          <div className="price-row total"><span>Total incl. VAT</span><span>{formatZAR(total)}</span></div>
           <button className="checkout-btn" onClick={() => setStep(2)}>Confirm Order →</button>
         </div>
       )}
@@ -214,7 +228,7 @@ function CheckoutContent() {
           <h2 className="section-head">Payment</h2>
           <div className="payment-summary-card">
             <div className="psc-label">Amount due</div>
-            <div className="psc-amount">R{total.toLocaleString()}</div>
+            <div className="psc-amount">{formatZAR(total)}</div>
             <div className="psc-items">{cart.reduce((s, i) => s + i.qty, 0)} item{cart.length !== 1 ? 's' : ''} · delivery to {delivery.suburb}</div>
           </div>
 
@@ -231,7 +245,7 @@ function CheckoutContent() {
           </div>
 
           <button className="checkout-btn paystack-pay-btn" onClick={initPaystack} disabled={busy}>
-            {busy ? <span className="spinner" /> : `Pay R${total.toLocaleString()} Securely →`}
+            {busy ? <span className="spinner" /> : `Pay ${formatZAR(total)} Securely →`}
           </button>
 
           <div className="secure-badges">
@@ -257,7 +271,7 @@ function ConfirmationScreen({ orderId, total, onDone }) {
       <div className="confirm-card">
         <div className="confirm-row"><span>Order ID</span><span className="confirm-val">#{orderId.slice(0, 8).toUpperCase()}</span></div>
         <div className="confirm-row"><span>Referral Code</span><span className="confirm-val">SBSec-{orderId.slice(0, 6).toUpperCase()}</span></div>
-        <div className="confirm-row"><span>Amount Paid</span><span className="confirm-val">R{total.toLocaleString()}</span></div>
+        <div className="confirm-row"><span>Amount Paid</span><span className="confirm-val">{formatZAR(total)}</span></div>
         <div className="confirm-row"><span>Delivery</span><span className="confirm-val">5–7 business days</span></div>
       </div>
 

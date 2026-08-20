@@ -1,0 +1,45 @@
+# Settings for Cloud Run
+runConfig:
+  minInstances: 0
+  maxInstances: 2
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+
+# Environment variables for App Hosting
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: AIzaSyAzLTxfOON-Cvg-u6SSlSZYQUN8niulBMU
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: safelink-b8071.firebaseapp.com
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: safelink-b8071
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: safelink-b8071.firebasestorage.app
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "443791165083"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: 1:443791165083:web:0a321c6b040e1fad4c683e
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_ADMIN_PASS
+    value: sbsecurity2024
+    availability:
+      - BUILD
+      - RUNTIME

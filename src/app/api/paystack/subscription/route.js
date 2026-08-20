@@ -15,36 +15,51 @@
 
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { doc, updateDoc, query, collection, where, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { FieldValue } from 'firebase-admin/firestore';
+import {
+  getAdminFirestore,
+  getPaymentIntent,
+  saveVerifiedPaidOrder,
+} from '@/lib/firebase-admin';
+import { validatePaystackTransaction } from '@/lib/paystack-checkout';
 
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY || '';
 
 function verifySignature(rawBody, signature) {
-  if (!PAYSTACK_SECRET) return true; // skip in dev if secret not set
+  if (!PAYSTACK_SECRET || !signature) return false;
   const hash = crypto
     .createHmac('sha512', PAYSTACK_SECRET)
     .update(rawBody)
     .digest('hex');
-  return hash === signature;
+  const expected = Buffer.from(hash, 'utf8');
+  const received = Buffer.from(signature, 'utf8');
+  return expected.length === received.length && crypto.timingSafeEqual(expected, received);
 }
 
 async function findHouseholdByEmail(email) {
-  const q = query(collection(db, 'households'), where('email', '==', email));
-  const snap = await getDocs(q);
+  const snap = await getAdminFirestore()
+    .collection('households')
+    .where('email', '==', email)
+    .limit(1)
+    .get();
   if (snap.empty) return null;
   return { id: snap.docs[0].id, ...snap.docs[0].data() };
 }
 
 async function updateHouseholdSubscription(uid, patch) {
-  await updateDoc(doc(db, 'households', uid), {
+  await getAdminFirestore().collection('households').doc(uid).update({
     subscription: patch,
     membershipStatus: patch.status === 'active' ? 'active' : 'inactive',
-    updatedAt: new Date().toISOString(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
 }
 
 export async function POST(request) {
+  if (!PAYSTACK_SECRET) {
+    console.error('PAYSTACK_SECRET_KEY is not configured for Paystack webhooks.');
+    return NextResponse.json({ error: 'Webhook is not configured' }, { status: 503 });
+  }
+
   const rawBody  = await request.text();
   const signature = request.headers.get('x-paystack-signature') || '';
 
@@ -60,6 +75,20 @@ export async function POST(request) {
   }
 
   const { event: eventType, data } = event;
+
+  if (eventType === 'charge.success' && typeof data?.reference === 'string') {
+    const paymentIntent = await getPaymentIntent(data.reference);
+    if (paymentIntent) {
+      if (!validatePaystackTransaction(data, paymentIntent)) {
+        console.error('[webhook] Store payment did not match intent:', data.reference);
+        return NextResponse.json({ error: 'Payment mismatch' }, { status: 400 });
+      }
+
+      await saveVerifiedPaidOrder({ paymentIntent, transaction: data });
+      return NextResponse.json({ received: true });
+    }
+  }
+
   const customerEmail = data?.customer?.email;
 
   if (!customerEmail) {

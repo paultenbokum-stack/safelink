@@ -1,48 +1,97 @@
 import { NextResponse } from 'next/server';
+import {
+  authenticateFirebaseRequest,
+  getPaymentIntent,
+  saveVerifiedPaidOrder,
+} from '@/lib/firebase-admin';
+import {
+  CheckoutInputError,
+  getPaystackSecret,
+  normaliseEmail,
+  validatePaystackTransaction,
+} from '@/lib/paystack-checkout';
 
-/**
- * POST /api/paystack/verify
- * Body: { reference: string }
- *
- * Verifies a Paystack payment server-side to prevent client-side spoofing.
- * The secret key must be stored as PAYSTACK_SECRET_KEY in your server env vars
- * (not prefixed with NEXT_PUBLIC_ so it never reaches the browser).
- */
+const MAX_BODY_BYTES = 24_576;
+const REFERENCE_PATTERN = /^SL-[A-Z0-9]+-[A-F0-9]{12}$/;
+
 export async function POST(request) {
   try {
+    const contentLength = Number(request.headers.get('content-length') || 0);
+    if (contentLength > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: 'Verification request is too large.' }, { status: 413 });
+    }
+
+    const customer = await authenticateFirebaseRequest(request);
+    const customerEmail = normaliseEmail(customer.email);
     const { reference } = await request.json();
 
-    if (!reference) {
-      return NextResponse.json({ error: 'Missing reference' }, { status: 400 });
+    if (typeof reference !== 'string' || !REFERENCE_PATTERN.test(reference)) {
+      return NextResponse.json({ error: 'Payment reference is invalid.' }, { status: 400 });
     }
 
-    const secretKey = process.env.PAYSTACK_SECRET_KEY;
-    if (!secretKey) {
-      console.error('PAYSTACK_SECRET_KEY not set');
-      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    const paymentIntent = await getPaymentIntent(reference);
+    if (!paymentIntent || paymentIntent.uid !== customer.uid || normaliseEmail(paymentIntent.email) !== customerEmail) {
+      return NextResponse.json({ error: 'This payment does not match your checkout.' }, { status: 404 });
     }
 
-    const res = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
-      headers: {
-        Authorization: `Bearer ${secretKey}`,
-        'Content-Type': 'application/json',
+    const secret = getPaystackSecret();
+    const response = await fetch(
+      `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+      {
+        headers: { Authorization: `Bearer ${secret}` },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(10_000),
       },
+    );
+    const paystack = await response.json().catch(() => null);
+    const transaction = paystack?.data;
+
+    if (!response.ok || !paystack?.status || transaction?.status !== 'success') {
+      return NextResponse.json(
+        { verified: false, error: 'Paystack has not confirmed this payment.' },
+        { status: 400 },
+      );
+    }
+
+    if (!validatePaystackTransaction(transaction, paymentIntent)) {
+      console.error('Paystack verification mismatch for reference:', reference);
+      return NextResponse.json(
+        { verified: false, error: 'The confirmed payment does not match this order.' },
+        { status: 409 },
+      );
+    }
+
+    const { orderId, alreadyCreated } = await saveVerifiedPaidOrder({
+      paymentIntent,
+      transaction,
     });
 
-    const data = await res.json();
-
-    if (!data.status || data.data?.status !== 'success') {
-      return NextResponse.json({ verified: false, message: data.message }, { status: 400 });
-    }
+    const transactionId = String(transaction.id);
 
     return NextResponse.json({
       verified: true,
-      amount:   data.data.amount / 100, // Convert from kobo to ZAR
-      reference: data.data.reference,
-      email:    data.data.customer?.email,
+      orderId,
+      alreadyCreated,
+      amount: paymentIntent.total,
+      currency: paymentIntent.currency,
+      reference,
+      transactionId,
     });
-  } catch (err) {
-    console.error('Paystack verify error:', err);
-    return NextResponse.json({ error: 'Verification failed' }, { status: 500 });
+  } catch (error) {
+    if (error?.message === 'UNAUTHENTICATED') {
+      return NextResponse.json({ error: 'Please sign in again before confirming payment.' }, { status: 401 });
+    }
+    if (error instanceof CheckoutInputError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: 'Invalid verification request.' }, { status: 400 });
+    }
+
+    console.error('Paystack verify error:', error);
+    return NextResponse.json(
+      { error: 'Payment confirmation is temporarily unavailable. Keep your Paystack reference and contact support if this persists.' },
+      { status: 500 },
+    );
   }
 }

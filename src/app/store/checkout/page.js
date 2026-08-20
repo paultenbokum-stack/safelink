@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { getHousehold, createOrder, createDevice } from '@/lib/db';
+import { getHousehold } from '@/lib/db';
 import AuthGuard from '@/app/components/AuthGuard';
 import {
   SENTINEL_PRODUCTS,
@@ -12,8 +12,6 @@ import {
   getLinePriceBreakdown,
   roundCurrency,
 } from '@/lib/products';
-
-const PAYSTACK_KEY = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || '';
 
 export default function CheckoutPage() {
   return (
@@ -33,6 +31,7 @@ function CheckoutContent() {
   const [busy, setBusy]       = useState(false);
   const [error, setError]     = useState('');
   const [orderId, setOrderId] = useState(null);
+  const [confirmedTotal, setConfirmedTotal] = useState(null);
   const [delivery, setDelivery] = useState({
     name: '', phone: '', addressLine1: '',
     suburb: '', city: '', province: '', postalCode: '',
@@ -75,83 +74,89 @@ function CheckoutContent() {
     setDelivery(d => ({ ...d, [field]: e.target.value }));
 
   // ── Payment via Paystack popup ────────────────────────────────
-  const initPaystack = () => {
-    if (!window.PaystackPop) {
-      setError('Payment gateway not loaded. Please refresh and try again.');
-      return;
+  const cartForPayment = () => cart.map(({ id, qty }) => ({ id, qty }));
+
+  const readApiResponse = async (response) => {
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(data?.error || 'The payment service could not complete this request.');
     }
-    setBusy(true);
-    const handler = window.PaystackPop.setup({
-      key:       PAYSTACK_KEY,
-      email:     user.email,
-      amount:    Math.round(total * 100), // Paystack uses kobo/cents
-      currency:  'ZAR',
-      // A unique reference must be created at the moment payment is initiated.
-      // eslint-disable-next-line react-hooks/purity
-      ref:       `SBSec-${Date.now()}`,
-      metadata: {
-        household_id: user.uid,
-        cart:         JSON.stringify(cart.map(i => ({ id: i.id, name: i.name, qty: i.qty }))),
-      },
-      callback: (response) => {
-        setBusy(false);
-        handlePaymentSuccess(response.reference);
-      },
-      onClose: () => {
-        setBusy(false);
-      },
-    });
-    handler.openIframe();
+    return data;
   };
 
   const handlePaymentSuccess = async (paystackRef) => {
     setBusy(true);
     setError('');
     try {
-      const newOrderId = await createOrder(user.uid, {
-        items:       pricedCart,
-        subtotal,
-        vat,
-        total,
-        paystackRef,
-        delivery,
-        householdId: user.uid,
+      const idToken = await user.getIdToken();
+      const response = await fetch('/api/paystack/verify', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reference: paystackRef }),
       });
+      const verification = await readApiResponse(response);
 
-      // Create device records for IMEI-required items
-      for (const item of cart) {
-        if (item.imeiRequired) {
-          for (let i = 0; i < item.qty; i++) {
-            await createDevice(user.uid, newOrderId, item.id, item.name);
-          }
-        }
+      if (!verification.verified || !verification.orderId) {
+        throw new Error('Paystack has not confirmed this payment yet.');
       }
 
-      setOrderId(newOrderId);
+      setOrderId(verification.orderId);
+      setConfirmedTotal(verification.amount);
       sessionStorage.removeItem('safelink_cart');
       setStep(4); // confirmation
     } catch (err) {
-      setError('Payment was received but order creation failed. Contact support with your Paystack reference: ' + paystackRef);
+      setError(`${err.message} No order has been created. Keep this Paystack reference for support: ${paystackRef}`);
       console.error(err);
     } finally {
       setBusy(false);
     }
   };
 
-  // Load Paystack script
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://js.paystack.co/v1/inline.js';
-    script.async = true;
-    document.head.appendChild(script);
-    return () => document.head.removeChild(script);
-  }, []);
+  const initPaystack = async () => {
+    if (!user || !cart.length) return;
+
+    setBusy(true);
+    setError('');
+    try {
+      const idToken = await user.getIdToken();
+      const response = await fetch('/api/paystack/initialize', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ cart: cartForPayment(), delivery }),
+      });
+      const payment = await readApiResponse(response);
+      const { default: PaystackPop } = await import('@paystack/inline-js');
+      const popup = new PaystackPop();
+
+      popup.resumeTransaction(payment.accessCode, {
+        onSuccess: (transaction) => {
+          void handlePaymentSuccess(transaction.reference || payment.reference);
+        },
+        onCancel: () => setBusy(false),
+        onError: (paystackError) => {
+          console.error('Paystack popup error:', paystackError);
+          setError('Paystack could not open the secure payment window. Please try again.');
+          setBusy(false);
+        },
+      });
+    } catch (err) {
+      console.error('Paystack initialize error:', err);
+      setError(err.message || 'The payment gateway is temporarily unavailable.');
+      setBusy(false);
+    }
+  };
 
   // ── Step 4: Confirmation ─────────────────────────────────────
   if (step === 4 && orderId) {
     return (
       <div className="checkout-page">
-        <ConfirmationScreen orderId={orderId} total={total} onDone={() => router.push('/orders')} />
+        <ConfirmationScreen orderId={orderId} total={confirmedTotal ?? total} onDone={() => router.push('/orders')} />
         <CheckoutStyles />
       </div>
     );
@@ -240,7 +245,7 @@ function CheckoutContent() {
               </svg>
             </div>
             <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              Secured by Paystack · KS Consulting gateway. Your card details are never stored by SafeLink.
+              Paystack processes your payment securely. SafeLink verifies the amount and payment status before creating your order.
             </p>
           </div>
 
@@ -270,7 +275,7 @@ function ConfirmationScreen({ orderId, total, onDone }) {
 
       <div className="confirm-card">
         <div className="confirm-row"><span>Order ID</span><span className="confirm-val">#{orderId.slice(0, 8).toUpperCase()}</span></div>
-        <div className="confirm-row"><span>Referral Code</span><span className="confirm-val">SBSec-{orderId.slice(0, 6).toUpperCase()}</span></div>
+        <div className="confirm-row"><span>Referral Code</span><span className="confirm-val">SBSec-{orderId.slice(-10).toUpperCase()}</span></div>
         <div className="confirm-row"><span>Amount Paid</span><span className="confirm-val">{formatZAR(total)}</span></div>
         <div className="confirm-row"><span>Delivery</span><span className="confirm-val">5–7 business days</span></div>
       </div>

@@ -9,17 +9,44 @@ import { encryptIMEI } from './crypto';
 /* ─── Households ─────────────────────────────────────────────── */
 
 export async function createHousehold(uid, data) {
-  await setDoc(doc(db, 'households', uid), {
+  const record = {
     ...data,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     membershipStatus: 'active',
-  });
+  };
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(`household_${uid}`, JSON.stringify(record));
+    localStorage.setItem('active_household', JSON.stringify({ id: uid, ...record }));
+  }
+  try {
+    await setDoc(doc(db, 'households', uid), {
+      ...data,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      membershipStatus: 'active',
+    });
+  } catch (err) {
+    console.warn('Firestore setDoc notice (using local storage fallback):', err.message);
+  }
 }
 
 export async function getHousehold(uid) {
-  const snap = await getDoc(doc(db, 'households', uid));
-  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+  if (typeof window !== 'undefined') {
+    const cached = localStorage.getItem(`household_${uid}`) || localStorage.getItem('active_household');
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) {}
+    }
+  }
+  try {
+    const snap = await getDoc(doc(db, 'households', uid));
+    if (snap.exists()) {
+      return { id: snap.id, ...snap.data() };
+    }
+  } catch (err) {
+    console.warn('Firestore getDoc notice (using local storage fallback):', err.message);
+  }
+  return null;
 }
 
 export async function updateHousehold(uid, data) {

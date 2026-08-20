@@ -1,376 +1,171 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
-import { getHousehold } from '@/lib/db';
-import Image from 'next/image';
 
 export default function LoginPage() {
-  const { user, loading, login, register } = useAuth();
   const router = useRouter();
+  const { loginWithPhone } = useAuth();
 
-  const [mode, setMode]         = useState('login');
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm]   = useState('');
-  const [error, setError]       = useState('');
-  const [busy, setBusy]         = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [quickError, setQuickError] = useState('');
 
-  useEffect(() => {
-    if (!loading && user) {
-      getHousehold(user.uid).then((h) => {
-        router.replace(h ? '/dashboard' : '/login/setup');
-      });
+  const handlePhoneFormat = (e) => {
+    let val = e.target.value.replace(/\D/g, '');
+    let formatted = '';
+    if (val.length > 0) {
+      formatted = val.substring(0, 2);
+      if (val.length > 2) formatted += ' ' + val.substring(2, 5);
+      if (val.length > 5) formatted += ' ' + val.substring(5, 9);
     }
-  }, [user, loading, router]);
+    setPhoneNumber(formatted);
+  };
 
-  const handleSubmit = async (e) => {
+  const handleDirectSignIn = async (e) => {
     e.preventDefault();
-    setError('');
+    setQuickError('');
 
-    if (mode === 'register' && password !== confirm) {
-      setError('Passwords do not match.');
-      return;
-    }
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
+    const cleanPhone = phoneNumber.replace(/\s/g, '');
+    if (cleanPhone.length < 9) {
+      setQuickError('Please enter a valid 9-digit South African mobile number.');
       return;
     }
 
-    setBusy(true);
+    setLoading(true);
     try {
-      if (mode === 'login') {
-        await login(email, password);
-      } else {
-        await register(email, password);
-        router.push('/login/setup');
-      }
+      // MFA bypass during testing: immediately log in and go to dashboard
+      await loginWithPhone(cleanPhone, {
+        displayName: 'SafeLink Member',
+      });
+
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 400);
     } catch (err) {
-      console.error('Auth error:', err.code, err.message);
-      const msgs = {
-        'auth/user-not-found':       'No account found with this email.',
-        'auth/wrong-password':       'Incorrect password.',
-        'auth/invalid-credential':   'Incorrect email or password.',
-        'auth/email-already-in-use': 'An account with this email already exists.',
-        'auth/invalid-email':        'Please enter a valid email address.',
-        'auth/too-many-requests':    'Too many attempts. Please try again later.',
-        'auth/unauthorized-domain':  'Localhost is not yet authorised in Firebase. See setup note below.',
-        'auth/network-request-failed': 'Network error — check your internet connection.',
-      };
-      setError(msgs[err.code] || `Something went wrong (${err.code || 'unknown'}). Please try again.`);
-    } finally {
-      setBusy(false);
+      console.error(err);
+      setQuickError('Failed to sign in. Please try again or create a profile.');
+      setLoading(false);
     }
   };
 
-  if (loading) return null;
-
   return (
-    <div className="login-page">
-      {/* Background atmospheric glow — from Stitch login_screen */}
-      <div className="bg-glow" aria-hidden="true" />
+    <div className="bg-background text-on-surface antialiased min-h-screen flex flex-col items-center justify-center p-gutter relative overflow-hidden">
+      {/* Background Atmospheric Glow */}
+      <div className="absolute inset-0 pointer-events-none flex justify-center items-center">
+        <div className="w-[600px] h-[600px] bg-secondary/10 rounded-full blur-[140px] absolute opacity-50 mix-blend-screen"></div>
+      </div>
 
-      {/* ── Logo / Branding (Stitch spec) ── */}
-      <div className="login-header">
-        <div className="login-logo">
-          <div className="logo-shield-wrap">
-            <Image
+      <main className="w-full max-w-md z-10 flex flex-col justify-center gap-6 my-auto">
+        {/* Top Section: Branding with Transparent PNG Logo */}
+        <div className="flex flex-col items-center text-center gap-2">
+          <div className="w-24 h-24 flex items-center justify-center p-1 drop-shadow-[0_0_25px_rgba(247,187,35,0.3)]">
+            <img
               src="/logo.png"
-              alt="SafeLink shield logo"
-              width={72}
-              height={72}
-              priority
-              style={{ objectFit: 'contain', filter: 'drop-shadow(0 0 12px rgba(255,195,47,0.35))' }}
+              alt="SafeLink Logo"
+              className="w-full h-full object-contain"
             />
           </div>
-          <div className="logo-text-block">
-            <div className="logo-brand">SafeLink</div>
-            <div className="logo-sub">Your Safety. Our Priority.</div>
-          </div>
+          <h1 className="font-headline-lg-mobile text-3xl font-black text-on-surface tracking-tight">
+            Welcome to SafeLink
+          </h1>
+          <p className="font-body-md text-sm text-on-surface-variant max-w-[320px]">
+            Your personal digital bodyguard & rapid tactical response platform.
+          </p>
         </div>
 
-        <h1 className="login-title">
-          {mode === 'login' ? 'Welcome back' : 'Create account'}
-        </h1>
-        <p className="login-subtitle">
-          {mode === 'login'
-            ? 'Sign in to manage your household security'
-            : 'Register your household and stay protected'}
-        </p>
-      </div>
+        {/* Auth Mode Switcher / Tabs */}
+        <div className="grid grid-cols-2 p-1 bg-surface-container-lowest/80 border border-white/10 rounded-xl">
+          <button
+            type="button"
+            className="py-2.5 rounded-lg font-bold text-xs bg-secondary/20 text-secondary border border-secondary/40 shadow-sm"
+          >
+            Sign In
+          </button>
+          <Link
+            href="/signup"
+            className="py-2.5 rounded-lg font-semibold text-xs text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors"
+          >
+            Create Profile (New)
+          </Link>
+        </div>
 
-      {/* ── Toggle ── */}
-      <div className="login-toggle" role="tablist">
-        <button
-          role="tab"
-          aria-selected={mode === 'login'}
-          className={`toggle-btn ${mode === 'login' ? 'active' : ''}`}
-          onClick={() => { setMode('login'); setError(''); }}
-        >
-          Sign In
-        </button>
-        <button
-          role="tab"
-          aria-selected={mode === 'register'}
-          className={`toggle-btn ${mode === 'register' ? 'active' : ''}`}
-          onClick={() => { setMode('register'); setError(''); }}
-        >
-          Register
-        </button>
-      </div>
-
-      {/* ── Form (Stitch glass-panel) ── */}
-      <form className="login-form glass-panel" onSubmit={handleSubmit}>
-        {error && (
-          <div className="login-error" role="alert">
-            {error}
-            {error.includes('Localhost') && (
-              <p className="auth-domain-note">
-                👉 Go to <strong>Firebase Console → Authentication → Settings → Authorized Domains</strong> and add <code>localhost</code>.
-              </p>
-            )}
+        {quickError && (
+          <div className="bg-red-500/15 border border-red-500/40 text-red-400 p-3 rounded-xl text-xs flex items-center gap-2">
+            <span className="material-symbols-outlined text-base">error</span>
+            <span>{quickError}</span>
           </div>
         )}
 
-        <div className="field-group">
-          <label className="field-label" htmlFor="email">Email address</label>
-          <div className="field-input-wrap input-focus-glow">
-            <input
-              id="email"
-              type="email"
-              className="field-input"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-            />
-          </div>
-        </div>
-
-        <div className="field-group">
-          <label className="field-label" htmlFor="password">Password</label>
-          <div className="field-input-wrap input-focus-glow">
-            <input
-              id="password"
-              type="password"
-              className="field-input"
-              placeholder="Min. 8 characters"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-            />
-          </div>
-        </div>
-
-        {mode === 'register' && (
-          <div className="field-group">
-            <label className="field-label" htmlFor="confirm">Confirm Password</label>
-            <div className="field-input-wrap input-focus-glow">
+        {/* Sign In Form */}
+        <form onSubmit={handleDirectSignIn} className="flex flex-col gap-4 w-full">
+          <div className="glass-panel rounded-2xl p-4 flex flex-col gap-2 border border-white/10">
+            <label className="font-label-sm text-xs text-on-surface-variant uppercase tracking-wider font-semibold" htmlFor="phone">
+              Mobile Number
+            </label>
+            <div className="flex items-center gap-2 bg-surface-container-low border border-outline/30 rounded-xl p-3 focus-within:border-secondary transition-all duration-200">
+              {/* SA Flag Prefix */}
+              <div className="flex items-center gap-1.5 pr-2.5 border-r border-outline/30">
+                <div className="sa-flag">
+                  <div className="sa-flag-y"></div>
+                </div>
+                <span className="font-body-lg text-sm font-bold text-on-surface">+27</span>
+              </div>
+              {/* Input Field */}
               <input
-                id="confirm"
-                type="password"
-                className="field-input"
-                placeholder="Re-enter your password"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
+                id="phone"
+                type="tel"
+                placeholder="82 345 6789"
+                value={phoneNumber}
+                onChange={handlePhoneFormat}
+                autoComplete="tel-national"
+                className="w-full bg-transparent border-none focus:ring-0 font-body-lg text-base text-on-surface placeholder-on-surface-variant/40 outline-none"
                 required
-                autoComplete="new-password"
               />
             </div>
           </div>
-        )}
 
-        {mode === 'login' && (
-          <button type="button" className="forgot-link" onClick={() => router.push('/login/reset')}>
-            Forgot password?
+          <div className="px-1 flex items-center justify-between text-xs text-on-surface-variant">
+            <span className="flex items-center gap-1 text-emerald-400 font-medium">
+              <span className="material-symbols-outlined text-sm">bolt</span>
+              Testing Mode: Instant Access (MFA disabled)
+            </span>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-secondary hover:bg-secondary-fixed transition-all active:scale-95 duration-200 rounded-xl py-3.5 flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(247,187,35,0.25)] cursor-pointer text-on-secondary font-bold text-sm"
+          >
+            {loading ? (
+              <>
+                <span className="w-4 h-4 border-2 border-on-secondary border-t-transparent rounded-full animate-spin"></span>
+                <span>Connecting to SafeLink...</span>
+              </>
+            ) : (
+              <>
+                <span>Sign In & Open Dashboard</span>
+                <span className="material-symbols-outlined text-lg">arrow_forward</span>
+              </>
+            )}
           </button>
-        )}
+        </form>
 
-        <button type="submit" className="login-submit" disabled={busy}>
-          {busy
-            ? <span className="spinner" aria-label="Loading" />
-            : mode === 'login' ? 'Sign In' : 'Create Account'}
-        </button>
-      </form>
-
-      {mode === 'register' && (
-        <p className="login-terms">
-          By creating an account you agree to our{' '}
-          <a href="/login/terms" style={{ color: 'var(--secondary)' }}>Terms of Service</a>
-          {' '}and{' '}
-          <a href="/login/terms" style={{ color: 'var(--secondary)' }}>Privacy Policy</a>.
-        </p>
-      )}
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        /* ── Login page — aligned to Stitch login_screen spec ── */
-        .login-page {
-          min-height: 100vh;
-          background: var(--background, #041522);
-          color: var(--on-surface, #d3e4f7);
-          display: flex;
-          flex-direction: column;
-          padding: 40px 20px 32px;
-          gap: 24px;
-          position: relative;
-          overflow: hidden;
-        }
-
-        /* Atmospheric glow blob — Stitch bg effect */
-        .bg-glow {
-          position: absolute;
-          top: 50%; left: 50%;
-          transform: translate(-50%, -50%);
-          width: 500px; height: 500px;
-          background: radial-gradient(circle, rgba(44,90,133,0.18) 0%, transparent 70%);
-          border-radius: 50%;
-          pointer-events: none;
-          z-index: 0;
-        }
-        .login-header, .login-toggle, .login-form, .login-terms { position: relative; z-index: 1; }
-
-        /* ── Logo ── */
-        .login-logo {
-          display: flex; align-items: center; gap: 14px; margin-bottom: 4px;
-        }
-        .logo-shield-wrap {
-          width: 72px; height: 72px; flex-shrink: 0;
-          display: flex; align-items: center; justify-content: center;
-        }
-        .logo-text-block { display: flex; flex-direction: column; gap: 3px; }
-        .logo-brand {
-          font-size: 26px; font-weight: 800;
-          letter-spacing: -0.5px;
-          color: var(--on-surface, #d3e4f7);
-        }
-        .logo-sub {
-          font-size: 11px;
-          color: var(--secondary, #ffc32f);
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          font-weight: 600;
-        }
-
-        .login-title   { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
-        .login-subtitle { margin: 0; font-size: 14px; color: var(--on-surface-variant, #c2c7d0); line-height: 1.5; }
-
-        /* ── Toggle ── */
-        .login-toggle {
-          display: flex;
-          background: rgba(255,255,255,0.05);
-          border-radius: 12px;
-          padding: 4px; gap: 4px;
-        }
-        .toggle-btn {
-          flex: 1; padding: 10px; border: none; border-radius: 10px;
-          font-size: 14px; font-weight: 600; cursor: pointer;
-          transition: all 0.2s ease;
-          background: transparent;
-          color: var(--on-surface-variant, #c2c7d0);
-          min-height: 40px;
-        }
-        .toggle-btn.active {
-          background: var(--primary-container, #2c5a85);
-          color: var(--on-primary-container, #a9d1ff);
-          box-shadow: 0 2px 12px rgba(44,90,133,0.4);
-        }
-
-        /* ── Form (glass-panel Stitch spec) ── */
-        .login-form {
-          display: flex; flex-direction: column; gap: 16px;
-          padding: 20px;
-        }
-
-        .field-group { display: flex; flex-direction: column; gap: 6px; }
-        .field-label {
-          font-size: 12px; font-weight: 600;
-          color: var(--on-surface-variant, #c2c7d0);
-          text-transform: uppercase; letter-spacing: 0.06em;
-        }
-        .field-input-wrap {
-          background: var(--surface-container-low, #0c1d2a);
-          border: 1px solid rgba(140,145,153,0.3);
-          border-radius: 10px;
-          transition: box-shadow 0.2s, border-color 0.2s;
-        }
-        .input-focus-glow:focus-within {
-          box-shadow: 0 0 15px rgba(44,90,133,0.5);
-          border-color: var(--primary, #9fcafb);
-        }
-        .field-input {
-          width: 100%;
-          padding: 13px 15px;
-          background: transparent;
-          border: none;
-          color: var(--on-surface, #d3e4f7);
-          font-size: 15px;
-          outline: none;
-          border-radius: 10px;
-        }
-        .field-input::placeholder { color: rgba(194,199,208,0.4); }
-
-        .forgot-link {
-          background: none; border: none;
-          color: var(--secondary, #ffc32f);
-          font-size: 13px; cursor: pointer;
-          text-align: right; padding: 0; font-weight: 600;
-        }
-
-        /* ── Primary CTA — Stitch gold ── */
-        .login-submit {
-          width: 100%; padding: 15px;
-          background: var(--secondary, #ffc32f);
-          border: none; border-radius: 12px;
-          color: var(--on-secondary, #402d00);
-          font-size: 15px; font-weight: 700;
-          cursor: pointer;
-          box-shadow: 0 4px 12px rgba(255,195,47,0.25);
-          transition: background 0.2s, transform 0.1s;
-          display: flex; align-items: center; justify-content: center;
-          min-height: 50px; margin-top: 4px;
-          letter-spacing: 0.01em;
-        }
-        .login-submit:hover:not(:disabled) { background: var(--secondary-fixed-dim, #f9bd25); }
-        .login-submit:disabled { opacity: 0.6; cursor: not-allowed; }
-        .login-submit:active:not(:disabled) { transform: scale(0.98); }
-
-        /* ── Error ── */
-        .login-error {
-          background: rgba(229,62,62,0.12);
-          border: 1px solid rgba(229,62,62,0.35);
-          border-radius: 10px; padding: 12px 14px;
-          font-size: 13px; color: #fc8181; line-height: 1.5;
-        }
-        .auth-domain-note {
-          margin-top: 8px; font-size: 12px;
-          color: var(--on-surface-variant, #c2c7d0);
-          line-height: 1.5;
-        }
-        .auth-domain-note code {
-          background: rgba(255,255,255,0.1);
-          padding: 1px 5px; border-radius: 4px;
-          font-family: monospace;
-        }
-
-        .login-terms {
-          font-size: 12px;
-          color: var(--on-surface-variant, #c2c7d0);
-          text-align: center; line-height: 1.5; margin: 0;
-          position: relative; z-index: 1;
-        }
-
-        .spinner {
-          display: inline-block; width: 20px; height: 20px;
-          border: 2px solid rgba(64,45,0,0.3);
-          border-top-color: var(--on-secondary, #402d00);
-          border-radius: 50%;
-          animation: spin 0.7s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}} />
+        {/* Bottom Section: Terms */}
+        <div className="mt-auto pt-2 pb-safe text-center">
+          <p className="font-label-sm text-[11px] text-on-surface-variant">
+            By continuing, you agree to our{' '}
+            <Link
+              href="/terms"
+              className="text-primary hover:text-primary-fixed underline decoration-primary/50 underline-offset-2 transition-colors"
+            >
+              Terms & Conditions & PSIRA Policy
+            </Link>
+          </p>
+        </div>
+      </main>
     </div>
   );
 }

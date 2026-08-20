@@ -1,167 +1,210 @@
 'use client';
-import { useState } from 'react';
-import StatusBar from '@/app/components/StatusBar';
 
-export default function PartnerDashboard() {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [responders, setResponders] = useState([
-    { id: 1, name: 'Sipho Ndlovu', vehicle: 'MED-01', status: 'on-duty', location: 'Sandton' },
-    { id: 2, name: 'Maria Jansen', vehicle: 'MED-04', status: 'on-dispatch', location: 'Randburg' },
-    { id: 3, name: 'David Smith', vehicle: 'MED-02', status: 'off-duty', location: 'Base' },
+import React, { useState } from 'react';
+import Header from '@/app/components/Header';
+import BottomNav from '@/app/components/BottomNav';
+import AuthGuard from '@/app/components/AuthGuard';
+
+export default function PartnerDashboardPage() {
+  return (
+    <AuthGuard>
+      <PartnerDashboardContent />
+    </AuthGuard>
+  );
+}
+
+function PartnerDashboardContent() {
+  const [activeDispatches, setActiveDispatches] = useState([
+    {
+      id: 'disp-1',
+      type: 'Medical SOS',
+      typeColor: '#ffb4ab',
+      icon: 'medical_services',
+      location: 'Sandton Central, Unit 4B',
+      victim: 'Lesedi Molefe (+27 82 991 2345)',
+      unit: 'Paramedic Ambulance #MED-03',
+      eta: '4 mins',
+      status: 'En Route',
+      time: '2 mins ago',
+    },
+    {
+      id: 'disp-2',
+      type: 'Armed Intruder Panic',
+      typeColor: '#ffc32f',
+      icon: 'local_police',
+      location: '42 Sandhurst Dr, Sandton',
+      victim: 'Thabo Molefe (+27 82 345 6789)',
+      unit: 'Armoured Unit #AR-402 (Officer Khumalo)',
+      eta: '3 mins',
+      status: 'Approaching Site',
+      time: '1 min ago',
+    },
+    {
+      id: 'disp-3',
+      type: 'Roadside Towing Recovery',
+      typeColor: '#9fcafb',
+      icon: 'rv_hookup',
+      location: 'N1 Northbound before Rivonia Rd',
+      victim: 'Sipho Molefe (+27 71 884 1002)',
+      unit: 'Flatbed Tow Unit #TW-12',
+      eta: '11 mins',
+      status: 'Dispatched',
+      time: '6 mins ago',
+    },
   ]);
 
-  const toggleStatus = (id) => {
-    setResponders(prev => prev.map(r => {
-      if (r.id === id) {
-        if (r.status === 'on-duty') return { ...r, status: 'off-duty' };
-        if (r.status === 'off-duty') return { ...r, status: 'on-duty' };
-      }
-      return r;
-    }));
-  };
-
   return (
-    <div className="min-h-screen pb-20" style={{ backgroundColor: 'var(--bg-dark)', color: 'var(--text-primary)' }}>
-      <StatusBar />
-      
-      {/* Header */}
-      <div className="p-6 border-b border-gray-800" style={{ backgroundColor: 'var(--bg-card)' }}>
-        <h1 className="text-2xl font-bold">Help24 Holdings</h1>
-        <div className="flex items-center gap-2 mt-2">
-          <span className="px-2 py-1 rounded-md text-xs font-bold bg-red-500 bg-opacity-20 text-red-400">
-            🏥 Medical Partner
-          </span>
-          <span className="text-xs text-gray-400">Coverage: Gauteng</span>
-        </div>
-      </div>
+    <div className="bg-background text-on-background font-body-md antialiased min-h-screen pb-32">
+      <Header title="Help24 Tactical Partner Portal" showNotification={true} />
 
-      <div className="p-6 space-y-8">
-        
-        {/* Stats Row */}
-        <div className="flex overflow-x-auto gap-4 pb-2 scrollbar-hide">
-          <div className="min-w-[140px] p-4 rounded-xl" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div className="text-xs text-gray-400 mb-1">Dispatches Today</div>
-            <div className="text-2xl font-bold">8</div>
-          </div>
-          <div className="min-w-[140px] p-4 rounded-xl" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div className="text-xs text-gray-400 mb-1">Avg Response</div>
-            <div className="text-2xl font-bold text-yellow-500">7m 23s</div>
-          </div>
-          <div className="min-w-[140px] p-4 rounded-xl" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div className="text-xs text-gray-400 mb-1">Acceptance Rate</div>
-            <div className="text-2xl font-bold text-green-500">94%</div>
-          </div>
-          <div className="min-w-[140px] p-4 rounded-xl" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div className="text-xs text-gray-400 mb-1">Completed (Mo)</div>
-            <div className="text-2xl font-bold">186</div>
-          </div>
-        </div>
-
-        {/* Active Dispatches */}
+      <main className="pt-20 px-gutter max-w-7xl mx-auto space-y-lg">
+        {/* Welcome Header (from Stitch partner_dashboard/code.html) */}
         <div>
-          <h2 className="text-sm font-bold uppercase tracking-wider mb-4 text-gray-400">Active Dispatches</h2>
-          <div className="rounded-xl p-5 border-l-4 relative overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderLeftColor: 'var(--emergency)' }}>
-            <div className="absolute top-0 left-0 w-full h-full bg-red-500 opacity-5 animate-pulse pointer-events-none"></div>
-            
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <h3 className="font-bold text-red-500 flex items-center gap-2">
-                  <span>🏥</span> Medical Emergency
-                </h3>
-                <p className="text-xs text-gray-400 mt-1">Ref: SOS-20260724-001</p>
-              </div>
-              <div className="text-xs font-bold px-2 py-1 bg-gray-800 rounded">2 min ago</div>
-            </div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#38a169] animate-pulse"></span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#38a169]">
+              Live Regional Dispatch Operations
+            </span>
+          </div>
+          <h2 className="font-headline-lg-mobile text-2xl md:text-3xl font-bold text-on-surface">
+            Command Dashboard & Fleet
+          </h2>
+          <p className="font-body-md text-xs md:text-sm text-on-surface-variant">
+            Help24 Holdings Regional Armed Response Unit Network — Gauteng Sector
+          </p>
+        </div>
 
-            <div className="space-y-2 mb-5">
-              <div className="flex items-center gap-2 text-sm">
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                <span>First name: Thabo</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                <span>Distance: 3.2 km</span>
-              </div>
-            </div>
+        {/* Stats Bento Grid (from Stitch partner_dashboard/code.html) */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-md">
+          {/* Bento Card 1 */}
+          <div className="bg-surface-container/80 backdrop-blur-md p-md rounded-2xl border border-white/10 shadow-[0_4px_12px_rgba(0,0,0,0.2)]">
+            <p className="font-label-sm text-xs text-on-surface-variant uppercase tracking-widest mb-xs">
+              Live Dispatches
+            </p>
+            <p className="font-display-lg text-3xl font-bold text-primary">8</p>
+            <p className="font-label-sm text-[11px] text-on-surface-variant mt-sm flex items-center gap-xs">
+              <span className="material-symbols-outlined text-[14px] text-secondary">trending_up</span> +2 incidents today
+            </p>
+          </div>
 
-            <div className="flex gap-3">
-              <button className="flex-1 py-3 rounded-lg font-bold text-black" style={{ backgroundColor: 'var(--accent)' }}>
-                Accept Dispatch
-              </button>
-              <button className="px-4 py-3 rounded-lg font-bold border border-gray-600 text-gray-300 hover:bg-gray-800">
-                Decline
-              </button>
+          {/* Bento Card 2 */}
+          <div className="bg-surface-container/80 backdrop-blur-md p-md rounded-2xl border border-white/10 shadow-[0_4px_12px_rgba(0,0,0,0.2)]">
+            <p className="font-label-sm text-xs text-on-surface-variant uppercase tracking-widest mb-xs">
+              Avg Armed Response
+            </p>
+            <p className="font-display-lg text-3xl font-bold text-on-surface">
+              7<span className="text-sm text-on-surface-variant font-normal">m</span> 23<span className="text-sm text-on-surface-variant font-normal">s</span>
+            </p>
+            <p className="font-label-sm text-[11px] text-on-surface-variant mt-sm flex items-center gap-xs">
+              <span className="material-symbols-outlined text-[14px] text-[#38a169]">trending_down</span> -12s from regional SLA
+            </p>
+          </div>
+
+          {/* Bento Card 3 */}
+          <div className="bg-surface-container/80 backdrop-blur-md p-md rounded-2xl border border-white/10 shadow-[0_4px_12px_rgba(0,0,0,0.2)] col-span-2 md:col-span-1">
+            <p className="font-label-sm text-xs text-on-surface-variant uppercase tracking-widest mb-xs">
+              SLA Acceptance Rate
+            </p>
+            <div className="flex items-end gap-sm">
+              <p className="font-display-lg text-3xl font-bold text-secondary">
+                94<span className="text-lg font-normal">%</span>
+              </p>
+              <div className="h-6 flex-1 bg-surface-container-high rounded-full overflow-hidden mb-1">
+                <div className="h-full bg-secondary w-[94%] rounded-full"></div>
+              </div>
             </div>
+            <p className="font-label-sm text-[11px] text-on-surface-variant mt-sm">Top 5% Regional Armed Providers</p>
           </div>
         </div>
 
-        {/* Responders */}
-        <div>
-          <h2 className="text-sm font-bold uppercase tracking-wider mb-4 text-gray-400">Responders</h2>
-          <div className="space-y-3">
-            {responders.map(r => (
-              <div key={r.id} className="p-4 rounded-xl flex items-center justify-between" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <div>
-                  <div className="font-bold text-sm">{r.name} • <span className="text-gray-400">{r.vehicle}</span></div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={`w-2 h-2 rounded-full ${r.status === 'on-duty' ? 'bg-green-500' : r.status === 'on-dispatch' ? 'bg-blue-500' : 'bg-gray-500'}`}></span>
-                    <span className="text-xs text-gray-400 capitalize">{r.status.replace('-', ' ')}</span>
-                    <span className="text-xs text-gray-600">• {r.location}</span>
+        {/* Active Dispatches Section */}
+        <section className="space-y-md">
+          <div className="flex justify-between items-center">
+            <h3 className="font-headline-md text-lg font-bold text-on-surface">
+              Active Tactical Dispatches ({activeDispatches.length})
+            </h3>
+            <span className="text-xs bg-secondary/10 text-secondary border border-secondary/30 px-2.5 py-1 rounded-full font-bold">
+              Automatic Dispatch Online
+            </span>
+          </div>
+
+          <div className="space-y-md">
+            {activeDispatches.map((dispatch) => (
+              <div
+                key={dispatch.id}
+                className="glass-card rounded-2xl p-md border border-white/10 relative overflow-hidden shadow-xl"
+              >
+                <div
+                  className="absolute top-0 left-0 w-1.5 h-full"
+                  style={{ backgroundColor: dispatch.typeColor }}
+                ></div>
+
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-sm mb-sm">
+                  <div className="flex items-center gap-sm">
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                      style={{
+                        backgroundColor: `${dispatch.typeColor}20`,
+                        color: dispatch.typeColor,
+                      }}
+                    >
+                      <span className="material-symbols-outlined text-2xl">{dispatch.icon}</span>
+                    </div>
+                    <div>
+                      <p
+                        className="font-label-md text-xs font-bold uppercase tracking-wider"
+                        style={{ color: dispatch.typeColor }}
+                      >
+                        {dispatch.type}
+                      </p>
+                      <p className="font-headline-md text-base font-bold text-on-surface">{dispatch.location}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-sm self-start sm:self-auto">
+                    <span className="bg-surface-container-high px-2.5 py-1 rounded-lg text-xs font-bold text-secondary">
+                      ETA: {dispatch.eta}
+                    </span>
+                    <span className="bg-[#38a169]/20 text-[#38a169] border border-[#38a169]/30 text-xs px-2 py-0.5 rounded-full font-bold">
+                      {dispatch.status}
+                    </span>
                   </div>
                 </div>
-                
-                {r.status !== 'on-dispatch' && (
-                  <div 
-                    onClick={() => toggleStatus(r.id)}
-                    className={`w-12 h-6 rounded-full relative cursor-pointer transition-colors duration-300 ${r.status === 'on-duty' ? 'bg-green-500' : 'bg-gray-700'}`}
-                  >
-                    <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform duration-300 shadow-sm ${r.status === 'on-duty' ? 'translate-x-6' : 'translate-x-0.5'}`}></div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-sm my-sm p-sm bg-surface-container-low rounded-xl text-xs">
+                  <div>
+                    <span className="text-on-surface-variant">Member:</span>{' '}
+                    <strong className="text-on-surface">{dispatch.victim}</strong>
                   </div>
-                )}
+                  <div>
+                    <span className="text-on-surface-variant">Assigned Unit:</span>{' '}
+                    <strong className="text-primary">{dispatch.unit}</strong>
+                  </div>
+                </div>
+
+                <div className="flex gap-sm pt-xs">
+                  <button
+                    onClick={() => alert(`Calling emergency line: ${dispatch.victim}...`)}
+                    className="flex-1 py-2 rounded-xl glass-panel hover:bg-white/10 text-xs font-bold text-on-surface flex items-center justify-center gap-1 active:scale-95"
+                  >
+                    <span className="material-symbols-outlined text-base text-secondary">call</span>
+                    Call Victim
+                  </button>
+                  <button
+                    onClick={() => alert(`Opening tactical telemetry routing to ${dispatch.location}...`)}
+                    className="flex-1 py-2 rounded-xl bg-primary-container/40 hover:bg-primary-container/60 border border-primary/30 text-xs font-bold text-primary flex items-center justify-center gap-1 active:scale-95"
+                  >
+                    <span className="material-symbols-outlined text-base">navigation</span>
+                    Tactical GPS
+                  </button>
+                </div>
               </div>
             ))}
           </div>
-        </div>
+        </section>
+      </main>
 
-        {/* Billing Overview */}
-        <div>
-          <h2 className="text-sm font-bold uppercase tracking-wider mb-4 text-gray-400">Monthly Billing</h2>
-          <div className="p-5 rounded-xl space-y-3 text-sm" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Active responders:</span>
-              <span>12 × R100 = R1,200/mo</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Next billing:</span>
-              <span>1 Aug 2026</span>
-            </div>
-            <div className="flex justify-between border-t border-gray-700 pt-3 mt-1">
-              <span className="text-gray-400">Status:</span>
-              <span className="text-green-500 font-bold">✅ Paid</span>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Partner Bottom Nav */}
-      <div className="fixed bottom-0 w-full flex justify-around items-center h-16 border-t border-gray-800 z-50" style={{ backgroundColor: 'var(--bg-dark)' }}>
-        {[
-          { id: 'dashboard', icon: '📊', label: 'Dashboard' },
-          { id: 'dispatches', icon: '🚨', label: 'Dispatches' },
-          { id: 'responders', icon: '👥', label: 'Responders' },
-          { id: 'billing', icon: '💳', label: 'Billing' },
-        ].map(tab => (
-          <button 
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex flex-col items-center justify-center w-full h-full ${activeTab === tab.id ? 'text-yellow-500' : 'text-gray-500'}`}
-          >
-            <span className="text-xl mb-1">{tab.icon}</span>
-            <span className="text-[10px] font-medium">{tab.label}</span>
-          </button>
-        ))}
-      </div>
+      <BottomNav />
     </div>
   );
 }

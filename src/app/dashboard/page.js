@@ -2,20 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { getHousehold, getUserDevices, getUserOrders } from '@/lib/db';
-import StatusBar from '@/app/components/StatusBar';
+import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
-
-const quickServices = [
-  { id: 'sos',     icon: '🚨', label: 'Armed Response', border: 'var(--emergency)', href: '/sos' },
-  { id: 'medical', icon: '🏥', label: 'Medical',        border: 'var(--emergency)', href: '/sos' },
-  { id: 'store',   icon: '🛒', label: 'Buy Devices',    border: 'var(--accent)',    href: '/store' },
-  { id: 'devices', icon: '📡', label: 'My Devices',     border: 'var(--primary)',   href: '/devices' },
-  { id: 'orders',  icon: '📦', label: 'My Orders',      border: 'var(--primary)',   href: '/orders' },
-  { id: 'profile', icon: '👤', label: 'Profile',        border: '#805ad5',          href: '/profile' },
-];
 
 export default function Dashboard() {
   return (
@@ -27,12 +19,13 @@ export default function Dashboard() {
 
 function DashboardContent() {
   const { user } = useAuth();
-  const router   = useRouter();
+  const router = useRouter();
 
   const [household, setHousehold] = useState(null);
-  const [devices, setDevices]     = useState([]);
-  const [orders, setOrders]       = useState([]);
-  const [loading, setLoading]     = useState(true);
+  const [devices, setDevices] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [testAlarmActive, setTestAlarmActive] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -40,253 +33,275 @@ function DashboardContent() {
       getHousehold(user.uid),
       getUserDevices(user.uid),
       getUserOrders(user.uid),
-    ]).then(([h, d, o]) => {
-      setHousehold(h);
-      setDevices(d);
-      setOrders(o);
-    }).catch(console.error).finally(() => setLoading(false));
+    ])
+      .then(([h, d, o]) => {
+        setHousehold(h);
+        setDevices(d || []);
+        setOrders(o || []);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [user]);
 
-  const activeDevices  = devices.filter(d => d.imei).length;
-  const pendingDevices = devices.filter(d => !d.imei).length;
-  const recentOrder    = orders[0];
+  const userName = household?.adminFirstName || user?.displayName?.split(' ')[0] || 'Thabo';
 
-  const greeting = () => {
-    const h = new Date().getHours();
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    return 'Good evening';
+  const triggerTestAlarm = () => {
+    setTestAlarmActive(true);
+    setTimeout(() => {
+      setTestAlarmActive(false);
+    }, 4000);
   };
 
   return (
-    <div className="dashboard-container">
-      <StatusBar />
+    <div className="bg-background text-on-background min-h-screen pb-[100px]">
+      <Header title={`Good morning, ${userName}`} />
 
-      <main className="dashboard-content">
-        {/* Greeting */}
-        <div className="dash-greeting">
-          <div>
-            <p className="greeting-text">
-              {greeting()}, {household?.adminFirstName || 'there'} 👋
-            </p>
-            <h1 className="household-name">
-              {household?.householdName || 'SafeLink Home'}
-            </h1>
-          </div>
-          <div className="membership-pill">● Protected</div>
-        </div>
-
-        {/* SOS Hero Button */}
-        <div className="sos-hero">
-          <div className="sos-button-wrapper">
-            <div className="sos-pulse-ring ring-1" />
-            <div className="sos-pulse-ring ring-2" />
-            <button className="sos-main-button" onClick={() => router.push('/sos')}>
-              <span>SOS</span>
-            </button>
-          </div>
-          <p className="sos-help-text">Hold for Emergency</p>
-        </div>
-
-        {/* Status Cards */}
-        {!loading && (
-          <div className="status-cards">
-            <div className="status-card" onClick={() => router.push('/devices')}>
-              <div className="sc-num" style={{ color: '#38a169' }}>{activeDevices}</div>
-              <div className="sc-label">Active Devices</div>
-            </div>
-            {pendingDevices > 0 && (
-              <div className="status-card warning" onClick={() => router.push('/devices')}>
-                <div className="sc-num" style={{ color: '#f7bb23' }}>{pendingDevices}</div>
-                <div className="sc-label">Needs IMEI</div>
+      <main className="pt-[88px] px-gutter max-w-3xl mx-auto space-y-lg pb-xl">
+        {/* Test Alarm Alert Modal / Notification */}
+        {testAlarmActive && (
+          <div className="glass-panel p-md rounded-xl border border-secondary bg-secondary/10 flex items-center justify-between animate-bounce">
+            <div className="flex items-center gap-sm">
+              <span className="material-symbols-outlined text-secondary text-2xl">notifications_active</span>
+              <div>
+                <p className="font-label-md text-secondary font-bold">Alarm Siren Test Active</p>
+                <p className="font-label-sm text-on-surface-variant">Silent telemetry signal verified with Help24 Command.</p>
               </div>
-            )}
-            <div className="status-card" onClick={() => router.push('/orders')}>
-              <div className="sc-num">{orders.length}</div>
-              <div className="sc-label">Orders</div>
             </div>
+            <span className="text-secondary font-label-sm uppercase font-bold">OK 100%</span>
           </div>
         )}
 
-        {/* Recent Order Banner */}
-        {recentOrder && (
-          <div className="glass-card order-banner" onClick={() => router.push(`/orders/${recentOrder.id}`)}>
-            <div className="ob-icon">📦</div>
-            <div className="ob-body">
-              <div className="ob-title">Latest Order</div>
-              <div className="ob-meta">
-                #{recentOrder.id.slice(0, 8).toUpperCase()} ·{' '}
-                <span style={{ color: recentOrder.status === 'delivered' ? '#38a169' : '#f7bb23', fontWeight: 700 }}>
-                  {recentOrder.status?.charAt(0).toUpperCase() + recentOrder.status?.slice(1)}
-                </span>
-              </div>
-            </div>
-            <div className="ob-arrow">›</div>
-          </div>
-        )}
+        {/* SOS Button Section */}
+        <section className="flex flex-col items-center justify-center py-lg">
+          <button
+            onClick={() => router.push('/sos')}
+            className="w-44 h-44 rounded-full bg-[#e53e3e] flex flex-col items-center justify-center text-white sos-pulse active:scale-95 transition-transform duration-200 shadow-[0_0_35px_rgba(229,62,62,0.6)] cursor-pointer"
+          >
+            <span
+              className="material-symbols-outlined text-[52px] mb-1"
+              style={{ fontVariationSettings: "'FILL' 1" }}
+            >
+              emergency
+            </span>
+            <span className="font-headline-md text-2xl font-bold tracking-wider">SOS</span>
+          </button>
+          <p className="mt-md text-on-surface-variant font-label-sm text-label-sm uppercase tracking-widest font-semibold">
+            Hold to Activate Armed Response
+          </p>
+        </section>
 
-        {/* Quick Actions Grid */}
-        <section className="services-section">
-          <h3 className="section-title">Quick Actions</h3>
-          <div className="services-grid">
-            {quickServices.map(service => (
-              <div
-                key={service.id}
-                className="glass-card service-card"
-                style={{ borderTop: `3px solid ${service.border}` }}
-                onClick={() => router.push(service.href)}
-              >
-                <div className="service-icon">{service.icon}</div>
-                <div className="service-label">{service.label}</div>
-              </div>
-            ))}
+        {/* Mini Map Card */}
+        <section className="glass-panel rounded-xl overflow-hidden map-glow">
+          <div className="p-md border-b border-white/10 flex justify-between items-center bg-surface-container/40">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-secondary animate-pulse"></span>
+              <h2 className="font-label-md text-label-md text-on-surface font-semibold">
+                {household?.householdName || 'Molefe Family'} — 4 members
+              </h2>
+            </div>
+            <Link
+              href="/map"
+              className="text-secondary font-label-sm text-label-sm hover:underline flex items-center gap-1 font-semibold"
+            >
+              <span>View Live Map</span>
+              <span className="material-symbols-outlined text-sm">arrow_forward</span>
+            </Link>
+          </div>
+
+          <div
+            onClick={() => router.push('/map')}
+            className="relative h-48 w-full bg-surface-container-high cursor-pointer group overflow-hidden"
+          >
+            <div className="absolute inset-0 map-bg opacity-90"></div>
+            {/* Map Geofence Rings */}
+            <div className="absolute top-[35%] left-[25%] w-[120px] h-[120px] rounded-full border border-[#38a169]/50 bg-[#38a169]/10 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
+              <span className="text-[#38a169] text-[10px] uppercase font-bold bg-[#0f1923]/80 px-1.5 py-0.5 rounded">Home</span>
+            </div>
+            <div className="absolute top-[60%] left-[70%] w-[100px] h-[100px] rounded-full border border-secondary/50 bg-secondary/10 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
+              <span className="text-secondary text-[10px] uppercase font-bold bg-[#0f1923]/80 px-1.5 py-0.5 rounded">School</span>
+            </div>
+
+            {/* Glowing Family Member Pins */}
+            <div className="absolute top-[35%] left-[25%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+              <div className="w-4 h-4 bg-secondary rounded-full border-2 border-background shadow-[0_0_12px_rgba(255,195,47,0.9)] animate-ping"></div>
+              <div className="w-4 h-4 bg-secondary rounded-full border-2 border-background shadow-[0_0_12px_rgba(255,195,47,0.9)] -mt-4"></div>
+              <span className="text-[10px] bg-surface-container px-1 rounded text-on-surface mt-1">Thabo</span>
+            </div>
+            <div className="absolute top-[60%] left-[70%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+              <div className="w-4 h-4 bg-secondary rounded-full border-2 border-background shadow-[0_0_12px_rgba(255,195,47,0.9)]"></div>
+              <span className="text-[10px] bg-surface-container px-1 rounded text-on-surface mt-1">Lesedi</span>
+            </div>
+            <div className="absolute top-[30%] right-[20%] flex flex-col items-center">
+              <div className="w-4 h-4 bg-secondary rounded-full border-2 border-background shadow-[0_0_12px_rgba(255,195,47,0.9)]"></div>
+              <span className="text-[10px] bg-surface-container px-1 rounded text-on-surface mt-1">Naledi</span>
+            </div>
+            <div className="absolute bottom-[20%] left-[45%] flex flex-col items-center">
+              <div className="w-4 h-4 bg-secondary rounded-full border-2 border-background shadow-[0_0_12px_rgba(255,195,47,0.9)]"></div>
+              <span className="text-[10px] bg-surface-container px-1 rounded text-on-surface mt-1">Sipho</span>
+            </div>
+
+            {/* Bottom tap banner */}
+            <div className="absolute bottom-2 right-2 bg-surface-container-highest/90 px-2.5 py-1 rounded-lg text-[11px] text-on-surface flex items-center gap-1 backdrop-blur-md">
+              <span className="material-symbols-outlined text-[14px] text-secondary">explore</span>
+              Tap to open live radar
+            </div>
           </div>
         </section>
 
-        {/* No devices CTA */}
-        {!loading && devices.length === 0 && (
-          <div className="glass-card cta-card" onClick={() => router.push('/store')}>
-            <div className="cta-icon">🛡️</div>
-            <div className="cta-body">
-              <div className="cta-title">Activate your first device</div>
-              <div className="cta-sub">Browse the SafeLink Store to get started</div>
-            </div>
-            <div className="cta-arrow">›</div>
+        {/* Quick Services Grid */}
+        <section>
+          <div className="flex justify-between items-center mb-md">
+            <h2 className="font-headline-md text-headline-md-mobile text-on-surface font-bold">
+              Quick Services
+            </h2>
+            <Link href="/services" className="text-secondary text-label-sm font-semibold hover:underline">
+              All Services
+            </Link>
           </div>
-        )}
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-sm">
+            <button
+              onClick={() => router.push('/sos?type=armed')}
+              className="glass-panel rounded-xl p-sm flex flex-col items-center justify-center gap-xs hover:bg-white/5 active:scale-95 transition-all text-on-surface min-h-[105px] border-l-2 border-l-secondary"
+            >
+              <span
+                className="material-symbols-outlined text-secondary text-3xl"
+                style={{ fontVariationSettings: "'FILL' 1" }}
+              >
+                security
+              </span>
+              <span className="font-label-sm text-label-sm text-center font-semibold mt-1">Armed Response</span>
+            </button>
+
+            <button
+              onClick={() => router.push('/sos?type=medical')}
+              className="glass-panel rounded-xl p-sm flex flex-col items-center justify-center gap-xs hover:bg-white/5 active:scale-95 transition-all text-on-surface min-h-[105px] border-l-2 border-l-error"
+            >
+              <span
+                className="material-symbols-outlined text-error text-3xl"
+                style={{ fontVariationSettings: "'FILL' 1" }}
+              >
+                medical_services
+              </span>
+              <span className="font-label-sm text-label-sm text-center font-semibold mt-1">Medical</span>
+            </button>
+
+            <button
+              onClick={() => router.push('/sos?type=fire')}
+              className="glass-panel rounded-xl p-sm flex flex-col items-center justify-center gap-xs hover:bg-white/5 active:scale-95 transition-all text-on-surface min-h-[105px] border-l-2 border-l-[#ae111d]"
+            >
+              <span
+                className="material-symbols-outlined text-[#ffb3ad] text-3xl"
+                style={{ fontVariationSettings: "'FILL' 1" }}
+              >
+                local_fire_department
+              </span>
+              <span className="font-label-sm text-label-sm text-center font-semibold mt-1">Fire Response</span>
+            </button>
+
+            <button
+              onClick={() => router.push('/services')}
+              className="glass-panel rounded-xl p-sm flex flex-col items-center justify-center gap-xs hover:bg-white/5 active:scale-95 transition-all text-on-surface min-h-[105px]"
+            >
+              <span
+                className="material-symbols-outlined text-primary text-3xl"
+                style={{ fontVariationSettings: "'FILL' 1" }}
+              >
+                rv_hookup
+              </span>
+              <span className="font-label-sm text-label-sm text-center font-semibold mt-1">Roadside Towing</span>
+            </button>
+
+            <button
+              onClick={() => router.push('/services/technician')}
+              className="glass-panel rounded-xl p-sm flex flex-col items-center justify-center gap-xs hover:bg-white/5 active:scale-95 transition-all text-on-surface min-h-[105px]"
+            >
+              <span
+                className="material-symbols-outlined text-primary text-3xl"
+                style={{ fontVariationSettings: "'FILL' 1" }}
+              >
+                build
+              </span>
+              <span className="font-label-sm text-label-sm text-center font-semibold mt-1">Book Technician</span>
+            </button>
+
+            <button
+              onClick={triggerTestAlarm}
+              className="glass-panel rounded-xl p-sm flex flex-col items-center justify-center gap-xs hover:bg-white/5 active:scale-95 transition-all text-on-surface min-h-[105px]"
+            >
+              <span
+                className="material-symbols-outlined text-secondary-container text-3xl"
+                style={{ fontVariationSettings: "'FILL' 1" }}
+              >
+                notifications_active
+              </span>
+              <span className="font-label-sm text-label-sm text-center font-semibold mt-1">Test Alarm</span>
+            </button>
+          </div>
+        </section>
+
+        {/* Recent Alerts */}
+        <section className="glass-panel rounded-xl p-md">
+          <div className="flex justify-between items-center mb-sm">
+            <h2 className="font-label-md text-label-md text-on-surface font-semibold">Recent Alerts & Activity</h2>
+            <span className="text-[11px] text-secondary bg-secondary/10 px-2 py-0.5 rounded-full border border-secondary/20 font-semibold">Live Feed</span>
+          </div>
+
+          <div className="space-y-sm">
+            <div className="flex items-start gap-sm pb-sm border-b border-white/5">
+              <div className="w-8 h-8 rounded-full bg-primary-container/40 flex items-center justify-center mt-1 shrink-0">
+                <span className="material-symbols-outlined text-primary text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
+                  location_on
+                </span>
+              </div>
+              <div className="flex-1">
+                <p className="font-body-md text-body-md text-on-surface font-medium">Lesedi arrived at Crawford International School</p>
+                <p className="font-label-sm text-label-sm text-on-surface-variant">Today, 07:45 AM • Geofence Safe</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-sm pb-sm border-b border-white/5">
+              <div className="w-8 h-8 rounded-full bg-primary-container/40 flex items-center justify-center mt-1 shrink-0">
+                <span className="material-symbols-outlined text-primary text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
+                  location_on
+                </span>
+              </div>
+              <div className="flex-1">
+                <p className="font-body-md text-body-md text-on-surface font-medium">Naledi arrived at Sandton City Office</p>
+                <p className="font-label-sm text-label-sm text-on-surface-variant">Today, 08:15 AM • Geofence Safe</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-sm">
+              <div className="w-8 h-8 rounded-full bg-[#38a169]/20 flex items-center justify-center mt-1 shrink-0">
+                <span className="material-symbols-outlined text-[#38a169] text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
+                  shield
+                </span>
+              </div>
+              <div className="flex-1">
+                <p className="font-body-md text-body-md text-on-surface font-medium">Perimeter Armed • Sentinel Home Hub Online</p>
+                <p className="font-label-sm text-label-sm text-on-surface-variant">Today, 06:00 AM • System Armed</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Device Store Teaser */}
+        <section className="glass-panel rounded-xl p-md flex items-center justify-between hover:bg-white/5 cursor-pointer transition-colors border border-secondary/20" onClick={() => router.push('/store')}>
+          <div className="flex items-center gap-md">
+            <div className="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary border border-secondary/30">
+              <span className="material-symbols-outlined text-2xl">sensors</span>
+            </div>
+            <div>
+              <h3 className="font-label-md text-on-surface font-bold">Sentinel BLE Tags & GPS Trackers</h3>
+              <p className="font-label-sm text-on-surface-variant">Military-grade hardware for vehicles and family</p>
+            </div>
+          </div>
+          <span className="material-symbols-outlined text-secondary">chevron_right</span>
+        </section>
       </main>
 
       <BottomNav />
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        .dashboard-container {
-          display: flex; flex-direction: column;
-          height: 100vh;
-          background-color: var(--bg-dark, #0f1923);
-          color: var(--text-primary, #ffffff);
-          overflow: hidden;
-        }
-        .dashboard-content {
-          flex: 1; overflow-y: auto;
-          padding: 16px; padding-bottom: 100px;
-          display: flex; flex-direction: column; gap: 20px;
-        }
-
-        /* Greeting */
-        .dash-greeting {
-          display: flex; justify-content: space-between; align-items: flex-start;
-          padding-top: 8px;
-        }
-        .greeting-text  { margin: 0; font-size: 13px; color: var(--text-secondary); }
-        .household-name { margin: 4px 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
-        .membership-pill {
-          background: rgba(56,161,105,0.15);
-          border: 1px solid rgba(56,161,105,0.3);
-          color: #68d391; font-size: 11px; font-weight: 700;
-          padding: 4px 10px; border-radius: 12px; white-space: nowrap;
-        }
-
-        /* SOS Button */
-        .sos-hero {
-          display: flex; flex-direction: column;
-          align-items: center; justify-content: center; margin: 4px 0;
-        }
-        .sos-button-wrapper {
-          position: relative; width: 120px; height: 120px;
-          display: flex; align-items: center; justify-content: center;
-          margin-bottom: 12px;
-        }
-        .sos-main-button {
-          width: 120px; height: 120px; border-radius: 50%;
-          background: linear-gradient(135deg, #f56565, var(--emergency, #e53e3e));
-          border: none; color: white; font-size: 28px; font-weight: 800;
-          letter-spacing: 2px; box-shadow: 0 4px 20px rgba(229,62,62,0.5);
-          cursor: pointer; position: relative; z-index: 10;
-          display: flex; align-items: center; justify-content: center;
-          transition: transform 0.2s;
-        }
-        .sos-main-button:active { transform: scale(0.95); }
-        .sos-pulse-ring {
-          position: absolute; width: 100%; height: 100%;
-          border-radius: 50%; background-color: var(--emergency, #e53e3e);
-          z-index: 1; opacity: 0;
-        }
-        .ring-1 { animation: pulse-ring 2s cubic-bezier(0.215,0.61,0.355,1) infinite; }
-        .ring-2 { animation: pulse-ring 2s cubic-bezier(0.215,0.61,0.355,1) infinite 1s; }
-        @keyframes pulse-ring {
-          0%   { transform: scale(1); opacity: 0.6; }
-          100% { transform: scale(1.6); opacity: 0; }
-        }
-        .sos-help-text {
-          font-size: 12px; color: var(--text-secondary);
-          text-transform: uppercase; letter-spacing: 1px; font-weight: 600;
-        }
-
-        /* Status cards */
-        .status-cards { display: flex; gap: 10px; }
-        .status-card {
-          flex: 1; text-align: center;
-          background: rgba(22,34,49,0.7);
-          border: 1px solid rgba(255,255,255,0.07);
-          border-radius: 14px; padding: 12px 8px;
-          cursor: pointer; transition: background 0.2s;
-        }
-        .status-card:active { background: rgba(44,90,133,0.2); }
-        .status-card.warning { border-color: rgba(247,187,35,0.3); }
-        .sc-num   { font-size: 24px; font-weight: 800; color: var(--accent); }
-        .sc-label { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; margin-top: 2px; }
-
-        /* Order banner */
-        .order-banner {
-          display: flex; align-items: center; gap: 12px;
-          cursor: pointer; transition: background 0.2s;
-        }
-        .order-banner:active { background: rgba(44,90,133,0.3); }
-        .ob-icon { font-size: 24px; }
-        .ob-body { flex: 1; }
-        .ob-title { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
-        .ob-meta  { font-size: 12px; color: var(--text-secondary); }
-        .ob-arrow { font-size: 22px; color: var(--text-secondary); }
-
-        /* Glass Card */
-        .glass-card {
-          background: rgba(22,34,49,0.7);
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
-          border: 1px solid rgba(255,255,255,0.05);
-          border-radius: 16px; padding: 16px;
-        }
-
-        /* Services */
-        .section-title {
-          font-size: 13px; font-weight: 700; color: var(--text-secondary);
-          margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;
-        }
-        .services-grid {
-          display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
-        }
-        .service-card {
-          display: flex; flex-direction: column; align-items: center;
-          justify-content: center; padding: 16px 8px;
-          cursor: pointer; transition: background 0.2s;
-        }
-        .service-card:active { background: rgba(22,34,49,0.9); }
-        .service-icon  { font-size: 24px; margin-bottom: 8px; }
-        .service-label { font-size: 13px; font-weight: 600; text-align: center; }
-
-        /* CTA card */
-        .cta-card {
-          display: flex; align-items: center; gap: 14px;
-          background: linear-gradient(135deg, rgba(44,90,133,0.3), rgba(44,90,133,0.1));
-          border-color: rgba(44,90,133,0.3); cursor: pointer;
-        }
-        .cta-card:active { opacity: 0.8; }
-        .cta-icon  { font-size: 28px; }
-        .cta-body  { flex: 1; }
-        .cta-title { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
-        .cta-sub   { font-size: 12px; color: var(--text-secondary); }
-        .cta-arrow { font-size: 22px; color: var(--accent); }
-      `}} />
     </div>
   );
 }

@@ -1,394 +1,339 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/auth-context';
-import { createIncident, resolveIncident, getHousehold } from '@/lib/db';
-import AuthGuard from '@/app/components/AuthGuard';
+import React, { useState, useEffect, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
-
-const HOLD_DURATION = 3000; // ms to hold
+import AuthGuard from '@/app/components/AuthGuard';
+import { useAuth } from '@/lib/auth-context';
 
 export default function SOSPage() {
   return (
     <AuthGuard>
-      <SOSContent />
+      <SOSFlowContent />
     </AuthGuard>
   );
 }
 
-function SOSContent() {
-  const { user }  = useAuth();
-  const router    = useRouter();
+function SOSFlowContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialType = searchParams.get('type') || null;
 
-  const [phase, setPhase]           = useState('idle');  // idle | holding | active | cancelling
-  const [progress, setProgress]     = useState(0);       // 0-100
-  const [incidentId, setIncidentId] = useState(null);
-  const [household, setHousehold]   = useState(null);
-  const [location, setLocation]     = useState(null);
-  const [error, setError]           = useState('');
+  const [activeIncident, setActiveIncident] = useState(initialType ? true : false);
+  const [emergencyType, setEmergencyType] = useState(initialType ? initialType.toUpperCase() : 'ARMED RESPONSE');
+  const [secondsActive, setSecondsActive] = useState(38);
+  const [etaMinutes, setEtaMinutes] = useState(3);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelProgress, setCancelProgress] = useState(0);
 
-  const holdTimerRef  = useRef(null);
-  const progressRef   = useRef(null);
-  const startTimeRef  = useRef(null);
+  const cancelTimerRef = useRef(null);
 
   useEffect(() => {
-    if (user) {
-      getHousehold(user.uid).then(setHousehold).catch(() => {});
+    let timer;
+    if (activeIncident) {
+      timer = setInterval(() => {
+        setSecondsActive((s) => s + 1);
+      }, 1000);
     }
-    // Attempt to get location early
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => {},
-        { timeout: 5000 }
-      );
-    }
-  }, [user]);
+    return () => clearInterval(timer);
+  }, [activeIncident]);
 
-  const startHold = useCallback(() => {
-    if (phase !== 'idle') return;
-    setPhase('holding');
-    setProgress(0);
-    startTimeRef.current = Date.now();
+  const handleSelectEmergency = (type) => {
+    setEmergencyType(type);
+    setActiveIncident(true);
+  };
 
-    progressRef.current = setInterval(() => {
-      const elapsed = Date.now() - startTimeRef.current;
-      const pct = Math.min((elapsed / HOLD_DURATION) * 100, 100);
-      setProgress(pct);
+  const startCancelHold = () => {
+    setCancelling(true);
+    let start = Date.now();
+    cancelTimerRef.current = setInterval(() => {
+      let elapsed = Date.now() - start;
+      let pct = Math.min((elapsed / 2000) * 100, 100);
+      setCancelProgress(pct);
       if (pct >= 100) {
-        clearInterval(progressRef.current);
-        triggerSOS();
+        clearInterval(cancelTimerRef.current);
+        setActiveIncident(false);
+        setCancelling(false);
+        setCancelProgress(0);
       }
     }, 30);
-  }, [phase]);
-
-  const cancelHold = useCallback(() => {
-    if (phase !== 'holding') return;
-    clearInterval(progressRef.current);
-    setPhase('idle');
-    setProgress(0);
-  }, [phase]);
-
-  const triggerSOS = async () => {
-    setPhase('active');
-    try {
-      const id = await createIncident(user.uid, {
-        type: 'SOS',
-        location,
-        address: household?.address || null,
-        householdName: household?.householdName || null,
-        phone: household?.phone || null,
-        triggeredAt: new Date().toISOString(),
-      });
-      setIncidentId(id);
-    } catch (err) {
-      setError('SOS logged — contact armed response directly if needed.');
-      console.error(err);
-    }
   };
 
-  const cancelSOS = async () => {
-    setPhase('cancelling');
-    if (incidentId) {
-      try {
-        await resolveIncident(incidentId);
-      } catch (err) {
-        console.error(err);
-      }
-    }
-    setIncidentId(null);
-    setPhase('idle');
-    setProgress(0);
+  const stopCancelHold = () => {
+    clearInterval(cancelTimerRef.current);
+    setCancelling(false);
+    setCancelProgress(0);
   };
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      clearInterval(progressRef.current);
-    };
-  }, []);
-
-  const circumference = 2 * Math.PI * 52; // radius=52
+  const formatTime = (secs) => {
+    const mins = Math.floor(secs / 60);
+    const remainder = secs % 60;
+    return `${String(mins).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+  };
 
   return (
-    <div className="sos-page">
-      {phase !== 'active' ? (
-        <>
-          {/* Header */}
-          <div className="sos-header">
-            <button className="back-btn" onClick={() => router.push('/dashboard')}>← Home</button>
-            <div className="sos-header-title">Emergency SOS</div>
-          </div>
+    <div
+      className={`min-h-screen text-on-surface antialiased flex flex-col relative overflow-x-hidden ${
+        activeIncident ? 'bg-[#041522] sos-active-border' : 'bg-background'
+      }`}
+    >
+      <Header
+        title={activeIncident ? 'CRITICAL INCIDENT ACTIVE' : 'EMERGENCY DISPATCH'}
+        showNotification={false}
+      />
 
-          {/* Main button area */}
-          <div className="sos-centre">
-            <div className="sos-instruction">
-              {phase === 'idle' ? 'Hold the button for 3 seconds to activate' : 'Keep holding…'}
+      <main className="flex-grow pt-[80px] pb-[100px] px-gutter flex flex-col max-w-2xl mx-auto w-full z-10 relative">
+        {/* ================= STATE 1: ACTIVE INCIDENT DISPATCH ================= */}
+        {activeIncident ? (
+          <div className="space-y-md animate-fade-in">
+            {/* Pulsing Emergency Status Header */}
+            <div className="glass-panel p-md rounded-2xl border-2 border-error bg-error/10 relative overflow-hidden text-center shadow-[0_0_30px_rgba(229,62,62,0.4)]">
+              <div className="flex items-center justify-between mb-xs">
+                <span className="bg-error text-white font-label-sm text-[11px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                  LIVE SOS #{emergencyType}
+                </span>
+                <span className="font-mono text-error font-bold text-sm tracking-wider">
+                  ⏱ {formatTime(secondsActive)} ACTIVE
+                </span>
+              </div>
+              <h2 className="font-headline-lg-mobile text-2xl font-black text-white tracking-wide mt-1">
+                DISPATCH ACTIVATED
+              </h2>
+              <p className="font-label-sm text-xs text-on-surface-variant mt-0.5">
+                GPS telemetry linked with Help24 Armed Command & SAPS
+              </p>
+
+              {/* Audio Waveform Recording Animation */}
+              <div className="flex items-center justify-center gap-1.5 py-3 mt-2 bg-surface-container-lowest/60 rounded-xl border border-white/5">
+                <span className="material-symbols-outlined text-error text-sm animate-pulse">mic</span>
+                <span className="text-[11px] font-semibold text-error mr-2">Live Audio Uplink</span>
+                {[4, 14, 8, 22, 18, 10, 24, 16, 8, 20, 12, 6].map((h, i) => (
+                  <div
+                    key={i}
+                    className="w-1 bg-error rounded-full waveform-bar"
+                    style={{
+                      height: `${h}px`,
+                      animationDelay: `${i * 0.1}s`,
+                    }}
+                  ></div>
+                ))}
+              </div>
             </div>
 
-            {/* Hold button with SVG progress ring */}
-            <div
-              className="sos-hold-wrapper"
-              onMouseDown={startHold}
-              onMouseUp={cancelHold}
-              onMouseLeave={cancelHold}
-              onTouchStart={startHold}
-              onTouchEnd={cancelHold}
-              style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
-            >
-              <svg className="progress-ring" width="130" height="130" viewBox="0 0 130 130">
-                {/* Background ring */}
-                <circle cx="65" cy="65" r="52" fill="none" stroke="rgba(229,62,62,0.15)" strokeWidth="6" />
-                {/* Progress ring */}
-                <circle
-                  cx="65" cy="65" r="52" fill="none"
-                  stroke="var(--emergency, #e53e3e)"
-                  strokeWidth="6"
-                  strokeDasharray={circumference}
-                  strokeDashoffset={circumference - (progress / 100) * circumference}
-                  strokeLinecap="round"
-                  transform="rotate(-90 65 65)"
-                  style={{ transition: 'stroke-dashoffset 0.03s linear' }}
-                />
-              </svg>
-              <button className={`sos-hold-btn ${phase === 'holding' ? 'holding' : ''}`}>
-                <span className="sos-hold-label">SOS</span>
-                <span className="sos-hold-sub">{phase === 'holding' ? `${Math.round(progress)}%` : 'Hold'}</span>
+            {/* Responder Unit Card */}
+            <div className="glass-panel p-md rounded-2xl border border-secondary/40 shadow-xl space-y-sm bg-surface-container/90">
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-sm">
+                  <div className="w-12 h-12 rounded-xl bg-secondary/20 border border-secondary/40 flex items-center justify-center text-secondary shrink-0">
+                    <span className="material-symbols-outlined text-3xl">local_police</span>
+                  </div>
+                  <div>
+                    <h3 className="font-headline-md text-base font-bold text-on-surface">
+                      Unit AR-402 (Help24 Tactical)
+                    </h3>
+                    <p className="font-label-sm text-xs text-on-surface-variant">
+                      Officer Khumalo • Armoured Response 4x4
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-secondary font-headline-md text-lg font-black">{etaMinutes} MINS</span>
+                  <p className="text-[10px] text-secondary font-semibold uppercase">Estimated Arrival</p>
+                </div>
+              </div>
+
+              {/* Distance Progress */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px] font-semibold text-on-surface-variant">
+                  <span>1.4 km away from your location</span>
+                  <span className="text-[#38a169]">Approaching via Sandton Dr</span>
+                </div>
+                <div className="w-full h-2 bg-surface-container-high rounded-full overflow-hidden">
+                  <div className="h-full bg-secondary w-3/4 rounded-full animate-pulse"></div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-sm pt-1">
+                <button
+                  onClick={() => alert('Connecting live patch to Help24 Dispatcher...')}
+                  className="bg-secondary text-on-secondary font-label-md text-xs py-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 active:scale-95 shadow-[0_0_12px_rgba(255,195,47,0.3)]"
+                >
+                  <span className="material-symbols-outlined text-[18px]">call</span>
+                  Call Officer
+                </button>
+                <button
+                  onClick={() => alert('Location beacon pinned and shared to WhatsApp family group.')}
+                  className="glass-panel text-on-surface font-label-md text-xs py-2.5 rounded-xl font-semibold flex items-center justify-center gap-1.5 hover:bg-white/5 active:scale-95 border-white/10"
+                >
+                  <span className="material-symbols-outlined text-[18px] text-primary">share_location</span>
+                  Share Location
+                </button>
+              </div>
+            </div>
+
+            {/* Notified Contacts Status */}
+            <div className="glass-panel p-md rounded-2xl border border-white/10 space-y-sm">
+              <h4 className="font-label-md text-xs uppercase tracking-wider font-bold text-on-surface-variant">
+                Emergency Notifications Dispatched
+              </h4>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-on-surface font-medium">Naledi Molefe (Wife)</span>
+                  <span className="text-[#38a169] font-semibold flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">check_circle</span> SMS & App Alert Delivered
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-on-surface font-medium">Help24 Control Room 24/7</span>
+                  <span className="text-secondary font-semibold flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">radio</span> Operator Assigned
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-on-surface font-medium">Sandton SAPS Sector 3</span>
+                  <span className="text-primary font-semibold flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">security</span> Relayed
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Hold to Cancel SOS */}
+            <div className="pt-2">
+              <button
+                onMouseDown={startCancelHold}
+                onMouseUp={stopCancelHold}
+                onTouchStart={startCancelHold}
+                onTouchEnd={stopCancelHold}
+                className="w-full relative overflow-hidden glass-panel border border-error/50 hover:bg-error/10 text-error py-3.5 rounded-2xl font-label-md text-sm font-bold flex flex-col items-center justify-center select-none cursor-pointer"
+              >
+                {cancelProgress > 0 && (
+                  <div
+                    className="absolute inset-0 bg-error/30 transition-all duration-75"
+                    style={{ width: `${cancelProgress}%` }}
+                  ></div>
+                )}
+                <span className="relative z-10 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-xl">cancel</span>
+                  {cancelling ? `Holding to cancel... ${Math.round(cancelProgress)}%` : 'Hold 2s to Cancel SOS'}
+                </span>
+                <span className="relative z-10 text-[10px] text-on-surface-variant font-normal mt-0.5">
+                  Pin verification required upon cancellation
+                </span>
               </button>
             </div>
-
-            {/* Pulse rings (idle only) */}
-            {phase === 'idle' && (
-              <>
-                <div className="sos-pulse-ring ring-1" />
-                <div className="sos-pulse-ring ring-2" />
-              </>
-            )}
-
-            {error && <div className="sos-error">{error}</div>}
           </div>
-
-          {/* Quick call options */}
-          <div className="quick-calls">
-            <div className="qc-title">Direct Emergency Lines</div>
-            <div className="qc-grid">
-              <a href="tel:10111" className="qc-btn qc-red">
-                <span className="qc-icon">🚔</span>
-                <span className="qc-label">Police</span>
-                <span className="qc-number">10111</span>
-              </a>
-              <a href="tel:10177" className="qc-btn qc-blue">
-                <span className="qc-icon">🚑</span>
-                <span className="qc-label">Ambulance</span>
-                <span className="qc-number">10177</span>
-              </a>
-              <a href="tel:112" className="qc-btn qc-orange">
-                <span className="qc-icon">🔥</span>
-                <span className="qc-label">Fire Dept</span>
-                <span className="qc-number">112</span>
-              </a>
-              {household?.emergency?.phone && (
-                <a href={`tel:${household.emergency.phone}`} className="qc-btn qc-green">
-                  <span className="qc-icon">👤</span>
-                  <span className="qc-label">{household.emergency.name || 'Emergency Contact'}</span>
-                  <span className="qc-number">{household.emergency.phone}</span>
-                </a>
-              )}
+        ) : (
+          /* ================= STATE 2: PANIC SELECTOR PANEL ================= */
+          <div className="flex flex-col gap-md">
+            <div className="text-center mb-sm">
+              <p className="font-body-md text-sm text-error font-semibold tracking-wide">
+                Immediate response team will be dispatched upon selection
+              </p>
             </div>
-          </div>
-        </>
-      ) : (
-        /* ── ACTIVE SOS SCREEN ── */
-        <div className="active-sos">
-          <div className="active-sos-pulse-container">
-            <div className="active-pulse ring-a" />
-            <div className="active-pulse ring-b" />
-            <div className="active-pulse ring-c" />
-            <div className="active-sos-icon">🚨</div>
-          </div>
 
-          <div className="active-title">SOS ACTIVATED</div>
-          <div className="active-sub">Armed response has been notified</div>
-
-          {incidentId && (
-            <div className="incident-badge">
-              Incident ID: #{incidentId.slice(0, 8).toUpperCase()}
-            </div>
-          )}
-
-          <div className="active-info-list">
-            {location && (
-              <div className="active-info-row">
-                <span>📍</span>
-                <span>GPS location shared: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}</span>
+            {/* Armed Response Card */}
+            <button
+              onClick={() => handleSelectEmergency('ARMED RESPONSE')}
+              className="glass-panel rounded-2xl p-md flex items-center gap-md text-left transition-all active:scale-95 hover:bg-surface-container-high/90 border-l-4 border-l-secondary relative overflow-hidden group cursor-pointer"
+            >
+              <div className="bg-surface-container rounded-2xl p-sm flex-shrink-0 group-hover:scale-110 transition-transform">
+                <span
+                  className="material-symbols-outlined text-[36px] text-secondary"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
+                >
+                  local_police
+                </span>
               </div>
-            )}
-            {household && (
-              <div className="active-info-row">
-                <span>🏠</span>
-                <span>{household.address?.line1}, {household.address?.suburb}</span>
+              <div className="flex-grow">
+                <h3 className="font-headline-md text-base font-bold text-on-surface">Armed Response</h3>
+                <p className="font-body-md text-xs text-on-surface-variant line-clamp-1">
+                  Intruder, hijacking, home invasion, or physical threat.
+                </p>
               </div>
-            )}
-            <div className="active-info-row">
-              <span>⏱</span>
-              <span>SOS signal active — stay on the line</span>
-            </div>
-          </div>
+              <span className="material-symbols-outlined text-outline-variant group-hover:text-secondary transition-colors">
+                chevron_right
+              </span>
+            </button>
 
-          <div className="active-emergency-numbers">
-            <a href="tel:10111" className="emergency-call-btn">📞 Call Police (10111)</a>
-            <a href="tel:10177" className="emergency-call-btn">📞 Call Ambulance (10177)</a>
-          </div>
+            {/* Medical Card */}
+            <button
+              onClick={() => handleSelectEmergency('MEDICAL SOS')}
+              className="glass-panel rounded-2xl p-md flex items-center gap-md text-left transition-all active:scale-95 hover:bg-surface-container-high/90 border-l-4 border-l-[#38a169] relative overflow-hidden group cursor-pointer"
+            >
+              <div className="bg-surface-container rounded-2xl p-sm flex-shrink-0 group-hover:scale-110 transition-transform">
+                <span
+                  className="material-symbols-outlined text-[36px] text-[#38a169]"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
+                >
+                  medical_services
+                </span>
+              </div>
+              <div className="flex-grow">
+                <h3 className="font-headline-md text-base font-bold text-on-surface">Medical Emergency</h3>
+                <p className="font-body-md text-xs text-on-surface-variant line-clamp-1">
+                  Cardiac event, injury, trauma, or critical ambulance needed.
+                </p>
+              </div>
+              <span className="material-symbols-outlined text-outline-variant group-hover:text-[#38a169] transition-colors">
+                chevron_right
+              </span>
+            </button>
 
-          <button className="cancel-sos-btn" onClick={cancelSOS}>
-            ✕ Cancel SOS — I am safe
-          </button>
-        </div>
-      )}
+            {/* Fire Card */}
+            <button
+              onClick={() => handleSelectEmergency('FIRE EMERGENCY')}
+              className="glass-panel rounded-2xl p-md flex items-center gap-md text-left transition-all active:scale-95 hover:bg-surface-container-high/90 border-l-4 border-l-error relative overflow-hidden group cursor-pointer"
+            >
+              <div className="bg-surface-container rounded-2xl p-sm flex-shrink-0 group-hover:scale-110 transition-transform">
+                <span
+                  className="material-symbols-outlined text-[36px] text-error"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
+                >
+                  local_fire_department
+                </span>
+              </div>
+              <div className="flex-grow">
+                <h3 className="font-headline-md text-base font-bold text-on-surface">Fire & Rescue</h3>
+                <p className="font-body-md text-xs text-on-surface-variant line-clamp-1">
+                  Structural fire, electrical explosion, or smoke hazard.
+                </p>
+              </div>
+              <span className="material-symbols-outlined text-outline-variant group-hover:text-error transition-colors">
+                chevron_right
+              </span>
+            </button>
+
+            {/* Roadside Assistance / Towing */}
+            <button
+              onClick={() => handleSelectEmergency('ROADSIDE ASSIST')}
+              className="glass-panel rounded-2xl p-md flex items-center gap-md text-left transition-all active:scale-95 hover:bg-surface-container-high/90 border-l-4 border-l-primary relative overflow-hidden group cursor-pointer"
+            >
+              <div className="bg-surface-container rounded-2xl p-sm flex-shrink-0 group-hover:scale-110 transition-transform">
+                <span
+                  className="material-symbols-outlined text-[36px] text-primary"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
+                >
+                  rv_hookup
+                </span>
+              </div>
+              <div className="flex-grow">
+                <h3 className="font-headline-md text-base font-bold text-on-surface">Roadside & Towing</h3>
+                <p className="font-body-md text-xs text-on-surface-variant line-clamp-1">
+                  Vehicle breakdown, flat tyre, jump-start, or towing escort.
+                </p>
+              </div>
+              <span className="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">
+                chevron_right
+              </span>
+            </button>
+          </div>
+        )}
+      </main>
 
       <BottomNav />
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        .sos-page {
-          min-height: 100vh;
-          background: var(--bg-dark, #0f1923);
-          color: var(--text-primary, #fff);
-          display: flex; flex-direction: column;
-          padding-bottom: 90px;
-        }
-        .sos-header {
-          display: flex; align-items: center; gap: 16px;
-          padding: 24px 20px 0;
-        }
-        .back-btn { background: none; border: none; color: var(--accent); font-size: 14px; font-weight: 600; cursor: pointer; padding: 0; }
-        .sos-header-title { font-size: 18px; font-weight: 800; color: var(--emergency, #e53e3e); }
-
-        .sos-centre {
-          display: flex; flex-direction: column; align-items: center;
-          padding: 40px 20px; position: relative; flex: 1;
-        }
-        .sos-instruction {
-          font-size: 14px; color: var(--text-secondary);
-          text-align: center; margin-bottom: 40px;
-          height: 20px;
-        }
-
-        .sos-hold-wrapper {
-          position: relative; width: 130px; height: 130px;
-          display: flex; align-items: center; justify-content: center;
-          cursor: pointer;
-        }
-        .progress-ring { position: absolute; inset: 0; }
-        .sos-hold-btn {
-          width: 108px; height: 108px; border-radius: 50%;
-          background: linear-gradient(135deg, #f56565, var(--emergency, #e53e3e));
-          border: none; color: #fff; cursor: pointer; z-index: 10;
-          display: flex; flex-direction: column; align-items: center; justify-content: center;
-          box-shadow: 0 4px 24px rgba(229,62,62,0.5);
-          transition: transform 0.1s, box-shadow 0.2s;
-          gap: 2px;
-        }
-        .sos-hold-btn.holding { transform: scale(0.95); box-shadow: 0 2px 12px rgba(229,62,62,0.3); }
-        .sos-hold-label { font-size: 28px; font-weight: 900; letter-spacing: 2px; }
-        .sos-hold-sub   { font-size: 11px; color: rgba(255,255,255,0.8); font-weight: 600; }
-
-        .sos-pulse-ring {
-          position: absolute;
-          width: 130px; height: 130px; border-radius: 50%;
-          background: rgba(229,62,62,0.2);
-          pointer-events: none;
-        }
-        .ring-1 { animation: pulse-ring 2s ease-out infinite; }
-        .ring-2 { animation: pulse-ring 2s ease-out infinite 1s; }
-        @keyframes pulse-ring {
-          0%   { transform: scale(1); opacity: 0.6; }
-          100% { transform: scale(1.8); opacity: 0; }
-        }
-
-        .sos-error {
-          margin-top: 20px;
-          background: rgba(229,62,62,0.15);
-          border: 1px solid rgba(229,62,62,0.4);
-          border-radius: 10px; padding: 12px; font-size: 13px; color: #fc8181;
-          max-width: 320px; text-align: center;
-        }
-
-        .quick-calls { padding: 0 20px 20px; }
-        .qc-title { font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
-        .qc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .qc-btn {
-          display: flex; flex-direction: column; align-items: center;
-          padding: 14px 10px; border-radius: 14px; gap: 4px;
-          text-decoration: none; color: #fff;
-          border: 1px solid rgba(255,255,255,0.1);
-          transition: opacity 0.2s;
-        }
-        .qc-btn:active { opacity: 0.8; }
-        .qc-red    { background: rgba(229,62,62,0.15); border-color: rgba(229,62,62,0.3); }
-        .qc-blue   { background: rgba(66,153,225,0.15); border-color: rgba(66,153,225,0.3); }
-        .qc-orange { background: rgba(221,107,32,0.15); border-color: rgba(221,107,32,0.3); }
-        .qc-green  { background: rgba(56,161,105,0.15); border-color: rgba(56,161,105,0.3); }
-        .qc-icon   { font-size: 22px; }
-        .qc-label  { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.7); }
-        .qc-number { font-size: 16px; font-weight: 800; }
-
-        /* Active SOS */
-        .active-sos {
-          display: flex; flex-direction: column; align-items: center;
-          padding: 48px 24px; gap: 20px; flex: 1; text-align: center;
-        }
-        .active-sos-pulse-container {
-          position: relative; width: 120px; height: 120px;
-          display: flex; align-items: center; justify-content: center;
-        }
-        .active-pulse {
-          position: absolute; border-radius: 50%;
-          background: rgba(229,62,62,0.3);
-          animation: active-pulse 1.5s ease-out infinite;
-        }
-        .ring-a { width: 120px; height: 120px; }
-        .ring-b { width: 120px; height: 120px; animation-delay: 0.5s; }
-        .ring-c { width: 120px; height: 120px; animation-delay: 1s; }
-        @keyframes active-pulse {
-          0%   { transform: scale(1); opacity: 0.6; }
-          100% { transform: scale(2.5); opacity: 0; }
-        }
-        .active-sos-icon { position: relative; z-index: 1; font-size: 52px; }
-        .active-title { font-size: 32px; font-weight: 900; color: var(--emergency, #e53e3e); letter-spacing: 2px; }
-        .active-sub   { font-size: 14px; color: var(--text-secondary); }
-        .incident-badge {
-          background: rgba(229,62,62,0.15);
-          border: 1px solid rgba(229,62,62,0.3);
-          padding: 6px 16px; border-radius: 20px;
-          font-size: 12px; font-weight: 700; color: #fc8181; font-family: monospace;
-        }
-        .active-info-list { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-        .active-info-row {
-          display: flex; align-items: flex-start; gap: 10px;
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.07);
-          border-radius: 10px; padding: 12px;
-          font-size: 13px; text-align: left;
-        }
-        .active-emergency-numbers { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-        .emergency-call-btn {
-          display: block; text-align: center;
-          background: rgba(229,62,62,0.15);
-          border: 1px solid rgba(229,62,62,0.3);
-          border-radius: 12px; padding: 14px;
-          color: #fc8181; font-size: 15px; font-weight: 700;
-          text-decoration: none; transition: opacity 0.2s;
-        }
-        .emergency-call-btn:active { opacity: 0.8; }
-        .cancel-sos-btn {
-          width: 100%; padding: 15px;
-          background: rgba(255,255,255,0.08);
-          border: 1px solid rgba(255,255,255,0.2);
-          border-radius: 14px; color: var(--text-secondary);
-          font-size: 14px; font-weight: 700; cursor: pointer;
-        }
-      `}} />
     </div>
   );
 }

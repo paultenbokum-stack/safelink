@@ -3,82 +3,58 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-const navItems = [
-  {
-    href: '/dashboard',
-    label: 'Home',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-        <polyline points="9 22 9 12 15 12 15 22" />
-      </svg>
-    ),
-  },
-  {
-    href: '/store',
-    label: 'Store',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-        <line x1="3" y1="6" x2="21" y2="6" />
-        <path d="M16 10a4 4 0 0 1-8 0" />
-      </svg>
-    ),
-  },
-  { href: '/sos', label: 'SOS', isSOS: true },
-  {
-    href: '/devices',
-    label: 'Devices',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
-        <line x1="12" y1="18" x2="12.01" y2="18" />
-      </svg>
-    ),
-  },
-  {
-    href: '/profile',
-    label: 'Profile',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-        <circle cx="12" cy="7" r="4" />
-      </svg>
-    ),
-  },
-];
-
 export default function BottomNav() {
   const pathname = usePathname();
 
+  const navItems = [
+    { href: '/dashboard', label: 'Home', icon: 'home', fill: true },
+    { href: '/map', label: 'Map', icon: 'map', fill: false },
+    { href: '/sos', label: 'SOS', icon: 'emergency_share', fill: true, isSos: true },
+    { href: '/devices', label: 'Devices', icon: 'devices', fill: false },
+    { href: '/profile', label: 'Profile', icon: 'person', fill: false },
+  ];
+
   return (
-    <nav className="bottom-nav">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-surface-container/90 backdrop-blur-lg border-t border-white/10 shadow-[0_-4px_12px_rgba(0,0,0,0.5)] flex justify-around items-center h-20 px-2 pb-safe md:max-w-md md:left-1/2 md:-translate-x-1/2 md:rounded-t-2xl">
       {navItems.map((item) => {
-        if (item.isSOS) {
+        const isActive = pathname === item.href || (item.href === '/dashboard' && pathname === '/');
+        
+        if (item.isSos) {
           return (
-            <div key="sos" className="nav-sos-container">
-              <Link
-                href="/sos"
-                className={`nav-sos-btn ${pathname === '/sos' ? 'animate-pulse-red' : ''}`}
-              >
-                SOS
-              </Link>
-            </div>
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex flex-col items-center justify-center px-3 py-1 text-error active:scale-90 transition-all duration-200 ${
+                isActive ? 'scale-105' : ''
+              }`}
+            >
+              <div className="w-10 h-10 rounded-full bg-error-container/30 border border-error/40 flex items-center justify-center text-error shadow-[0_0_12px_rgba(229,62,62,0.4)] animate-pulse">
+                <span className="material-symbols-outlined text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                  {item.icon}
+                </span>
+              </div>
+              <span className="font-label-sm text-[11px] font-bold text-error mt-0.5">{item.label}</span>
+            </Link>
           );
         }
-
-        const isActive =
-          pathname === item.href ||
-          (item.href === '/dashboard' && pathname === '/');
 
         return (
           <Link
             key={item.href}
             href={item.href}
-            className={`nav-item ${isActive ? 'active' : ''}`}
+            className={`flex flex-col items-center justify-center px-3 py-1 rounded-xl active:scale-90 transition-all duration-200 ${
+              isActive
+                ? 'text-secondary bg-secondary-container/20'
+                : 'text-on-surface-variant hover:text-on-surface hover:bg-white/5'
+            }`}
           >
-            {item.icon}
-            <span>{item.label}</span>
+            <span
+              className="material-symbols-outlined text-[24px]"
+              style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}
+            >
+              {item.icon}
+            </span>
+            <span className="font-label-sm text-[11px] mt-0.5">{item.label}</span>
           </Link>
         );
       })}

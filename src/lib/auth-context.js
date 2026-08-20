@@ -18,8 +18,23 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Check local storage for test session first
+    const savedUser = typeof window !== 'undefined' ? localStorage.getItem('safelink_user') : null;
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+        setLoading(false);
+      } catch (e) {
+        console.error('Failed to parse saved user', e);
+      }
+    }
+
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
+      if (u) {
+        setUser(u);
+      } else if (!savedUser) {
+        setUser(null);
+      }
       setLoading(false);
     });
     return unsubscribe;
@@ -31,7 +46,35 @@ export function AuthProvider({ children }) {
   const register = (email, password) =>
     createUserWithEmailAndPassword(auth, email, password);
 
-  const logout = () => signOut(auth);
+  const loginWithPhone = async (phoneNumber, profileData = {}) => {
+    const mockUid = 'user_' + phoneNumber.replace(/\D/g, '').slice(-9);
+    const customUser = {
+      uid: mockUid,
+      phoneNumber: `+27${phoneNumber.replace(/\D/g, '').slice(-9)}`,
+      displayName: profileData.displayName || profileData.adminFirstName || 'SafeLink Member',
+      email: profileData.email || `${mockUid}@safelink.co.za`,
+      photoURL: profileData.photoURL || null,
+      isTestSession: true,
+      ...profileData,
+    };
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('safelink_user', JSON.stringify(customUser));
+    }
+    setUser(customUser);
+    return customUser;
+  };
+
+  const logout = async () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('safelink_user');
+    }
+    setUser(null);
+    try {
+      await signOut(auth);
+    } catch (e) {
+      // ignore signOut error if not signed into Firebase auth
+    }
+  };
 
   const resetPassword = (email) => sendPasswordResetEmail(auth, email);
 
@@ -39,7 +82,18 @@ export function AuthProvider({ children }) {
     auth.currentUser ? sendEmailVerification(auth.currentUser) : Promise.resolve();
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, resetPassword, verifyEmail }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        register,
+        loginWithPhone,
+        logout,
+        resetPassword,
+        verifyEmail,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

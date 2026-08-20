@@ -1,11 +1,8 @@
-import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
 
-const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'] });
-
 export const metadata = {
-  title: 'SafeLink',
+  title: 'SafeLink - Digital Bodyguard',
   description: 'Your Safety. Our Priority. Armed response, Sentinel devices, and emergency services at your fingertips.',
 };
 
@@ -14,24 +11,24 @@ export const viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#0f1923',
+  themeColor: '#041522',
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
       </head>
-      <body className={inter.className}>
+      <body className="bg-background text-on-background min-h-screen selection:bg-secondary/30 selection:text-secondary">
         <AuthProvider>
-          <div className="app-container">
-            <main className="content-area">
-              {children}
-            </main>
-          </div>
+          {children}
         </AuthProvider>
       </body>
     </html>

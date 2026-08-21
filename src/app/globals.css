@@ -123,46 +123,6 @@ html, body {
   background-size: 100% 100%, 24px 24px, 24px 24px;
 }
 
-/* South African Flag CSS representation */
-.sa-flag {
-  width: 24px;
-  height: 16px;
-  position: relative;
-  overflow: hidden;
-  background-color: #007749;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-.sa-flag::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: linear-gradient(to bottom, #E03C31 33%, transparent 33%, transparent 67%, #001489 67%);
-}
-.sa-flag::after {
-  content: '';
-  position: absolute;
-  left: -8px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 20px;
-  height: 20px;
-  background: #007749;
-  border: 3px solid #FFF;
-  transform-origin: center;
-  clip-path: polygon(100% 50%, 0 0, 0 100%);
-}
-.sa-flag-y {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 6px;
-  background: #FFB81C;
-  clip-path: polygon(0 0, 100% 50%, 0 100%);
-  z-index: 2;
-}
-
 /* Focus glow effect */
 .input-focus-glow:focus-within {
   box-shadow: 0 0 15px rgba(44, 90, 133, 0.5);

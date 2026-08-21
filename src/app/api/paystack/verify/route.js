@@ -66,8 +66,6 @@ export async function POST(request) {
       transaction,
     });
 
-    const transactionId = String(transaction.id);
-
     return NextResponse.json({
       verified: true,
       orderId,
@@ -75,7 +73,6 @@ export async function POST(request) {
       amount: paymentIntent.total,
       currency: paymentIntent.currency,
       reference,
-      transactionId,
     });
   } catch (error) {
     if (error?.message === 'UNAUTHENTICATED') {

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
+import SouthAfricaFlag from '@/app/components/SouthAfricaFlag';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -108,9 +109,7 @@ export default function LoginPage() {
             <div className="flex items-center gap-2 bg-surface-container-low border border-outline/30 rounded-xl p-3 focus-within:border-secondary transition-all duration-200">
               {/* SA Flag Prefix */}
               <div className="flex items-center gap-1.5 pr-2.5 border-r border-outline/30">
-                <div className="sa-flag">
-                  <div className="sa-flag-y"></div>
-                </div>
+                <SouthAfricaFlag className="w-6 h-4" />
                 <span className="font-body-lg text-sm font-bold text-on-surface">+27</span>
               </div>
               {/* Input Field */}

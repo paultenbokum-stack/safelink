@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { createHousehold } from '@/lib/db';
+import SouthAfricaFlag from '@/app/components/SouthAfricaFlag';
 
 const SA_PROVINCES = [
   'Gauteng',
@@ -249,7 +250,7 @@ export default function SignUpPage() {
               <label className="text-xs font-semibold text-on-surface-variant">South African Mobile Number *</label>
               <div className="flex items-center gap-2 bg-surface-container-low border border-white/10 rounded-xl px-3 py-2 focus-within:border-secondary transition-colors">
                 <div className="flex items-center gap-1.5 pr-2 border-r border-white/10 text-xs font-bold text-on-surface">
-                  <div className="sa-flag"><div className="sa-flag-y"></div></div>
+                  <SouthAfricaFlag className="w-6 h-4" />
                   <span>+27</span>
                 </div>
                 <input

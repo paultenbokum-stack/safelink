@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="100%" height="100%">
+  <defs>
+    <clipPath id="sa-rect">
+      <rect width="900" height="600"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#sa-rect)">
+    <!-- Red top field -->
+    <rect width="900" height="200" fill="#E03C31"/>
+    <!-- Blue bottom field -->
+    <rect y="400" width="900" height="200" fill="#001489"/>
+    <!-- White outer Y -->
+    <polygon points="0,0 120.19,0 470.19,200 900,200 900,400 470.19,400 120.19,600 0,600" fill="#FFFFFF"/>
+    <!-- Green Y central band -->
+    <polygon points="0,0 48.08,0 398.08,240 900,240 900,360 398.08,360 48.08,600 0,600" fill="#007749"/>
+    <!-- Yellow / Gold chevron -->
+    <polygon points="0,48.08 250,300 0,551.92" fill="#FFB81C"/>
+    <!-- Black hoist triangle -->
+    <polygon points="0,108.17 200,300 0,491.83" fill="#000000"/>
+  </g>
+</svg>

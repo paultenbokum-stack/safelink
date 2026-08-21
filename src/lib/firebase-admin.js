@@ -59,6 +59,12 @@ export async function getPaymentIntent(reference) {
   return snapshot.exists ? { id: snapshot.id, ...snapshot.data() } : null;
 }
 
+function safeTransactionId(value) {
+  if (typeof value === 'string' && /^\d+$/.test(value)) return value;
+  if (Number.isSafeInteger(value) && value >= 0) return String(value);
+  return null;
+}
+
 export async function saveVerifiedPaidOrder({ paymentIntent, transaction: paystackTransaction }) {
   const firestore = getAdminFirestore();
   const { uid, reference } = paymentIntent;
@@ -85,7 +91,7 @@ export async function saveVerifiedPaidOrder({ paymentIntent, transaction: paysta
       currency: paymentIntent.currency,
       delivery: paymentIntent.delivery,
       paystackRef: reference,
-      paystackTransactionId: String(paystackTransaction.id),
+      paystackTransactionId: safeTransactionId(paystackTransaction.id),
       paidAt: paystackTransaction.paid_at || paystackTransaction.paidAt || null,
       paymentChannel: paystackTransaction.channel || null,
       paymentGateway: 'paystack',
@@ -100,7 +106,7 @@ export async function saveVerifiedPaidOrder({ paymentIntent, transaction: paysta
 
     firestoreTransaction.set(intentRef, {
       status: 'completed',
-      paystackTransactionId: String(paystackTransaction.id),
+      paystackTransactionId: safeTransactionId(paystackTransaction.id),
       paidAt: paystackTransaction.paid_at || paystackTransaction.paidAt || null,
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });

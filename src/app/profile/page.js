@@ -48,48 +48,50 @@ function ProfileContent() {
   const displayPhone = household?.phone || user?.phoneNumber || '+27 82 345 6789';
   const avatarSrc = household?.avatarUrl || user?.photoURL || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80';
 
+  const memberCount = household?.members?.length || household?.memberCount || 1;
+
   const settingsItems = [
     {
       title: 'Personal Info',
       subtitle: `${displayName} • ${displayPhone}`,
       icon: 'person',
-      href: '/profile',
+      href: '/profile/edit',
     },
     {
-      title: 'Life360 Safety Circle',
-      subtitle: `${household?.householdName || 'Family Circle'} — ${household?.memberCount || 3} members linked`,
+      title: 'Family Members',
+      subtitle: `${household?.householdName || 'My Family'} — ${memberCount} member${memberCount !== 1 ? 's' : ''}`,
       icon: 'group',
-      href: '/map',
+      href: '/profile/family',
     },
     {
       title: 'Emergency Contact',
-      subtitle: household?.emergency?.name ? `${household.emergency.name} (${household.emergency.relation})` : 'Emergency contact configured',
+      subtitle: household?.emergency?.name ? `${household.emergency.name} (${household.emergency.relation})` : 'Tap to configure',
       icon: 'contact_phone',
-      href: '/profile',
+      href: '/profile/emergency',
     },
     {
       title: 'Home Address & Geofence',
-      subtitle: household?.address?.suburb ? `${household.address.suburb}, ${household.address.city}` : 'Sandton, Johannesburg',
+      subtitle: household?.address?.suburb ? `${household.address.suburb}, ${household.address.city}` : 'Tap to set your home address',
       icon: 'home_pin',
-      href: '/map',
+      href: '/profile/edit',
     },
     {
       title: 'Subscription & Membership',
-      subtitle: 'SafeLink Platinum — R100/month',
+      subtitle: 'SafeLink Standard — R100/month',
       icon: 'credit_card',
       href: '/subscribe',
     },
     {
       title: 'Linked Sentinel Devices',
-      subtitle: '4 devices actively paired',
+      subtitle: 'Manage & add tracking devices',
       icon: 'devices',
       href: '/devices',
     },
     {
-      title: 'Notification & SOS Siren Rules',
-      subtitle: 'Critical alerts bypass silent mode',
+      title: 'Notification & SOS Rules',
+      subtitle: 'Alerts, siren & silent mode overrides',
       icon: 'tune',
-      href: '/profile',
+      href: '/profile/notifications',
     },
     {
       title: 'Terms & Conditions',

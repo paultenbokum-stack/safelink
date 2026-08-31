@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
+import { useAuth } from '@/lib/auth-context';
 
-const initialDevices = [
+const DEMO_DEVICES = [
   {
     id: 'dev-1',
     name: "Lesedi's School Bag",
@@ -67,30 +68,116 @@ export default function DevicesPage() {
 
 function DevicesContent() {
   const router = useRouter();
-  const [devices, setDevices] = useState(initialDevices);
+  const { user } = useAuth();
+  const [devices, setDevices] = useState(DEMO_DEVICES);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newDeviceName, setNewDeviceName] = useState('');
   const [newDeviceImei, setNewDeviceImei] = useState('');
+  const [isLive, setIsLive] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [addError, setAddError] = useState('');
+  const [adding, setAdding] = useState(false);
 
-  const handleAddDevice = (e) => {
+  // Fetch devices from API on mount
+  useEffect(() => {
+    async function fetchDevices() {
+      if (!user) return;
+      try {
+        const token = user.accessToken || user.stsTokenManager?.accessToken;
+        if (!token || user.isTestSession) {
+          setLoading(false);
+          return;
+        }
+        const res = await fetch('/api/devices', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const devs = (data.devices || []).filter((d) => !d.isPhoneDevice);
+          if (devs.length > 0) {
+            setDevices(devs.map((d) => ({
+              id: d.id || d.imei,
+              name: d.nickname || d.deviceName || `Device ${(d.imei || '').slice(-4)}`,
+              category: d.model || 'Sentinel Tracker',
+              imei: d.imei_plain || d.imei || 'Unknown',
+              icon: d.deviceType === 'phone' ? 'phone_android' : 'sensors',
+              status: d.status === 'active' ? 'Online' : 'Offline',
+              statusColor: d.status === 'active' ? '#38a169' : '#a0aec0',
+              battery: d.batteryLevel || null,
+              lastPing: d.updatedAt || 'Unknown',
+              location: d.lastAddress || 'Locating...',
+            })));
+            setIsLive(true);
+          }
+        }
+      } catch (e) {
+        console.warn('[devices] Failed to fetch:', e);
+      }
+      setLoading(false);
+    }
+    fetchDevices();
+  }, [user]);
+
+  const handleAddDevice = async (e) => {
     e.preventDefault();
-    if (!newDeviceName || !newDeviceImei) return;
-    const newDev = {
-      id: `dev-${Date.now()}`,
-      name: newDeviceName,
-      category: 'BLE / GPS Tracker',
-      imei: newDeviceImei,
-      icon: 'sensors',
-      status: 'Online',
-      statusColor: '#38a169',
-      battery: 100,
-      lastPing: 'Just now',
-      location: 'Unassigned Location',
-    };
-    setDevices((prev) => [newDev, ...prev]);
-    setNewDeviceName('');
-    setNewDeviceImei('');
-    setShowAddModal(false);
+    setAddError('');
+
+    if (!newDeviceName.trim()) {
+      setAddError('Please enter a device name.');
+      return;
+    }
+
+    const cleanImei = newDeviceImei.replace(/\D/g, '');
+    if (cleanImei.length !== 15) {
+      setAddError('IMEI must be exactly 15 digits. Check the label on your Sentinel device.');
+      return;
+    }
+
+    setAdding(true);
+
+    try {
+      const token = user?.accessToken || user?.stsTokenManager?.accessToken;
+
+      if (token && !user?.isTestSession) {
+        // Live API bind
+        const res = await fetch('/api/devices', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ imei: cleanImei, nickname: newDeviceName.trim() }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          setAddError(err.error || 'Failed to bind device. Please check the IMEI and try again.');
+          setAdding(false);
+          return;
+        }
+      }
+
+      // Add to local state
+      const newDev = {
+        id: `dev-${Date.now()}`,
+        name: newDeviceName.trim(),
+        category: 'Sentinel Tracker',
+        imei: cleanImei,
+        icon: 'sensors',
+        status: 'Connecting...',
+        statusColor: '#ffc32f',
+        battery: null,
+        lastPing: 'Just now',
+        location: 'Awaiting first GPS fix...',
+      };
+      setDevices((prev) => [newDev, ...prev]);
+      setNewDeviceName('');
+      setNewDeviceImei('');
+      setShowAddModal(false);
+    } catch (err) {
+      setAddError('Network error. Please check your connection and try again.');
+    }
+    setAdding(false);
   };
 
   return (
@@ -244,13 +331,22 @@ function DevicesContent() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. 84930284593 (11 digits)"
+                  placeholder="e.g. 84930284593XXXX (15 digits)"
                   value={newDeviceImei}
                   onChange={(e) => setNewDeviceImei(e.target.value)}
                   className="w-full bg-surface-container-low border border-white/10 rounded-xl p-sm text-on-surface text-sm focus:border-secondary outline-none font-mono"
                   required
+                  maxLength={15}
                 />
+                <p className="text-[10px] text-on-surface-variant mt-1">Find the 15-digit IMEI on the label of your Sentinel device</p>
               </div>
+
+              {addError && (
+                <div className="bg-red-500/15 border border-red-500/40 text-red-400 p-2.5 rounded-xl text-xs flex items-center gap-2">
+                  <span className="material-symbols-outlined text-sm">error</span>
+                  {addError}
+                </div>
+              )}
 
               <div className="pt-sm flex gap-sm">
                 <button

@@ -257,56 +257,99 @@ function LiveFamilyMapContent() {
     }
   }, [user]);
 
-  /* ─── Initialize Mapbox ────────────────────────────────────── */
+  /* ─── Initialize Map (Mapbox or Leaflet fallback) ──────────── */
   useEffect(() => {
     if (!mapContainerRef.current) return;
     if (mapInstanceRef.current) return;
 
-    let mapboxgl;
     let cancelled = false;
 
     async function initMap() {
-      try {
-        mapboxgl = (await import('mapbox-gl')).default;
-        await import('mapbox-gl/dist/mapbox-gl.css');
-      } catch (e) {
-        console.error('Failed to load mapbox-gl:', e);
-        return;
-      }
+      // Try Mapbox first if token is available
+      if (MAPBOX_TOKEN) {
+        try {
+          const mapboxgl = (await import('mapbox-gl')).default;
+          await import('mapbox-gl/dist/mapbox-gl.css');
 
-      if (cancelled || !mapContainerRef.current) return;
+          if (cancelled || !mapContainerRef.current) return;
 
-      if (!MAPBOX_TOKEN) {
-        console.warn('[map] No MAPBOX_TOKEN — running in demo mode with dark background');
-        setMapReady(false);
-        return;
-      }
+          mapboxgl.accessToken = MAPBOX_TOKEN;
 
-      mapboxgl.accessToken = MAPBOX_TOKEN;
+          const map = new mapboxgl.Map({
+            container: mapContainerRef.current,
+            style: 'mapbox://styles/mapbox/dark-v11',
+            center: [28.0567, -26.1076],
+            zoom: 13,
+            attributionControl: false,
+          });
 
-      const map = new mapboxgl.Map({
-        container: mapContainerRef.current,
-        style: 'mapbox://styles/mapbox/dark-v11',
-        center: [28.0567, -26.1076], // Sandton, Johannesburg
-        zoom: 13,
-        attributionControl: false,
-      });
+          map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
 
-      map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
-
-      map.on('load', () => {
-        if (!cancelled) {
-          mapInstanceRef.current = map;
-          setMapReady(true);
+          map.on('load', () => {
+            if (!cancelled) {
+              mapInstanceRef.current = map;
+              mapInstanceRef.current._isMapbox = true;
+              setMapReady(true);
+            }
+          });
+          return;
+        } catch (e) {
+          console.warn('[map] Mapbox failed, falling back to Leaflet:', e);
         }
-      });
+      }
+
+      // Fallback: Leaflet + OpenStreetMap (free, no API key)
+      try {
+        const L = (await import('leaflet')).default;
+
+        if (cancelled || !mapContainerRef.current) return;
+
+        // Inject Leaflet CSS
+        if (!document.getElementById('leaflet-css')) {
+          const link = document.createElement('link');
+          link.id = 'leaflet-css';
+          link.rel = 'stylesheet';
+          link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+          document.head.appendChild(link);
+        }
+
+        // Wait for CSS to load
+        await new Promise((r) => setTimeout(r, 200));
+
+        const map = L.map(mapContainerRef.current, {
+          center: [-26.1076, 28.0567], // Leaflet uses [lat, lng]
+          zoom: 13,
+          zoomControl: false,
+          attributionControl: false,
+        });
+
+        // Dark-themed tiles from CartoDB (free)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+          maxZoom: 19,
+          attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+        }).addTo(map);
+
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        mapInstanceRef.current = map;
+        mapInstanceRef.current._isLeaflet = true;
+        mapInstanceRef.current._L = L;
+        setMapReady(true);
+      } catch (e) {
+        console.error('[map] Leaflet init failed:', e);
+        setMapReady(false);
+      }
     }
 
     initMap();
     return () => {
       cancelled = true;
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
+        if (mapInstanceRef.current._isMapbox) {
+          mapInstanceRef.current.remove();
+        } else if (mapInstanceRef.current._isLeaflet) {
+          mapInstanceRef.current.remove();
+        }
         mapInstanceRef.current = null;
       }
     };
@@ -317,46 +360,34 @@ function LiveFamilyMapContent() {
     if (!mapReady || !mapInstanceRef.current) return;
 
     const map = mapInstanceRef.current;
+    const isLeaflet = !!map._isLeaflet;
 
     // Clear existing markers
     Object.values(markersRef.current).forEach((m) => m.remove());
     markersRef.current = {};
 
-    // Add member markers
+    // ── Add member markers ──
     members.forEach((member) => {
       if (!member.lat || !member.lng) return;
 
-      const el = document.createElement('div');
-      el.className = 'safelink-map-marker';
-      el.innerHTML = `
-        <div style="
-          position: relative;
-          cursor: pointer;
-        ">
+      const markerHtml = `
+        <div style="position:relative;cursor:pointer;">
           <div style="
-            width: 44px; height: 44px;
-            border-radius: 50%;
-            border: 3px solid ${member.color};
-            overflow: hidden;
-            background: #1a1a2e;
-            box-shadow: 0 0 12px ${member.color}60;
+            width:44px;height:44px;border-radius:50%;
+            border:3px solid ${member.color};overflow:hidden;
+            background:#1a1a2e;box-shadow:0 0 12px ${member.color}60;
           ">
             ${member.avatar
               ? `<img src="${member.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />`
-              : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:${member.color};font-weight:bold;font-size:16px;">${member.name.charAt(0)}</div>`
+              : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:${member.color};font-weight:bold;font-size:16px;">${member.isPhone ? '📱' : member.name.charAt(0)}</div>`
             }
           </div>
           <div style="
-            position: absolute;
-            top: 48px; left: 50%; transform: translateX(-50%);
-            white-space: nowrap;
-            background: rgba(15,25,35,0.95);
-            border: 1px solid rgba(255,255,255,0.15);
-            padding: 2px 8px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 600;
-            color: #e0e0e0;
+            position:absolute;top:48px;left:50%;transform:translateX(-50%);
+            white-space:nowrap;background:rgba(15,25,35,0.95);
+            border:1px solid rgba(255,255,255,0.15);
+            padding:2px 8px;border-radius:6px;
+            font-size:11px;font-weight:600;color:#e0e0e0;
           ">
             <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${member.color};margin-right:4px;vertical-align:middle;"></span>
             ${member.name.split(' ')[0]}
@@ -364,75 +395,97 @@ function LiveFamilyMapContent() {
         </div>
       `;
 
-      el.addEventListener('click', () => setSelectedMember(member));
-
-      const mapboxgl = map._mapboxgl || (window.mapboxgl);
-      try {
-        // Dynamic import for marker creation
-        import('mapbox-gl').then(({ default: mgl }) => {
-          const marker = new mgl.Marker({ element: el, anchor: 'center' })
-            .setLngLat([member.lng, member.lat])
-            .addTo(map);
-          markersRef.current[member.id] = marker;
+      if (isLeaflet) {
+        const L = map._L;
+        const icon = L.divIcon({
+          html: markerHtml,
+          className: 'safelink-map-marker',
+          iconSize: [44, 66],
+          iconAnchor: [22, 33],
         });
-      } catch (e) {
-        console.warn('Failed to add marker:', e);
+        const marker = L.marker([member.lat, member.lng], { icon }).addTo(map);
+        marker.on('click', () => setSelectedMember(member));
+        markersRef.current[member.id] = marker;
+      } else {
+        // Mapbox
+        const el = document.createElement('div');
+        el.className = 'safelink-map-marker';
+        el.innerHTML = markerHtml;
+        el.addEventListener('click', () => setSelectedMember(member));
+
+        try {
+          import('mapbox-gl').then(({ default: mgl }) => {
+            const marker = new mgl.Marker({ element: el, anchor: 'center' })
+              .setLngLat([member.lng, member.lat])
+              .addTo(map);
+            markersRef.current[member.id] = marker;
+          });
+        } catch (e) {
+          console.warn('Failed to add Mapbox marker:', e);
+        }
       }
     });
 
-    // Add geofence circles
+    // ── Add geofence circles ──
     if (showGeofences) {
       geofences.forEach((fence) => {
-        const sourceId = `geofence-${fence.id}`;
-        const layerFillId = `geofence-fill-${fence.id}`;
-        const layerLineId = `geofence-line-${fence.id}`;
+        if (isLeaflet) {
+          const L = map._L;
+          const circle = L.circle([fence.lat, fence.lng], {
+            radius: fence.radius || 200,
+            color: fence.color,
+            fillColor: fence.color,
+            fillOpacity: 0.1,
+            weight: 2,
+            opacity: 0.6,
+          }).addTo(map);
+          markersRef.current[`geofence-${fence.id}`] = circle;
+        } else {
+          // Mapbox geofence rendering
+          const sourceId = `geofence-${fence.id}`;
+          const layerFillId = `geofence-fill-${fence.id}`;
+          const layerLineId = `geofence-line-${fence.id}`;
 
-        // Remove existing layers/sources
-        if (map.getLayer(layerFillId)) map.removeLayer(layerFillId);
-        if (map.getLayer(layerLineId)) map.removeLayer(layerLineId);
-        if (map.getSource(sourceId)) map.removeSource(sourceId);
+          if (map.getLayer(layerFillId)) map.removeLayer(layerFillId);
+          if (map.getLayer(layerLineId)) map.removeLayer(layerLineId);
+          if (map.getSource(sourceId)) map.removeSource(sourceId);
 
-        // Create circle GeoJSON
-        const points = 64;
-        const coords = [];
-        const radiusKm = (fence.radius || 200) / 1000;
+          const points = 64;
+          const coords = [];
+          const radiusKm = (fence.radius || 200) / 1000;
 
-        for (let i = 0; i <= points; i++) {
-          const angle = (i / points) * 2 * Math.PI;
-          const dx = radiusKm / (111.32 * Math.cos((fence.lat * Math.PI) / 180));
-          const dy = radiusKm / 110.574;
-          coords.push([fence.lng + dx * Math.cos(angle), fence.lat + dy * Math.sin(angle)]);
+          for (let i = 0; i <= points; i++) {
+            const angle = (i / points) * 2 * Math.PI;
+            const dx = radiusKm / (111.32 * Math.cos((fence.lat * Math.PI) / 180));
+            const dy = radiusKm / 110.574;
+            coords.push([fence.lng + dx * Math.cos(angle), fence.lat + dy * Math.sin(angle)]);
+          }
+
+          map.addSource(sourceId, {
+            type: 'geojson',
+            data: { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] } },
+          });
+
+          map.addLayer({
+            id: layerFillId, type: 'fill', source: sourceId,
+            paint: { 'fill-color': fence.color, 'fill-opacity': 0.1 },
+          });
+
+          map.addLayer({
+            id: layerLineId, type: 'line', source: sourceId,
+            paint: { 'line-color': fence.color, 'line-width': 2, 'line-opacity': 0.6 },
+          });
         }
-
-        map.addSource(sourceId, {
-          type: 'geojson',
-          data: {
-            type: 'Feature',
-            geometry: { type: 'Polygon', coordinates: [coords] },
-          },
-        });
-
-        map.addLayer({
-          id: layerFillId,
-          type: 'fill',
-          source: sourceId,
-          paint: {
-            'fill-color': fence.color,
-            'fill-opacity': 0.1,
-          },
-        });
-
-        map.addLayer({
-          id: layerLineId,
-          type: 'line',
-          source: sourceId,
-          paint: {
-            'line-color': fence.color,
-            'line-width': 2,
-            'line-opacity': 0.6,
-          },
-        });
       });
+    }
+
+    // Pan map to first member's location
+    if (members.length > 0 && members[0].lat && members[0].lng) {
+      if (isLeaflet) {
+        map.setView([members[0].lat, members[0].lng], 13, { animate: true });
+      } else {
+        map.flyTo({ center: [members[0].lng, members[0].lat], zoom: 13 });
+      }
     }
   }, [mapReady, members, geofences, showGeofences]);
 

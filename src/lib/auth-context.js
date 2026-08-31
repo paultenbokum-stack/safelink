@@ -46,12 +46,22 @@ export function AuthProvider({ children }) {
   const register = (email, password) =>
     createUserWithEmailAndPassword(auth, email, password);
 
-  const loginWithPhone = async (phoneNumber, profileData = {}) => {
-    const mockUid = 'user_' + phoneNumber.replace(/\D/g, '').slice(-9);
+  const loginWithPhone = async (phoneNumber, profileData = {}, password = '') => {
+    const cleanDigits = phoneNumber.replace(/\D/g, '').slice(-9);
+
+    // Hardcoded demo credentials check
+    const DEMO_PHONE = '827675092';
+    const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD || 'Cinoisbosss71!';
+
+    if (cleanDigits !== DEMO_PHONE || password !== DEMO_PASSWORD) {
+      throw new Error('Invalid phone number or password. Access restricted during beta.');
+    }
+
+    const mockUid = 'user_' + cleanDigits;
     const customUser = {
       uid: mockUid,
-      phoneNumber: `+27${phoneNumber.replace(/\D/g, '').slice(-9)}`,
-      displayName: profileData.displayName || profileData.adminFirstName || 'SafeLink Member',
+      phoneNumber: `+27${cleanDigits}`,
+      displayName: profileData.displayName || profileData.adminFirstName || 'SafeLink Admin',
       email: profileData.email || `${mockUid}@safelink.co.za`,
       photoURL: profileData.photoURL || null,
       isTestSession: true,

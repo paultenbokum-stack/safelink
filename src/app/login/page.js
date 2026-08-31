@@ -11,6 +11,7 @@ export default function LoginPage() {
   const { loginWithPhone } = useAuth();
 
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [quickError, setQuickError] = useState('');
 
@@ -37,10 +38,9 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      // MFA bypass during testing: immediately log in and go to dashboard
       await loginWithPhone(cleanPhone, {
-        displayName: 'SafeLink Member',
-      });
+        displayName: 'SafeLink Admin',
+      }, password);
 
       setTimeout(() => {
         router.push('/dashboard');
@@ -126,10 +126,30 @@ export default function LoginPage() {
             </div>
           </div>
 
+          {/* Password Field */}
+          <div className="glass-panel rounded-2xl p-4 flex flex-col gap-2 border border-white/10">
+            <label className="font-label-sm text-xs text-on-surface-variant uppercase tracking-wider font-semibold" htmlFor="password">
+              Password
+            </label>
+            <div className="flex items-center gap-2 bg-surface-container-low border border-outline/30 rounded-xl p-3 focus-within:border-secondary transition-all duration-200">
+              <span className="material-symbols-outlined text-on-surface-variant text-lg">lock</span>
+              <input
+                id="password"
+                type="password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                className="w-full bg-transparent border-none focus:ring-0 font-body-lg text-base text-on-surface placeholder-on-surface-variant/40 outline-none"
+                required
+              />
+            </div>
+          </div>
+
           <div className="px-1 flex items-center justify-between text-xs text-on-surface-variant">
             <span className="flex items-center gap-1 text-emerald-400 font-medium">
-              <span className="material-symbols-outlined text-sm">bolt</span>
-              Testing Mode: Instant Access (MFA disabled)
+              <span className="material-symbols-outlined text-sm">verified_user</span>
+              Beta Access — Authorised Users Only
             </span>
           </div>
 

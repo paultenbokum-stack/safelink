@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
+import LocationSharingSettings from '@/app/components/LocationSharingSettings';
 
 export default function ProfilePage() {
   return (
@@ -146,6 +147,11 @@ function ProfileContent() {
               </span>
             </Link>
           ))}
+
+          {/* Location Sharing */}
+          <div className="mt-2">
+            <LocationSharingSettings />
+          </div>
 
           {/* Sign Out Button */}
           <button

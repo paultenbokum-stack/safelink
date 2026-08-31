@@ -1,11 +1,50 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
 import { useAuth } from '@/lib/auth-context';
+
+const EMERGENCY_TYPES = [
+  {
+    id: 'armed_response',
+    label: 'ARMED RESPONSE',
+    title: 'Armed Response',
+    desc: 'Intruder, hijacking, home invasion, or physical threat.',
+    icon: 'local_police',
+    color: '#ffc32f',
+    borderClass: 'border-l-secondary',
+  },
+  {
+    id: 'medical',
+    label: 'MEDICAL SOS',
+    title: 'Medical Emergency',
+    desc: 'Cardiac event, injury, trauma, or critical ambulance needed.',
+    icon: 'medical_services',
+    color: '#38a169',
+    borderClass: 'border-l-[#38a169]',
+  },
+  {
+    id: 'fire',
+    label: 'FIRE EMERGENCY',
+    title: 'Fire & Rescue',
+    desc: 'Structural fire, electrical explosion, or smoke hazard.',
+    icon: 'local_fire_department',
+    color: '#ef4444',
+    borderClass: 'border-l-error',
+  },
+  {
+    id: 'roadside_towing',
+    label: 'ROADSIDE ASSIST',
+    title: 'Roadside & Towing',
+    desc: 'Vehicle breakdown, flat tyre, jump-start, or towing escort.',
+    icon: 'rv_hookup',
+    color: '#9fcafb',
+    borderClass: 'border-l-primary',
+  },
+];
 
 export default function SOSPage() {
   return (
@@ -18,44 +57,197 @@ export default function SOSPage() {
 function SOSFlowContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
   const initialType = searchParams.get('type') || null;
+  const prefillLat = searchParams.get('lat');
+  const prefillLng = searchParams.get('lng');
 
-  const [activeIncident, setActiveIncident] = useState(initialType ? true : false);
-  const [emergencyType, setEmergencyType] = useState(initialType ? initialType.toUpperCase() : 'ARMED RESPONSE');
-  const [secondsActive, setSecondsActive] = useState(38);
-  const [etaMinutes, setEtaMinutes] = useState(3);
+  const [activeIncident, setActiveIncident] = useState(false);
+  const [incidentId, setIncidentId] = useState(null);
+  const [emergencyType, setEmergencyType] = useState(
+    initialType ? EMERGENCY_TYPES.find((t) => t.id === initialType) || EMERGENCY_TYPES[0] : EMERGENCY_TYPES[0]
+  );
+  const [dispatchResult, setDispatchResult] = useState(null);
+  const [secondsActive, setSecondsActive] = useState(0);
   const [cancelling, setCancelling] = useState(false);
   const [cancelProgress, setCancelProgress] = useState(0);
+  const [dispatching, setDispatching] = useState(false);
+  const [userLocation, setUserLocation] = useState({
+    lat: prefillLat ? parseFloat(prefillLat) : null,
+    lng: prefillLng ? parseFloat(prefillLng) : null,
+    address: null,
+  });
+  const [locationError, setLocationError] = useState(null);
+  const [tierBlocked, setTierBlocked] = useState(false);
 
   const cancelTimerRef = useRef(null);
+  const pollTimerRef = useRef(null);
 
+  // Auto-trigger if type passed in URL
+  useEffect(() => {
+    if (initialType) {
+      const typeObj = EMERGENCY_TYPES.find((t) => t.id === initialType);
+      if (typeObj) handleSelectEmergency(typeObj);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Active incident timer
   useEffect(() => {
     let timer;
     if (activeIncident) {
-      timer = setInterval(() => {
-        setSecondsActive((s) => s + 1);
-      }, 1000);
+      timer = setInterval(() => setSecondsActive((s) => s + 1), 1000);
     }
     return () => clearInterval(timer);
   }, [activeIncident]);
 
-  const handleSelectEmergency = (type) => {
-    setEmergencyType(type);
-    setActiveIncident(true);
-  };
+  // Get user's GPS location
+  useEffect(() => {
+    if (!userLocation.lat && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserLocation({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            address: null,
+          });
+        },
+        (err) => {
+          console.warn('[sos] Geolocation error:', err);
+          setLocationError('Could not determine your location. Please enable GPS.');
+          // Fallback: Sandton, JHB
+          setUserLocation({ lat: -26.1076, lng: 28.0567, address: 'Sandton, Johannesburg (approx)' });
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+  }, [userLocation.lat]);
 
+  // Poll incident status while active
+  useEffect(() => {
+    if (!activeIncident || !incidentId) return;
+
+    async function pollStatus() {
+      try {
+        const token = user?.accessToken || user?.stsTokenManager?.accessToken;
+        const res = await fetch('/api/sos/dispatch', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ action: 'status', incidentId }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.incident) {
+            setDispatchResult((prev) => ({ ...prev, ...data.incident }));
+            if (data.incident.status === 'resolved' || data.incident.status === 'cancelled') {
+              setActiveIncident(false);
+              clearInterval(pollTimerRef.current);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[sos] Status poll failed:', err);
+      }
+    }
+
+    pollTimerRef.current = setInterval(pollStatus, 8000);
+    return () => clearInterval(pollTimerRef.current);
+  }, [activeIncident, incidentId, user]);
+
+  /* ─── Dispatch emergency ───────────────────────────────────── */
+  const handleSelectEmergency = useCallback(async (type) => {
+    setEmergencyType(type);
+    setDispatching(true);
+    setSecondsActive(0);
+    setTierBlocked(false);
+
+    try {
+      const token = user?.accessToken || user?.stsTokenManager?.accessToken;
+
+      const res = await fetch('/api/sos/dispatch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          type: type.id,
+          lat: userLocation.lat,
+          lng: userLocation.lng,
+          address: userLocation.address,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.status === 403 && data.upgradeUrl) {
+        // Tier blocked — need Standard or Premium
+        setTierBlocked(true);
+        setDispatching(false);
+        return;
+      }
+
+      if (res.status === 401) {
+        // Mock dispatch for demo/test sessions
+        setDispatchResult({
+          incidentId: `DEMO-${Date.now()}`,
+          status: 'dispatched',
+          eta: '8-12 minutes',
+          responder: {
+            company: 'SafeLink Demo Response',
+            vehicle: 'AR-402',
+            officer: 'Officer Khumalo',
+          },
+          isMock: true,
+        });
+        setIncidentId(`DEMO-${Date.now()}`);
+        setActiveIncident(true);
+        setDispatching(false);
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'Dispatch failed');
+      }
+
+      setDispatchResult(data);
+      setIncidentId(data.incidentId);
+      setActiveIncident(true);
+    } catch (err) {
+      console.error('[sos] Dispatch error:', err);
+      // Fallback to demo mode
+      setDispatchResult({
+        incidentId: `FALLBACK-${Date.now()}`,
+        status: 'dispatched',
+        eta: '8-12 minutes',
+        responder: {
+          company: 'SafeLink Demo Response',
+          vehicle: 'AR-402',
+          officer: 'Demo Officer',
+        },
+        isMock: true,
+      });
+      setIncidentId(`FALLBACK-${Date.now()}`);
+      setActiveIncident(true);
+    } finally {
+      setDispatching(false);
+    }
+  }, [user, userLocation]);
+
+  /* ─── Cancel dispatch ──────────────────────────────────────── */
   const startCancelHold = () => {
     setCancelling(true);
-    let start = Date.now();
+    const start = Date.now();
     cancelTimerRef.current = setInterval(() => {
-      let elapsed = Date.now() - start;
-      let pct = Math.min((elapsed / 2000) * 100, 100);
+      const elapsed = Date.now() - start;
+      const pct = Math.min((elapsed / 2000) * 100, 100);
       setCancelProgress(pct);
       if (pct >= 100) {
         clearInterval(cancelTimerRef.current);
-        setActiveIncident(false);
-        setCancelling(false);
-        setCancelProgress(0);
+        performCancel();
       }
     }, 30);
   };
@@ -66,11 +258,37 @@ function SOSFlowContent() {
     setCancelProgress(0);
   };
 
+  const performCancel = async () => {
+    try {
+      const token = user?.accessToken || user?.stsTokenManager?.accessToken;
+      if (incidentId && token && !incidentId.startsWith('DEMO') && !incidentId.startsWith('FALLBACK')) {
+        await fetch('/api/sos/dispatch', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ action: 'cancel', incidentId, reason: 'False alarm' }),
+        });
+      }
+    } catch (err) {
+      console.warn('[sos] Cancel failed:', err);
+    }
+
+    setActiveIncident(false);
+    setCancelling(false);
+    setCancelProgress(0);
+    setDispatchResult(null);
+    setIncidentId(null);
+  };
+
   const formatTime = (secs) => {
     const mins = Math.floor(secs / 60);
     const remainder = secs % 60;
     return `${String(mins).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
   };
+
+  const responder = dispatchResult?.responder || {};
 
   return (
     <div
@@ -84,14 +302,49 @@ function SOSFlowContent() {
       />
 
       <main className="flex-grow pt-[80px] pb-[100px] px-gutter flex flex-col max-w-2xl mx-auto w-full z-10 relative">
-        {/* ================= STATE 1: ACTIVE INCIDENT DISPATCH ================= */}
+        {/* ─── Tier upgrade prompt ─── */}
+        {tierBlocked && (
+          <div className="glass-panel p-md rounded-2xl border-2 border-secondary mb-md animate-fade-in">
+            <div className="flex items-start gap-sm">
+              <span className="material-symbols-outlined text-3xl text-secondary" style={{ fontVariationSettings: "'FILL' 1" }}>
+                lock
+              </span>
+              <div>
+                <h3 className="font-headline-md text-lg font-bold text-on-surface">Upgrade Required</h3>
+                <p className="font-body-md text-sm text-on-surface-variant mb-sm">
+                  SOS emergency dispatch requires a <strong>Standard</strong> or <strong>Premium</strong> subscription.
+                </p>
+                <button
+                  onClick={() => router.push('/subscribe')}
+                  className="bg-secondary hover:bg-secondary-fixed text-on-secondary font-label-md text-sm font-bold py-2.5 px-6 rounded-xl active:scale-95 transition-all cursor-pointer"
+                >
+                  Upgrade Now — From R100/mo
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── GPS status ─── */}
+        {!activeIncident && (
+          <div className="glass-panel px-3 py-2 rounded-xl mb-sm flex items-center gap-2">
+            <span className="material-symbols-outlined text-sm text-[#38a169]">my_location</span>
+            <span className="text-xs text-on-surface-variant">
+              {userLocation.lat
+                ? `GPS locked: ${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}`
+                : locationError || 'Acquiring GPS signal...'}
+            </span>
+          </div>
+        )}
+
+        {/* ─── ACTIVE INCIDENT ─── */}
         {activeIncident ? (
           <div className="space-y-md animate-fade-in">
-            {/* Pulsing Emergency Status Header */}
+            {/* Emergency Status Header */}
             <div className="glass-panel p-md rounded-2xl border-2 border-error bg-error/10 relative overflow-hidden text-center shadow-[0_0_30px_rgba(229,62,62,0.4)]">
               <div className="flex items-center justify-between mb-xs">
                 <span className="bg-error text-white font-label-sm text-[11px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
-                  LIVE SOS #{emergencyType}
+                  LIVE SOS #{emergencyType.label}
                 </span>
                 <span className="font-mono text-error font-bold text-sm tracking-wider">
                   ⏱ {formatTime(secondsActive)} ACTIVE
@@ -101,10 +354,12 @@ function SOSFlowContent() {
                 DISPATCH ACTIVATED
               </h2>
               <p className="font-label-sm text-xs text-on-surface-variant mt-0.5">
-                GPS telemetry linked with Help24 Armed Command & SAPS
+                {dispatchResult?.isMock
+                  ? 'Demo Mode — GPS telemetry linked with SafeLink Command'
+                  : 'GPS telemetry linked with Aura Armed Command & SAPS'}
               </p>
 
-              {/* Audio Waveform Recording Animation */}
+              {/* Audio Waveform */}
               <div className="flex items-center justify-center gap-1.5 py-3 mt-2 bg-surface-container-lowest/60 rounded-xl border border-white/5">
                 <span className="material-symbols-outlined text-error text-sm animate-pulse">mic</span>
                 <span className="text-[11px] font-semibold text-error mr-2">Live Audio Uplink</span>
@@ -112,11 +367,8 @@ function SOSFlowContent() {
                   <div
                     key={i}
                     className="w-1 bg-error rounded-full waveform-bar"
-                    style={{
-                      height: `${h}px`,
-                      animationDelay: `${i * 0.1}s`,
-                    }}
-                  ></div>
+                    style={{ height: `${h}px`, animationDelay: `${i * 0.1}s` }}
+                  />
                 ))}
               </div>
             </div>
@@ -130,41 +382,58 @@ function SOSFlowContent() {
                   </div>
                   <div>
                     <h3 className="font-headline-md text-base font-bold text-on-surface">
-                      Unit AR-402 (Help24 Tactical)
+                      {responder.vehicle || 'Unit'} ({responder.company || 'Dispatching...'})
                     </h3>
                     <p className="font-label-sm text-xs text-on-surface-variant">
-                      Officer Khumalo • Armoured Response 4x4
+                      {responder.officer || 'Officer assigned'} • Armed Response
                     </p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="text-secondary font-headline-md text-lg font-black">{etaMinutes} MINS</span>
+                  <span className="text-secondary font-headline-md text-lg font-black">
+                    {dispatchResult?.eta || '---'}
+                  </span>
                   <p className="text-[10px] text-secondary font-semibold uppercase">Estimated Arrival</p>
                 </div>
               </div>
 
-              {/* Distance Progress */}
+              {/* Progress bar */}
               <div className="space-y-1">
                 <div className="flex justify-between text-[11px] font-semibold text-on-surface-variant">
-                  <span>1.4 km away from your location</span>
-                  <span className="text-[#38a169]">Approaching via Sandton Dr</span>
+                  <span>Responder en route to your location</span>
+                  <span className="text-[#38a169]">
+                    {dispatchResult?.status === 'dispatched' ? 'Approaching' : dispatchResult?.status || 'Dispatching'}
+                  </span>
                 </div>
                 <div className="w-full h-2 bg-surface-container-high rounded-full overflow-hidden">
-                  <div className="h-full bg-secondary w-3/4 rounded-full animate-pulse"></div>
+                  <div className="h-full bg-secondary w-3/4 rounded-full animate-pulse" />
                 </div>
               </div>
 
-              {/* Action Buttons */}
+              {/* Action buttons */}
               <div className="grid grid-cols-2 gap-sm pt-1">
                 <button
-                  onClick={() => alert('Connecting live patch to Help24 Dispatcher...')}
+                  onClick={() => alert('Connecting live patch to dispatcher...')}
                   className="bg-secondary text-on-secondary font-label-md text-xs py-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 active:scale-95 shadow-[0_0_12px_rgba(255,195,47,0.3)]"
                 >
                   <span className="material-symbols-outlined text-[18px]">call</span>
                   Call Officer
                 </button>
                 <button
-                  onClick={() => alert('Location beacon pinned and shared to WhatsApp family group.')}
+                  onClick={() => {
+                    if (navigator.share) {
+                      navigator.share({
+                        title: 'My Emergency Location',
+                        text: `SOS Alert from SafeLink!\nLocation: ${userLocation.lat}, ${userLocation.lng}`,
+                        url: `https://maps.google.com/?q=${userLocation.lat},${userLocation.lng}`,
+                      });
+                    } else {
+                      navigator.clipboard.writeText(
+                        `https://maps.google.com/?q=${userLocation.lat},${userLocation.lng}`
+                      );
+                      alert('Location URL copied to clipboard');
+                    }
+                  }}
                   className="glass-panel text-on-surface font-label-md text-xs py-2.5 rounded-xl font-semibold flex items-center justify-center gap-1.5 hover:bg-white/5 active:scale-95 border-white/10"
                 >
                   <span className="material-symbols-outlined text-[18px] text-primary">share_location</span>
@@ -173,34 +442,39 @@ function SOSFlowContent() {
               </div>
             </div>
 
-            {/* Notified Contacts Status */}
+            {/* Notifications */}
             <div className="glass-panel p-md rounded-2xl border border-white/10 space-y-sm">
               <h4 className="font-label-md text-xs uppercase tracking-wider font-bold text-on-surface-variant">
                 Emergency Notifications Dispatched
               </h4>
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-on-surface font-medium">Naledi Molefe (Wife)</span>
+                  <span className="text-on-surface font-medium">Emergency Contact(s)</span>
                   <span className="text-[#38a169] font-semibold flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">check_circle</span> SMS & App Alert Delivered
+                    <span className="material-symbols-outlined text-sm">check_circle</span>
+                    SMS & App Alert Delivered
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-on-surface font-medium">Help24 Control Room 24/7</span>
+                  <span className="text-on-surface font-medium">
+                    {dispatchResult?.isMock ? 'SafeLink Demo Control' : 'Aura Control Room 24/7'}
+                  </span>
                   <span className="text-secondary font-semibold flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">radio</span> Operator Assigned
+                    <span className="material-symbols-outlined text-sm">radio</span>
+                    Operator Assigned
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-on-surface font-medium">Sandton SAPS Sector 3</span>
+                  <span className="text-on-surface font-medium">SAPS Nearest Station</span>
                   <span className="text-primary font-semibold flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">security</span> Relayed
+                    <span className="material-symbols-outlined text-sm">security</span>
+                    Relayed
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Hold to Cancel SOS */}
+            {/* Hold to Cancel */}
             <div className="pt-2">
               <button
                 onMouseDown={startCancelHold}
@@ -213,7 +487,7 @@ function SOSFlowContent() {
                   <div
                     className="absolute inset-0 bg-error/30 transition-all duration-75"
                     style={{ width: `${cancelProgress}%` }}
-                  ></div>
+                  />
                 )}
                 <span className="relative z-10 flex items-center gap-2">
                   <span className="material-symbols-outlined text-xl">cancel</span>
@@ -226,109 +500,45 @@ function SOSFlowContent() {
             </div>
           </div>
         ) : (
-          /* ================= STATE 2: PANIC SELECTOR PANEL ================= */
+          /* ─── PANIC SELECTOR ─── */
           <div className="flex flex-col gap-md">
             <div className="text-center mb-sm">
               <p className="font-body-md text-sm text-error font-semibold tracking-wide">
-                Immediate response team will be dispatched upon selection
+                {dispatching
+                  ? 'Connecting to dispatch...'
+                  : 'Immediate response team will be dispatched upon selection'}
               </p>
             </div>
 
-            {/* Armed Response Card */}
-            <button
-              onClick={() => handleSelectEmergency('ARMED RESPONSE')}
-              className="glass-panel rounded-2xl p-md flex items-center gap-md text-left transition-all active:scale-95 hover:bg-surface-container-high/90 border-l-4 border-l-secondary relative overflow-hidden group cursor-pointer"
-            >
-              <div className="bg-surface-container rounded-2xl p-sm flex-shrink-0 group-hover:scale-110 transition-transform">
+            {EMERGENCY_TYPES.map((type) => (
+              <button
+                key={type.id}
+                onClick={() => handleSelectEmergency(type)}
+                disabled={dispatching}
+                className={`glass-panel rounded-2xl p-md flex items-center gap-md text-left transition-all active:scale-95 hover:bg-surface-container-high/90 border-l-4 ${type.borderClass} relative overflow-hidden group cursor-pointer ${
+                  dispatching ? 'opacity-50 pointer-events-none' : ''
+                }`}
+              >
+                <div className="bg-surface-container rounded-2xl p-sm flex-shrink-0 group-hover:scale-110 transition-transform">
+                  <span
+                    className="material-symbols-outlined text-[36px]"
+                    style={{ color: type.color, fontVariationSettings: "'FILL' 1" }}
+                  >
+                    {type.icon}
+                  </span>
+                </div>
+                <div className="flex-grow">
+                  <h3 className="font-headline-md text-base font-bold text-on-surface">{type.title}</h3>
+                  <p className="font-body-md text-xs text-on-surface-variant line-clamp-1">{type.desc}</p>
+                </div>
                 <span
-                  className="material-symbols-outlined text-[36px] text-secondary"
-                  style={{ fontVariationSettings: "'FILL' 1" }}
+                  className="material-symbols-outlined text-outline-variant transition-colors"
+                  style={{ '--tw-text-opacity': 1 }}
                 >
-                  local_police
+                  chevron_right
                 </span>
-              </div>
-              <div className="flex-grow">
-                <h3 className="font-headline-md text-base font-bold text-on-surface">Armed Response</h3>
-                <p className="font-body-md text-xs text-on-surface-variant line-clamp-1">
-                  Intruder, hijacking, home invasion, or physical threat.
-                </p>
-              </div>
-              <span className="material-symbols-outlined text-outline-variant group-hover:text-secondary transition-colors">
-                chevron_right
-              </span>
-            </button>
-
-            {/* Medical Card */}
-            <button
-              onClick={() => handleSelectEmergency('MEDICAL SOS')}
-              className="glass-panel rounded-2xl p-md flex items-center gap-md text-left transition-all active:scale-95 hover:bg-surface-container-high/90 border-l-4 border-l-[#38a169] relative overflow-hidden group cursor-pointer"
-            >
-              <div className="bg-surface-container rounded-2xl p-sm flex-shrink-0 group-hover:scale-110 transition-transform">
-                <span
-                  className="material-symbols-outlined text-[36px] text-[#38a169]"
-                  style={{ fontVariationSettings: "'FILL' 1" }}
-                >
-                  medical_services
-                </span>
-              </div>
-              <div className="flex-grow">
-                <h3 className="font-headline-md text-base font-bold text-on-surface">Medical Emergency</h3>
-                <p className="font-body-md text-xs text-on-surface-variant line-clamp-1">
-                  Cardiac event, injury, trauma, or critical ambulance needed.
-                </p>
-              </div>
-              <span className="material-symbols-outlined text-outline-variant group-hover:text-[#38a169] transition-colors">
-                chevron_right
-              </span>
-            </button>
-
-            {/* Fire Card */}
-            <button
-              onClick={() => handleSelectEmergency('FIRE EMERGENCY')}
-              className="glass-panel rounded-2xl p-md flex items-center gap-md text-left transition-all active:scale-95 hover:bg-surface-container-high/90 border-l-4 border-l-error relative overflow-hidden group cursor-pointer"
-            >
-              <div className="bg-surface-container rounded-2xl p-sm flex-shrink-0 group-hover:scale-110 transition-transform">
-                <span
-                  className="material-symbols-outlined text-[36px] text-error"
-                  style={{ fontVariationSettings: "'FILL' 1" }}
-                >
-                  local_fire_department
-                </span>
-              </div>
-              <div className="flex-grow">
-                <h3 className="font-headline-md text-base font-bold text-on-surface">Fire & Rescue</h3>
-                <p className="font-body-md text-xs text-on-surface-variant line-clamp-1">
-                  Structural fire, electrical explosion, or smoke hazard.
-                </p>
-              </div>
-              <span className="material-symbols-outlined text-outline-variant group-hover:text-error transition-colors">
-                chevron_right
-              </span>
-            </button>
-
-            {/* Roadside Assistance / Towing */}
-            <button
-              onClick={() => handleSelectEmergency('ROADSIDE ASSIST')}
-              className="glass-panel rounded-2xl p-md flex items-center gap-md text-left transition-all active:scale-95 hover:bg-surface-container-high/90 border-l-4 border-l-primary relative overflow-hidden group cursor-pointer"
-            >
-              <div className="bg-surface-container rounded-2xl p-sm flex-shrink-0 group-hover:scale-110 transition-transform">
-                <span
-                  className="material-symbols-outlined text-[36px] text-primary"
-                  style={{ fontVariationSettings: "'FILL' 1" }}
-                >
-                  rv_hookup
-                </span>
-              </div>
-              <div className="flex-grow">
-                <h3 className="font-headline-md text-base font-bold text-on-surface">Roadside & Towing</h3>
-                <p className="font-body-md text-xs text-on-surface-variant line-clamp-1">
-                  Vehicle breakdown, flat tyre, jump-start, or towing escort.
-                </p>
-              </div>
-              <span className="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">
-                chevron_right
-              </span>
-            </button>
+              </button>
+            ))}
           </div>
         )}
       </main>

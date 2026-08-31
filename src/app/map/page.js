@@ -249,6 +249,7 @@ function LiveFamilyMapContent() {
   const [mapReady, setMapReady] = useState(false);
   const [mapProvider, setMapProvider] = useState('leaflet'); // 'google' | 'mapbox' | 'leaflet'
   const [connectionStatus, setConnectionStatus] = useState('connecting');
+  const [isDrawerCollapsed, setIsDrawerCollapsed] = useState(false);
 
   /* ─── Fetch device locations (Partner vs Standard Firebase) ─── */
   const fetchDeviceLocations = useCallback(async () => {
@@ -535,9 +536,15 @@ function LiveFamilyMapContent() {
           attributionControl: false,
         });
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-          maxZoom: 19,
-          subdomains: 'abcd',
+        // ESRI World Dark Gray Canvas tiles (Zero watermarks, 100% free, dark tactical radar theme)
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 16,
+          attribution: '&copy; Esri, DeLorme, NAVTEQ',
+        }).addTo(map);
+
+        // Add reference labels (streets, city names)
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 16,
         }).addTo(map);
 
         L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -909,19 +916,38 @@ function LiveFamilyMapContent() {
         </div>
       </div>
 
-      {/* Selected Device Drawer */}
+      {/* Selected Device Drawer with Pull Tab */}
       {selectedMember && (
         <div className="absolute bottom-20 left-0 right-0 z-30 p-gutter max-w-2xl mx-auto pointer-events-auto">
-          <div className="glass-panel rounded-2xl p-md shadow-2xl border border-white/15 backdrop-blur-xl bg-surface-container-high/90">
-            {/* Header info */}
-            <div className="flex items-start justify-between mb-sm">
-              <div className="flex items-center gap-sm">
-                <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-secondary p-0.5 relative shrink-0 bg-surface-container-low flex items-center justify-center">
+          <div className="glass-panel rounded-2xl p-sm sm:p-md shadow-2xl border border-white/15 backdrop-blur-xl bg-surface-container-high/90 transition-all duration-300">
+            {/* Pull Tab / Collapse Handle at Top */}
+            <div
+              onClick={() => setIsDrawerCollapsed(!isDrawerCollapsed)}
+              className="w-full flex justify-center items-center py-1 -mt-1 mb-1 cursor-pointer group select-none"
+              title={isDrawerCollapsed ? 'Expand tracker details' : 'Collapse tracker details'}
+            >
+              <div className="flex items-center gap-1 px-3 py-0.5 rounded-full bg-white/10 group-hover:bg-secondary/30 transition-all border border-white/10 shadow-sm">
+                <span className="material-symbols-outlined text-[16px] text-on-surface-variant group-hover:text-secondary transition-transform duration-200">
+                  {isDrawerCollapsed ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}
+                </span>
+                <span className="text-[10px] font-bold text-on-surface-variant group-hover:text-on-surface uppercase tracking-wider">
+                  {isDrawerCollapsed ? 'Expand Details' : 'Minimize'}
+                </span>
+              </div>
+            </div>
+
+            {/* Header info (Always Visible) */}
+            <div className="flex items-start justify-between">
+              <div
+                className="flex items-center gap-sm cursor-pointer"
+                onClick={() => setIsDrawerCollapsed(!isDrawerCollapsed)}
+              >
+                <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-secondary p-0.5 relative shrink-0 bg-surface-container-low flex items-center justify-center">
                   {selectedMember.avatar ? (
                     <img src={selectedMember.avatar} alt={selectedMember.name} className="w-full h-full object-cover rounded-full" />
                   ) : (
                     <div
-                      className="w-full h-full rounded-full flex items-center justify-center font-black text-lg"
+                      className="w-full h-full rounded-full flex items-center justify-center font-black text-base"
                       style={{ color: selectedMember.color, backgroundColor: `${selectedMember.color}25` }}
                     >
                       {selectedMember.name.charAt(0)}
@@ -949,7 +975,7 @@ function LiveFamilyMapContent() {
                 </div>
               </div>
 
-              <div className="flex flex-col items-end">
+              <div className="flex flex-col items-end shrink-0 pl-2">
                 {selectedMember.battery !== null && (
                   <div className="flex items-center gap-1 text-secondary text-xs font-bold">
                     <span className="material-symbols-outlined text-[14px]">battery_5_bar</span>
@@ -963,49 +989,54 @@ function LiveFamilyMapContent() {
               </div>
             </div>
 
-            {/* Quick Member / Device Switcher Carousel */}
-            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 pt-2 border-t border-white/10">
-              {members.slice(0, 6).map((m) => {
-                const active = m.id === selectedMember.id;
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => setSelectedMember(m)}
-                    className={`p-1.5 rounded-xl flex flex-col items-center gap-1 transition-all cursor-pointer ${
-                      active
-                        ? 'bg-secondary/20 border border-secondary/40 text-secondary'
-                        : 'hover:bg-white/5 text-on-surface-variant'
-                    }`}
-                  >
-                    <div
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                      style={{ color: m.color, backgroundColor: `${m.color}25` }}
-                    >
-                      {m.name.charAt(0)}
-                    </div>
-                    <span className="text-[10px] font-semibold truncate max-w-[65px]">{m.name.split(' ')[0]}</span>
-                  </button>
-                );
-              })}
-            </div>
+            {/* Expandable Section: Quick Member Carousel & Actions */}
+            {!isDrawerCollapsed && (
+              <div className="animate-fadeIn">
+                {/* Quick Member / Device Switcher Carousel */}
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 pt-2.5 mt-2 border-t border-white/10">
+                  {members.slice(0, 6).map((m) => {
+                    const active = m.id === selectedMember.id;
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => setSelectedMember(m)}
+                        className={`p-1.5 rounded-xl flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                          active
+                            ? 'bg-secondary/20 border border-secondary/40 text-secondary'
+                            : 'hover:bg-white/5 text-on-surface-variant'
+                        }`}
+                      >
+                        <div
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                          style={{ color: m.color, backgroundColor: `${m.color}25` }}
+                        >
+                          {m.name.charAt(0)}
+                        </div>
+                        <span className="text-[10px] font-semibold truncate max-w-[65px]">{m.name.split(' ')[0]}</span>
+                      </button>
+                    );
+                  })}
+                </div>
 
-            {/* Tactical Actions */}
-            <div className="grid grid-cols-2 gap-sm mt-3 pt-2">
-              <button
-                onClick={() => router.push('/devices')}
-                className="glass-panel py-2 rounded-xl text-on-surface font-label-md text-xs flex items-center justify-center gap-1.5 hover:bg-white/10 active:scale-95 transition-all border-white/10 cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[16px] text-primary">sensors</span>
-                Device Telemetry
-              </button>
-              <button
-                onClick={() => router.push(`/sos?lat=${selectedMember.lat}&lng=${selectedMember.lng}&target=${encodeURIComponent(selectedMember.name)}`)}
-                className="bg-error hover:bg-error-container text-white py-2 rounded-xl font-label-md text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-[0_0_12px_rgba(229,62,62,0.4)] cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[16px]">emergency</span>
-                Dispatch to Location
-              </button>
-            </div>
+                {/* Tactical Actions */}
+                <div className="grid grid-cols-2 gap-sm mt-3 pt-2">
+                  <button
+                    onClick={() => router.push('/devices')}
+                    className="glass-panel py-2 rounded-xl text-on-surface font-label-md text-xs flex items-center justify-center gap-1.5 hover:bg-white/10 active:scale-95 transition-all border-white/10 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[16px] text-primary">sensors</span>
+                    Device Telemetry
+                  </button>
+                  <button
+                    onClick={() => router.push(`/sos?lat=${selectedMember.lat}&lng=${selectedMember.lng}&target=${encodeURIComponent(selectedMember.name)}`)}
+                    className="bg-error hover:bg-error-container text-white py-2 rounded-xl font-label-md text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-[0_0_12px_rgba(229,62,62,0.4)] cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">emergency</span>
+                    Dispatch to Location
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

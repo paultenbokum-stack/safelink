@@ -68,6 +68,8 @@ export async function POST(request) {
       deviceHashes: (result.deviceRefs || []).map((d) => d.hashedImei),
       // Store raw IMEIs server-side in session only — needed to call TrackSolid
       _deviceImeis: (result.deviceRefs || []).map((d) => d.rawImei),
+      _deviceNicknames: (result.deviceRefs || []).map((d) => d.nickname),
+      _deviceTypes: (result.deviceRefs || []).map((d) => d.type),
     };
 
     const sessionToken = issuePartnerSession(sessionPayload);

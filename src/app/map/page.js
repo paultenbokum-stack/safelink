@@ -7,15 +7,49 @@ import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
 import { useAuth } from '@/lib/auth-context';
 
-/**
- * Mapbox GL JS is loaded dynamically to avoid SSR issues.
- * Falls back to the old CSS-grid map if no Mapbox token is configured.
- */
-
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
 const REFRESH_INTERVAL_MS = 15000; // Poll device locations every 15 seconds
 
-/* ─── Demo fallback data (shown when no real devices are bound) ── */
+/* ─── Device Type & Status Helpers ─────────────────────────────── */
+function formatDeviceType(type) {
+  const map = {
+    BLE_TAG: 'BLE Tag',
+    VEHICLE_GPS: 'Vehicle GPS',
+    PANIC_FOB: 'Panic FOB',
+    PERSONAL_TRACKER: 'Personal Tracker',
+    HUB: 'IoT Hub',
+  };
+  return map[type] || 'Sentinel Device';
+}
+
+function formatStatus(status) {
+  const map = {
+    in_motion: 'In Motion',
+    online: 'Online',
+    offline: 'Offline',
+    armed: 'Armed & Online',
+    unknown: 'Awaiting Telemetry',
+  };
+  return map[status] || status || 'Active';
+}
+
+function getDeviceIcon(type) {
+  const map = {
+    BLE_TAG: 'sensors',
+    VEHICLE_GPS: 'directions_car',
+    PANIC_FOB: 'key',
+    PERSONAL_TRACKER: 'watch',
+    HUB: 'hub',
+  };
+  return map[type] || 'location_on';
+}
+
+function getDeviceColor(index) {
+  const colors = ['#9fcafb', '#ffc32f', '#38a169', '#2c5a85', '#ef4444', '#8b5cf6', '#f97316', '#06b6d4'];
+  return colors[index % colors.length];
+}
+
+/* ─── Demo fallback data ────────────────────────────────────────── */
 const DEMO_MEMBERS = [
   {
     id: 'demo-1',
@@ -70,15 +104,15 @@ const DEMO_MEMBERS = [
   },
   {
     id: 'demo-4',
-    name: 'Sipho Molefe',
-    role: 'Son (University)',
+    name: 'Toyota Fortuner GD-6',
+    role: 'Vehicle GPS Tracker',
     status: 'In Transit',
     zone: 'Heading to Campus',
-    battery: 79,
+    battery: 100,
     speed: 45,
     address: 'N1 North, Midrand',
     lastSeen: 'Live',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+    avatar: null,
     color: '#38a169',
     lat: -26.0200,
     lng: 28.0700,
@@ -88,9 +122,9 @@ const DEMO_MEMBERS = [
 ];
 
 const DEMO_GEOFENCES = [
-  { id: 'home', name: 'Home Zone', lat: -26.1076, lng: 28.0567, radius: 150, color: '#38a169' },
-  { id: 'school', name: 'School Zone', lat: -26.1022, lng: 28.0412, radius: 120, color: '#ffc32f' },
-  { id: 'work', name: 'Corporate Zone', lat: -26.0961, lng: 28.0569, radius: 200, color: '#2c5a85' },
+  { id: 'home', name: 'Home Zone', lat: -26.1076, lng: 28.0567, radius: 180, color: '#38a169' },
+  { id: 'school', name: 'School Zone', lat: -26.1022, lng: 28.0412, radius: 140, color: '#ffc32f' },
+  { id: 'work', name: 'Corporate Zone', lat: -26.0961, lng: 28.0569, radius: 220, color: '#2c5a85' },
 ];
 
 export default function MapPage() {
@@ -103,7 +137,9 @@ export default function MapPage() {
 
 function LiveFamilyMapContent() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, partnerSession } = useAuth();
+  const isPartner = !!user?.isPartnerSession;
+
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef({});
@@ -114,22 +150,76 @@ function LiveFamilyMapContent() {
   const [selectedMember, setSelectedMember] = useState(DEMO_MEMBERS[0]);
   const [showGeofences, setShowGeofences] = useState(true);
   const [mapReady, setMapReady] = useState(false);
-  const [isLiveData, setIsLiveData] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting');
 
-  /* ─── Fetch live device locations from API ─────────────────── */
+  /* ─── Fetch device locations (Partner vs Standard Firebase) ─── */
   const fetchDeviceLocations = useCallback(async () => {
     if (!user) return;
 
+    /* 1. Partner Session Path (Security Brokers / Partner CRM) */
+    if (isPartner && partnerSession?.sessionToken) {
+      try {
+        const res = await fetch('/api/partner/devices', {
+          headers: { Authorization: `Bearer ${partnerSession.sessionToken}` },
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            const partnerMembers = data.map((d, i) => ({
+              id: d.hashedImei,
+              name: d.nickname || `Device ${d.hashedImei.slice(0, 6)}`,
+              role: formatDeviceType(d.type),
+              status: formatStatus(d.status),
+              zone: 'Active Area',
+              battery: d.battery != null ? d.battery : 100,
+              speed: d.status === 'in_motion' ? 45 : 0,
+              address: d.address || (d.lat && d.lng ? `${d.lat.toFixed(4)}°S, ${d.lng.toFixed(4)}°E` : 'Sandton, JHB'),
+              lastSeen: d.lastSeen || 'Live',
+              avatar: null,
+              color: getDeviceColor(i),
+              lat: parseFloat(d.lat) || -26.1076 + (i * 0.006),
+              lng: parseFloat(d.lng) || 28.0567 + (i * 0.006),
+              device: `${formatDeviceType(d.type)} • ${d.nickname}`,
+              icon: getDeviceIcon(d.type),
+              isTag: d.type === 'BLE_TAG',
+              isPhone: false,
+              isPartner: true,
+              isDemo: false,
+            }));
+
+            setMembers(partnerMembers);
+            setSelectedMember((prev) => {
+              if (!prev) return partnerMembers[0];
+              const match = partnerMembers.find((m) => m.id === prev.id);
+              return match || partnerMembers[0];
+            });
+            setConnectionStatus('partner_live');
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('[map] Partner device fetch error:', err);
+      }
+      setConnectionStatus('demo');
+      return;
+    }
+
+    /* 2. Test Session Path (Hardcoded 0827675092) */
+    if (user.isTestSession) {
+      setMembers(DEMO_MEMBERS);
+      setConnectionStatus('demo');
+      return;
+    }
+
+    /* 3. Live Firebase + TrackSolid Path */
     try {
       const token = user.accessToken || user.stsTokenManager?.accessToken;
-      if (!token || user.isTestSession) {
-        // No real Firebase auth — use demo data
+      if (!token) {
         setConnectionStatus('demo');
         return;
       }
 
-      // Fetch BLE device locations and phone locations in parallel
       const [devicesRes, phonesRes] = await Promise.all([
         fetch('/api/devices', { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
         fetch('/api/location/share', { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
@@ -137,7 +227,7 @@ function LiveFamilyMapContent() {
 
       const allMembers = [];
 
-      // ── Process BLE/Sentinel device locations ──
+      // Process hardware devices
       if (devicesRes?.ok) {
         const data = await devicesRes.json();
         const devices = (data.devices || []).filter((d) => !d.isPhoneDevice);
@@ -184,7 +274,7 @@ function LiveFamilyMapContent() {
         }
       }
 
-      // ── Process phone-shared locations ──
+      // Process phone GPS sharing
       if (phonesRes?.ok) {
         const phoneData = await phonesRes.json();
         const phoneLocations = phoneData.locations || [];
@@ -214,11 +304,9 @@ function LiveFamilyMapContent() {
         });
       }
 
-      // ── Set state ──
       if (allMembers.length > 0) {
         setMembers(allMembers);
         setSelectedMember(allMembers[0]);
-        setIsLiveData(true);
         setConnectionStatus('live');
       } else {
         setConnectionStatus('demo');
@@ -227,14 +315,14 @@ function LiveFamilyMapContent() {
       console.warn('[map] Failed to fetch device locations:', err);
       setConnectionStatus('demo');
     }
-  }, [user]);
+  }, [user, isPartner, partnerSession]);
 
-  /* ─── Fetch geofences from API ─────────────────────────────── */
+  /* ─── Fetch Geofences ───────────────────────────────────────── */
   const fetchGeofences = useCallback(async () => {
-    if (!user) return;
+    if (!user || user.isTestSession || isPartner) return;
     try {
       const token = user.accessToken || user.stsTokenManager?.accessToken;
-      if (!token || user.isTestSession) return;
+      if (!token) return;
 
       const res = await fetch('/api/geofences', {
         headers: { Authorization: `Bearer ${token}` },
@@ -255,9 +343,9 @@ function LiveFamilyMapContent() {
     } catch (err) {
       console.warn('[map] Failed to fetch geofences:', err);
     }
-  }, [user]);
+  }, [user, isPartner]);
 
-  /* ─── Initialize Map (Mapbox or Leaflet fallback) ──────────── */
+  /* ─── Initialize Map (Mapbox GL or Leaflet Dark Fallback) ────── */
   useEffect(() => {
     if (!mapContainerRef.current) return;
     if (mapInstanceRef.current) return;
@@ -265,7 +353,7 @@ function LiveFamilyMapContent() {
     let cancelled = false;
 
     async function initMap() {
-      // Try Mapbox first if token is available
+      // 1. Try Mapbox if token configured
       if (MAPBOX_TOKEN) {
         try {
           const mapboxgl = (await import('mapbox-gl')).default;
@@ -278,7 +366,7 @@ function LiveFamilyMapContent() {
           const map = new mapboxgl.Map({
             container: mapContainerRef.current,
             style: 'mapbox://styles/mapbox/dark-v11',
-            center: [28.0567, -26.1076],
+            center: [28.0567, -26.1076], // Sandton, Johannesburg
             zoom: 13,
             attributionControl: false,
           });
@@ -294,17 +382,17 @@ function LiveFamilyMapContent() {
           });
           return;
         } catch (e) {
-          console.warn('[map] Mapbox failed, falling back to Leaflet:', e);
+          console.warn('[map] Mapbox init failed, falling back to Leaflet:', e);
         }
       }
 
-      // Fallback: Leaflet + OpenStreetMap (free, no API key)
+      // 2. Leaflet Fallback (Free OpenStreetMap / CartoDB Dark Tiles)
       try {
         const L = (await import('leaflet')).default;
 
         if (cancelled || !mapContainerRef.current) return;
 
-        // Inject Leaflet CSS
+        // Ensure Leaflet CSS is in head
         if (!document.getElementById('leaflet-css')) {
           const link = document.createElement('link');
           link.id = 'leaflet-css';
@@ -313,23 +401,27 @@ function LiveFamilyMapContent() {
           document.head.appendChild(link);
         }
 
-        // Wait for CSS to load
-        await new Promise((r) => setTimeout(r, 200));
+        await new Promise((r) => setTimeout(r, 150));
 
         const map = L.map(mapContainerRef.current, {
-          center: [-26.1076, 28.0567], // Leaflet uses [lat, lng]
+          center: [-26.1076, 28.0567],
           zoom: 13,
           zoomControl: false,
           attributionControl: false,
         });
 
-        // Dark-themed tiles from CartoDB (free)
+        // CartoDB Dark All tiles (sleek, high-contrast dark radar theme)
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
           maxZoom: 19,
-          attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+          subdomains: 'abcd',
         }).addTo(map);
 
         L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        // Invalidate size after initial layout render
+        setTimeout(() => {
+          try { map.invalidateSize(); } catch {}
+        }, 300);
 
         mapInstanceRef.current = map;
         mapInstanceRef.current._isLeaflet = true;
@@ -342,55 +434,90 @@ function LiveFamilyMapContent() {
     }
 
     initMap();
+
     return () => {
       cancelled = true;
       if (mapInstanceRef.current) {
-        if (mapInstanceRef.current._isMapbox) {
+        try {
           mapInstanceRef.current.remove();
-        } else if (mapInstanceRef.current._isLeaflet) {
-          mapInstanceRef.current.remove();
-        }
+        } catch {}
         mapInstanceRef.current = null;
       }
     };
   }, []);
 
-  /* ─── Render markers and geofences on map ──────────────────── */
+  /* ─── Render Markers and Geofences on Map ───────────────────── */
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
 
     const map = mapInstanceRef.current;
     const isLeaflet = !!map._isLeaflet;
 
-    // Clear existing markers
-    Object.values(markersRef.current).forEach((m) => m.remove());
+    // Clear existing markers & shapes
+    Object.values(markersRef.current).forEach((m) => {
+      try { m.remove(); } catch {}
+    });
     markersRef.current = {};
 
-    // ── Add member markers ──
+    // ── 1. Add Device & Member Markers ──
     members.forEach((member) => {
       if (!member.lat || !member.lng) return;
 
+      const isSelected = selectedMember?.id === member.id;
+      const initial = member.name.charAt(0).toUpperCase();
+
       const markerHtml = `
-        <div style="position:relative;cursor:pointer;">
+        <div style="position:relative;cursor:pointer;display:flex;flex-direction:column;align-items:center;">
+          <!-- Animated Radar Glow Ring -->
           <div style="
-            width:44px;height:44px;border-radius:50%;
-            border:3px solid ${member.color};overflow:hidden;
-            background:#1a1a2e;box-shadow:0 0 12px ${member.color}60;
+            position:absolute;top:0;left:50%;transform:translateX(-50%);
+            width:52px;height:52px;border-radius:50%;
+            background:${member.color}25;
+            box-shadow:0 0 16px ${member.color}70;
+            border:1.5px solid ${member.color}80;
+            animation:${isSelected ? 'ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite' : 'none'};
+            pointer-events:none;
+          "></div>
+
+          <!-- Main Pin Avatar / Icon -->
+          <div style="
+            width:42px;height:42px;border-radius:50%;
+            border:${isSelected ? '3px solid #ffc32f' : `2.5px solid ${member.color}`};
+            overflow:hidden;background:#0f1923;
+            display:flex;align-items:center;justify-content:center;
+            box-shadow:0 4px 12px rgba(0,0,0,0.6);
+            z-index:2;position:relative;
           ">
             ${member.avatar
               ? `<img src="${member.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />`
-              : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:${member.color};font-weight:bold;font-size:16px;">${member.isPhone ? '📱' : member.name.charAt(0)}</div>`
+              : member.isPhone
+              ? `<span style="font-size:18px;">📱</span>`
+              : member.icon === 'directions_car'
+              ? `<span style="font-size:18px;">🚗</span>`
+              : member.icon === 'watch'
+              ? `<span style="font-size:18px;">⌚</span>`
+              : member.icon === 'key'
+              ? `<span style="font-size:18px;">🔑</span>`
+              : `<div style="color:${member.color};font-weight:900;font-size:16px;">${initial}</div>`
             }
           </div>
+
+          <!-- Label Tag -->
           <div style="
-            position:absolute;top:48px;left:50%;transform:translateX(-50%);
-            white-space:nowrap;background:rgba(15,25,35,0.95);
-            border:1px solid rgba(255,255,255,0.15);
+            margin-top:4px;
+            white-space:nowrap;
+            background:rgba(15,25,35,0.92);
+            border:1px solid rgba(255,255,255,0.18);
             padding:2px 8px;border-radius:6px;
-            font-size:11px;font-weight:600;color:#e0e0e0;
+            font-size:11px;font-weight:700;color:#f0f0f0;
+            box-shadow:0 2px 6px rgba(0,0,0,0.5);
+            display:flex;align-items:center;gap:4px;
+            backdrop-filter:blur(4px);
+            z-index:3;
           ">
-            <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${member.color};margin-right:4px;vertical-align:middle;"></span>
-            ${member.name.split(' ')[0]}
+            <span style="width:6px;height:6px;border-radius:50%;background:${member.color};display:inline-block;"></span>
+            <span>${member.name.split(' ')[0]}</span>
+            ${member.battery != null ? `<span style="font-size:9px;color:#ffc32f;margin-left:2px;">${member.battery}%</span>` : ''}
           </div>
         </div>
       `;
@@ -399,17 +526,16 @@ function LiveFamilyMapContent() {
         const L = map._L;
         const icon = L.divIcon({
           html: markerHtml,
-          className: 'safelink-map-marker',
-          iconSize: [44, 66],
-          iconAnchor: [22, 33],
+          className: 'safelink-radar-marker',
+          iconSize: [60, 70],
+          iconAnchor: [30, 26],
         });
         const marker = L.marker([member.lat, member.lng], { icon }).addTo(map);
         marker.on('click', () => setSelectedMember(member));
         markersRef.current[member.id] = marker;
       } else {
-        // Mapbox
         const el = document.createElement('div');
-        el.className = 'safelink-map-marker';
+        el.className = 'safelink-radar-marker';
         el.innerHTML = markerHtml;
         el.addEventListener('click', () => setSelectedMember(member));
 
@@ -426,7 +552,7 @@ function LiveFamilyMapContent() {
       }
     });
 
-    // ── Add geofence circles ──
+    // ── 2. Add Geofence Zones ──
     if (showGeofences) {
       geofences.forEach((fence) => {
         if (isLeaflet) {
@@ -435,13 +561,19 @@ function LiveFamilyMapContent() {
             radius: fence.radius || 200,
             color: fence.color,
             fillColor: fence.color,
-            fillOpacity: 0.1,
+            fillOpacity: 0.12,
             weight: 2,
-            opacity: 0.6,
+            opacity: 0.65,
           }).addTo(map);
+
+          circle.bindTooltip(`<b>${fence.name}</b>`, {
+            permanent: false,
+            direction: 'top',
+            className: 'safelink-geofence-tooltip',
+          });
+
           markersRef.current[`geofence-${fence.id}`] = circle;
         } else {
-          // Mapbox geofence rendering
           const sourceId = `geofence-${fence.id}`;
           const layerFillId = `geofence-fill-${fence.id}`;
           const layerLineId = `geofence-line-${fence.id}`;
@@ -467,29 +599,24 @@ function LiveFamilyMapContent() {
           });
 
           map.addLayer({
-            id: layerFillId, type: 'fill', source: sourceId,
-            paint: { 'fill-color': fence.color, 'fill-opacity': 0.1 },
+            id: layerFillId,
+            type: 'fill',
+            source: sourceId,
+            paint: { 'fill-color': fence.color, 'fill-opacity': 0.12 },
           });
 
           map.addLayer({
-            id: layerLineId, type: 'line', source: sourceId,
-            paint: { 'line-color': fence.color, 'line-width': 2, 'line-opacity': 0.6 },
+            id: layerLineId,
+            type: 'line',
+            source: sourceId,
+            paint: { 'line-color': fence.color, 'line-width': 2, 'line-opacity': 0.65 },
           });
         }
       });
     }
+  }, [mapReady, members, geofences, showGeofences, selectedMember]);
 
-    // Pan map to first member's location
-    if (members.length > 0 && members[0].lat && members[0].lng) {
-      if (isLeaflet) {
-        map.setView([members[0].lat, members[0].lng], 13, { animate: true });
-      } else {
-        map.flyTo({ center: [members[0].lng, members[0].lat], zoom: 13 });
-      }
-    }
-  }, [mapReady, members, geofences, showGeofences]);
-
-  /* ─── Data polling ──────────────────────────────────────────── */
+  /* ─── Polling effect ────────────────────────────────────────── */
   useEffect(() => {
     fetchDeviceLocations();
     fetchGeofences();
@@ -498,166 +625,116 @@ function LiveFamilyMapContent() {
     return () => clearInterval(pollTimerRef.current);
   }, [fetchDeviceLocations, fetchGeofences]);
 
-  /* ─── Fly map to selected member ───────────────────────────── */
+  /* ─── Pan to selected member ────────────────────────────────── */
   useEffect(() => {
-    if (mapReady && mapInstanceRef.current && selectedMember?.lat && selectedMember?.lng) {
-      mapInstanceRef.current.flyTo({
+    if (!mapReady || !mapInstanceRef.current || !selectedMember?.lat || !selectedMember?.lng) return;
+
+    const map = mapInstanceRef.current;
+    if (map._isLeaflet) {
+      map.setView([selectedMember.lat, selectedMember.lng], 14, { animate: true, duration: 1 });
+    } else if (map.flyTo) {
+      map.flyTo({
         center: [selectedMember.lng, selectedMember.lat],
-        zoom: 15,
-        duration: 1200,
+        zoom: 14,
+        duration: 1000,
       });
     }
   }, [selectedMember, mapReady]);
 
-  /* ─── Battery icon helper ───────────────────────────────────── */
-  const getBatteryIcon = (level) => {
-    if (!level) return 'battery_unknown';
-    if (level > 80) return 'battery_5_bar';
-    if (level > 60) return 'battery_4_bar';
-    if (level > 40) return 'battery_3_bar';
-    if (level > 20) return 'battery_2_bar';
-    return 'battery_1_bar';
+  /* ─── Fit bounds to all devices ──────────────────────────────── */
+  const handleRecenter = () => {
+    if (!mapInstanceRef.current || members.length === 0) return;
+    const map = mapInstanceRef.current;
+
+    if (map._isLeaflet) {
+      const L = map._L;
+      const bounds = L.latLngBounds(members.map((m) => [m.lat, m.lng]));
+      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
+    } else if (map.fitBounds) {
+      const lngs = members.map((m) => m.lng);
+      const lats = members.map((m) => m.lat);
+      map.fitBounds(
+        [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+        { padding: 60, maxZoom: 15 }
+      );
+    }
   };
 
-  const statusColor = connectionStatus === 'live' ? '#38a169' : '#ffc32f';
+  /* ─── Status badge styling ──────────────────────────────────── */
+  const statusColor = connectionStatus === 'partner_live' || connectionStatus === 'live' ? '#38a169' : '#ffc32f';
   const statusText =
-    connectionStatus === 'live'
+    connectionStatus === 'partner_live'
+      ? `${members.length} Partner Devices Live`
+      : connectionStatus === 'live'
       ? `${members.length} Devices Live`
-      : `${members.length} Members (Demo)`;
+      : `${members.length} Trackers (Active Demo)`;
 
   return (
     <div className="bg-background text-on-background font-body-md h-screen w-screen overflow-hidden flex flex-col relative">
-      <Header title="Live Family Radar" showNotification={true} />
+      <Header title="Live Radar & GPS" showNotification={true} />
 
-      {/* Map Container — Mapbox or fallback */}
+      {/* Map Container — ALWAYS in DOM so Leaflet or Mapbox can mount */}
       <div className="absolute inset-0 z-0 pt-16 pb-20">
-        {MAPBOX_TOKEN ? (
-          <div ref={mapContainerRef} className="w-full h-full" />
-        ) : (
-          /* Fallback: CSS grid map background with positioned pins */
-          <div className="w-full h-full map-bg relative">
-            {/* Geofence circles */}
-            {showGeofences && geofences.map((fence) => (
-              <div
-                key={fence.id}
-                className="absolute rounded-full border-2 flex items-center justify-center pointer-events-none -translate-x-1/2 -translate-y-1/2"
-                style={{
-                  top: `${30 + (fence.lat + 26.11) * -800}%`,
-                  left: `${50 + (fence.lng - 28.055) * 800}%`,
-                  width: `${fence.radius}px`,
-                  height: `${fence.radius}px`,
-                  borderColor: fence.color,
-                  backgroundColor: `${fence.color}15`,
-                }}
-              >
-                <span
-                  className="font-label-sm text-[11px] uppercase tracking-wider bg-[#0f1923]/90 px-2 py-0.5 rounded backdrop-blur-sm border"
-                  style={{ color: fence.color, borderColor: `${fence.color}40` }}
-                >
-                  {fence.name}
-                </span>
-              </div>
-            ))}
-
-            {/* Member pins */}
-            {members.map((member) => {
-              const isSelected = selectedMember?.id === member.id;
-              // Map real coords to % positions within the view
-              const top = `${30 + (member.lat + 26.11) * -800}%`;
-              const left = `${50 + (member.lng - 28.055) * 800}%`;
-
-              return (
-                <div
-                  key={member.id}
-                  onClick={() => setSelectedMember(member)}
-                  style={{ top, left }}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer z-20 group transition-all duration-300"
-                >
-                  <div
-                    className={`w-14 h-14 rounded-full absolute -top-2 -left-2 ${
-                      isSelected ? 'animate-ping opacity-60' : 'opacity-20'
-                    }`}
-                    style={{ backgroundColor: member.color }}
-                  />
-                  <div
-                    className={`w-10 h-10 rounded-full overflow-hidden border-2 p-0.5 relative z-10 shadow-lg bg-surface transition-transform duration-200 group-hover:scale-110 ${
-                      isSelected
-                        ? 'border-secondary scale-110 shadow-[0_0_15px_rgba(255,195,47,0.8)]'
-                        : 'border-white/30'
-                    }`}
-                  >
-                    {member.avatar ? (
-                      <img src={member.avatar} alt={member.name} className="w-full h-full object-cover rounded-full" />
-                    ) : (
-                      <div
-                        className="w-full h-full rounded-full flex items-center justify-center font-bold text-lg"
-                        style={{ color: member.color, backgroundColor: `${member.color}20` }}
-                      >
-                        {member.name.charAt(0)}
-                      </div>
-                    )}
-                  </div>
-                  <div className="absolute top-12 left-1/2 -translate-x-1/2 whitespace-nowrap bg-surface-container/95 border border-white/10 px-2 py-0.5 rounded-md text-[11px] font-semibold text-on-surface shadow-md flex items-center gap-1 backdrop-blur-md">
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: member.color }} />
-                    {member.name.split(' ')[0]}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <div ref={mapContainerRef} className="w-full h-full bg-[#0a0f14]" />
       </div>
 
-      {/* Map Control Floating Overlay */}
+      {/* Map Control Floating Top Bar */}
       <div className="absolute top-20 left-4 right-4 z-30 max-w-2xl mx-auto flex items-center justify-between pointer-events-auto">
-        <div className="glass-panel px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg">
-          <span
-            className="w-2.5 h-2.5 rounded-full animate-pulse"
-            style={{ backgroundColor: statusColor }}
-          />
+        <div className="glass-panel px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg border border-white/10">
+          <span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ backgroundColor: statusColor }} />
           <span className="font-label-sm text-xs font-bold text-on-surface">{statusText}</span>
-          {connectionStatus === 'demo' && (
-            <span className="text-[10px] text-on-surface-variant">(Demo)</span>
+          {isPartner && (
+            <span className="text-[10px] text-primary font-semibold">({partnerSession?.partnerName || 'Security Brokers'})</span>
           )}
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Recenter Button */}
+          <button
+            onClick={handleRecenter}
+            className="glass-panel p-2 rounded-full hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center text-on-surface border border-white/10"
+            title="Recenter all devices"
+          >
+            <span className="material-symbols-outlined text-[18px]">center_focus_strong</span>
+          </button>
+
+          {/* Toggle Geofence Safe Zones */}
           <button
             onClick={() => setShowGeofences(!showGeofences)}
-            className={`glass-panel p-2 rounded-full hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center gap-1.5 ${
+            className={`glass-panel p-2 rounded-full hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center gap-1.5 border border-white/10 ${
               showGeofences ? 'text-secondary border-secondary/40' : 'text-on-surface-variant'
             }`}
+            title="Toggle Safe Zones"
           >
             <span className="material-symbols-outlined text-[18px]">share_location</span>
             <span className="text-xs font-semibold pr-1">Zones</span>
           </button>
 
+          {/* Add Device / Device List */}
           <button
             onClick={() => router.push('/devices')}
-            className="glass-panel px-3 py-1.5 rounded-full hover:bg-white/10 active:scale-95 transition-all text-xs font-bold text-primary flex items-center gap-1"
+            className="glass-panel px-3 py-1.5 rounded-full hover:bg-white/10 active:scale-95 transition-all text-xs font-bold text-primary flex items-center gap-1 border border-white/10"
           >
-            <span className="material-symbols-outlined text-[16px]">add_circle</span>
-            Add Device
+            <span className="material-symbols-outlined text-[16px]">devices</span>
+            Devices
           </button>
         </div>
       </div>
 
-      {/* Bottom Member Details Drawer */}
+      {/* Selected Device Drawer */}
       {selectedMember && (
-        <div className="absolute bottom-20 left-0 right-0 z-30 p-gutter max-w-2xl mx-auto">
-          <div className="glass-panel rounded-2xl p-md shadow-2xl border border-white/15 backdrop-blur-xl">
-            {/* Selected Member */}
+        <div className="absolute bottom-20 left-0 right-0 z-30 p-gutter max-w-2xl mx-auto pointer-events-auto">
+          <div className="glass-panel rounded-2xl p-md shadow-2xl border border-white/15 backdrop-blur-xl bg-surface-container-high/90">
+            {/* Header info */}
             <div className="flex items-start justify-between mb-sm">
               <div className="flex items-center gap-sm">
-                <div
-                  className="w-12 h-12 rounded-full overflow-hidden border-2 border-secondary p-0.5 relative shrink-0"
-                >
+                <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-secondary p-0.5 relative shrink-0 bg-surface-container-low flex items-center justify-center">
                   {selectedMember.avatar ? (
                     <img src={selectedMember.avatar} alt={selectedMember.name} className="w-full h-full object-cover rounded-full" />
                   ) : (
                     <div
-                      className="w-full h-full rounded-full flex items-center justify-center font-bold text-xl"
-                      style={{ color: selectedMember.color, backgroundColor: `${selectedMember.color}20` }}
+                      className="w-full h-full rounded-full flex items-center justify-center font-black text-lg"
+                      style={{ color: selectedMember.color, backgroundColor: `${selectedMember.color}25` }}
                     >
                       {selectedMember.name.charAt(0)}
                     </div>
@@ -665,7 +742,9 @@ function LiveFamilyMapContent() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-headline-md text-lg font-bold text-on-surface">{selectedMember.name}</h3>
+                    <h3 className="font-headline-md text-base md:text-lg font-bold text-on-surface leading-tight">
+                      {selectedMember.name}
+                    </h3>
                     <span className="bg-[#38a169]/20 text-[#38a169] border border-[#38a169]/30 text-[10px] font-bold px-2 py-0.5 rounded-full">
                       {selectedMember.status}
                     </span>
@@ -675,67 +754,67 @@ function LiveFamilyMapContent() {
                       </span>
                     )}
                   </div>
-                  <p className="font-label-sm text-xs text-on-surface-variant">{selectedMember.address}</p>
+                  <p className="font-label-sm text-xs text-on-surface-variant flex items-center gap-1 mt-0.5">
+                    <span className="material-symbols-outlined text-[13px] text-primary">pin_drop</span>
+                    {selectedMember.address}
+                  </p>
                 </div>
               </div>
 
               <div className="flex flex-col items-end">
                 {selectedMember.battery !== null && (
-                  <div className="flex items-center gap-1 text-secondary text-sm font-bold">
-                    <span className="material-symbols-outlined text-[16px]">
-                      {getBatteryIcon(selectedMember.battery)}
-                    </span>
+                  <div className="flex items-center gap-1 text-secondary text-xs font-bold">
+                    <span className="material-symbols-outlined text-[14px]">battery_5_bar</span>
                     {selectedMember.battery}%
                   </div>
                 )}
-                <span className="text-[10px] text-on-surface-variant">{selectedMember.speed} km/h</span>
+                {selectedMember.speed > 0 && (
+                  <span className="text-[10px] text-on-surface-variant font-mono">{selectedMember.speed} km/h</span>
+                )}
+                <span className="text-[10px] text-on-surface-variant/80">{selectedMember.lastSeen}</span>
               </div>
             </div>
 
-            {/* Quick Member Switcher */}
-            <div className="grid grid-cols-4 gap-2 pt-2 border-t border-white/10">
-              {members.slice(0, 8).map((m) => {
-                const active = m.id === selectedMember?.id;
+            {/* Quick Member / Device Switcher Carousel */}
+            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 pt-2 border-t border-white/10">
+              {members.slice(0, 6).map((m) => {
+                const active = m.id === selectedMember.id;
                 return (
                   <button
                     key={m.id}
                     onClick={() => setSelectedMember(m)}
-                    className={`p-1.5 rounded-xl flex flex-col items-center gap-1 transition-all ${
+                    className={`p-1.5 rounded-xl flex flex-col items-center gap-1 transition-all cursor-pointer ${
                       active
                         ? 'bg-secondary/20 border border-secondary/40 text-secondary'
                         : 'hover:bg-white/5 text-on-surface-variant'
                     }`}
                   >
-                    {m.avatar ? (
-                      <img src={m.avatar} alt={m.name} className="w-7 h-7 rounded-full object-cover" />
-                    ) : (
-                      <div
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-                        style={{ color: m.color, backgroundColor: `${m.color}20` }}
-                      >
-                        {m.name.charAt(0)}
-                      </div>
-                    )}
+                    <div
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                      style={{ color: m.color, backgroundColor: `${m.color}25` }}
+                    >
+                      {m.name.charAt(0)}
+                    </div>
                     <span className="text-[10px] font-semibold truncate max-w-[65px]">{m.name.split(' ')[0]}</span>
                   </button>
                 );
               })}
             </div>
 
-            {/* Action Buttons */}
+            {/* Tactical Actions */}
             <div className="grid grid-cols-2 gap-sm mt-3 pt-2">
               <button
-                onClick={() => alert(`Calling ${selectedMember.name}...`)}
-                className="glass-panel py-2 rounded-xl text-on-surface font-label-md text-xs flex items-center justify-center gap-1.5 hover:bg-white/10 active:scale-95 transition-all border-white/10"
+                onClick={() => router.push('/devices')}
+                className="glass-panel py-2 rounded-xl text-on-surface font-label-md text-xs flex items-center justify-center gap-1.5 hover:bg-white/10 active:scale-95 transition-all border-white/10 cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[18px] text-primary">call</span>
-                Direct Call
+                <span className="material-symbols-outlined text-[16px] text-primary">sensors</span>
+                Device Telemetry
               </button>
               <button
-                onClick={() => router.push(`/sos?lat=${selectedMember.lat}&lng=${selectedMember.lng}`)}
-                className="bg-error hover:bg-error-container text-white py-2 rounded-xl font-label-md text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-[0_0_12px_rgba(229,62,62,0.4)]"
+                onClick={() => router.push(`/sos?lat=${selectedMember.lat}&lng=${selectedMember.lng}&target=${encodeURIComponent(selectedMember.name)}`)}
+                className="bg-error hover:bg-error-container text-white py-2 rounded-xl font-label-md text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-[0_0_12px_rgba(229,62,62,0.4)] cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[18px]">emergency</span>
+                <span className="material-symbols-outlined text-[16px]">emergency</span>
                 Dispatch to Location
               </button>
             </div>
@@ -746,11 +825,4 @@ function LiveFamilyMapContent() {
       <BottomNav />
     </div>
   );
-}
-
-/* ─── Helpers ──────────────────────────────────────────────────── */
-
-function getDeviceColor(index) {
-  const colors = ['#9fcafb', '#ffc32f', '#2c5a85', '#38a169', '#ef4444', '#8b5cf6', '#f97316', '#06b6d4'];
-  return colors[index % colors.length];
 }

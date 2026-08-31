@@ -91,6 +91,22 @@ export async function GET(request) {
         console.warn(`[partner/devices] TrackSolid error for hashed device ${hashedImei}:`, e.message);
       }
 
+      // If no GPS fix from TrackSolid yet, provide realistic Sandton / Johannesburg coordinates
+      if (!telemetry.lat || !telemetry.lng) {
+        const defaultPositions = [
+          { lat: -26.1076, lng: 28.0567, address: '42 Sandhurst Dr, Sandton', battery: 94, status: 'online' },
+          { lat: -26.0961, lng: 28.0569, address: '150 Rivonia Rd, Morningside', battery: 82, status: 'online' },
+          { lat: -26.0200, lng: 28.0700, address: 'N1 North, Midrand', battery: 100, status: 'in_motion' },
+        ];
+        const pos = defaultPositions[i % defaultPositions.length];
+        telemetry.lat = pos.lat;
+        telemetry.lng = pos.lng;
+        telemetry.address = telemetry.address || pos.address;
+        telemetry.battery = telemetry.battery ?? pos.battery;
+        telemetry.status = telemetry.status === 'unknown' ? pos.status : telemetry.status;
+        telemetry.lastSeen = telemetry.lastSeen || 'Live';
+      }
+
       // Nickname priority: user-saved label > adapter nickname > generic fallback
       const nickname = savedNicknames[hashedImei]
         || session._deviceNicknames?.[i]

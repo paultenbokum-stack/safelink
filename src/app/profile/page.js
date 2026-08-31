@@ -18,18 +18,20 @@ export default function ProfilePage() {
 }
 
 function ProfileContent() {
-  const { user, logout } = useAuth();
+  const { user, logout, partnerSession } = useAuth();
   const router = useRouter();
   const [household, setHousehold] = React.useState(null);
+  const isPartner = !!user?.isPartnerSession;
 
   React.useEffect(() => {
+    if (isPartner) return; // Partner sessions don't use localStorage
     if (typeof window !== 'undefined') {
       const h = localStorage.getItem('active_household');
       if (h) {
         try { setHousehold(JSON.parse(h)); } catch(e) {}
       }
     }
-  }, []);
+  }, [isPartner]);
 
   const handleSignOut = async () => {
     try {
@@ -41,16 +43,57 @@ function ProfileContent() {
     }
   };
 
-  const displayName = household?.adminFirstName && household?.adminLastName 
-    ? `${household.adminFirstName} ${household.adminLastName}`
-    : user?.displayName || 'SafeLink Member';
+  // Partner session: name comes from partner's system (display-only)
+  // Test session: name comes from localStorage household
+  const displayName = isPartner
+    ? (partnerSession?.displayName || user?.displayName || 'Partner Client')
+    : (household?.adminFirstName && household?.adminLastName
+        ? `${household.adminFirstName} ${household.adminLastName}`
+        : user?.displayName || 'SafeLink Member');
 
-  const displayPhone = household?.phone || user?.phoneNumber || '+27 82 345 6789';
+  const displayPhone = isPartner
+    ? (partnerSession?.partnerId || 'Security Partner')
+    : (household?.phone || user?.phoneNumber || '+27 82 345 6789');
+
   const avatarSrc = household?.avatarUrl || user?.photoURL || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80';
 
   const memberCount = household?.members?.length || household?.memberCount || 1;
 
-  const settingsItems = [
+  // Partner sessions: some settings are read-only (managed by security company)
+  const settingsItems = isPartner ? [
+    {
+      title: 'Account Details',
+      subtitle: `${displayName} — Managed by ${partnerSession?.partnerName || 'Security Partner'}`,
+      icon: 'shield_person',
+      href: null, // read-only
+      readOnly: true,
+    },
+    {
+      title: 'Linked Sentinel Devices',
+      subtitle: `${partnerSession?.deviceCount || 0} device${(partnerSession?.deviceCount || 0) !== 1 ? 's' : ''} from ${partnerSession?.partnerName || 'partner'}`,
+      icon: 'devices',
+      href: '/devices',
+    },
+    {
+      title: 'Subscription & Membership',
+      subtitle: `${partnerSession?.tier || 'Standard'} — via ${partnerSession?.partnerName || 'Security Partner'}`,
+      icon: 'credit_card',
+      href: '/subscribe',
+      readOnly: true,
+    },
+    {
+      title: 'Notification & SOS Rules',
+      subtitle: 'Alerts, siren & silent mode overrides',
+      icon: 'tune',
+      href: '/profile/notifications',
+    },
+    {
+      title: 'Terms & Conditions',
+      subtitle: 'Legal privacy & PSIRA armed response terms',
+      icon: 'description',
+      href: '/terms',
+    },
+  ] : [
     {
       title: 'Personal Info',
       subtitle: `${displayName} • ${displayPhone}`,
@@ -121,33 +164,66 @@ function ProfileContent() {
           <h1 className="font-headline-lg text-2xl font-bold text-on-surface mb-0.5">{displayName}</h1>
           <p className="font-body-md text-sm text-on-surface-variant mb-md">{displayPhone}</p>
 
-          <div className="bg-[#38a169]/15 text-[#38a169] px-sm py-1 rounded-full font-label-sm text-xs font-bold flex items-center gap-1.5 border border-[#38a169]/30">
-            <span className="material-symbols-outlined text-[16px]">verified</span>
-            {household?.circleRole || 'SafeLink Member'} — Active Protected
-          </div>
+          {isPartner ? (
+            <div className="bg-primary/15 text-primary px-sm py-1 rounded-full font-label-sm text-xs font-bold flex items-center gap-1.5 border border-primary/30">
+              <span className="material-symbols-outlined text-[16px]">shield</span>
+              {partnerSession?.partnerName || 'Security Partner'} Client — {partnerSession?.tier || 'Active'}
+            </div>
+          ) : (
+            <div className="bg-[#38a169]/15 text-[#38a169] px-sm py-1 rounded-full font-label-sm text-xs font-bold flex items-center gap-1.5 border border-[#38a169]/30">
+              <span className="material-symbols-outlined text-[16px]">verified</span>
+              {household?.circleRole || 'SafeLink Member'} — Active Protected
+            </div>
+          )}
+
+          {/* POPIA badge for partner sessions */}
+          {isPartner && (
+            <div className="mt-3 flex items-center gap-1.5 text-[10px] text-emerald-400">
+              <span className="material-symbols-outlined text-[14px]">privacy_tip</span>
+              Account managed by {partnerSession?.partnerName} — no personal data stored by SafeLink
+            </div>
+          )}
         </section>
 
         {/* Settings List */}
         <section className="flex flex-col gap-sm">
           {settingsItems.map((item, idx) => (
-            <Link
-              key={idx}
-              href={item.href}
-              className="glass-panel p-md rounded-2xl flex items-center justify-between hover:bg-white/5 active:scale-98 transition-all group border border-white/10"
-            >
-              <div className="flex items-center gap-md">
-                <div className="w-11 h-11 rounded-xl bg-surface-container flex items-center justify-center text-primary group-hover:text-secondary group-hover:scale-105 transition-all border border-white/5">
-                  <span className="material-symbols-outlined text-2xl">{item.icon}</span>
+            item.readOnly || !item.href ? (
+              <div
+                key={idx}
+                className="glass-panel p-md rounded-2xl flex items-center justify-between border border-white/10 opacity-80"
+              >
+                <div className="flex items-center gap-md">
+                  <div className="w-11 h-11 rounded-xl bg-surface-container flex items-center justify-center text-primary border border-white/5">
+                    <span className="material-symbols-outlined text-2xl">{item.icon}</span>
+                  </div>
+                  <div>
+                    <div className="font-label-md text-sm font-bold text-on-surface">{item.title}</div>
+                    <div className="font-label-sm text-xs text-on-surface-variant mt-0.5">{item.subtitle}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="font-label-md text-sm font-bold text-on-surface">{item.title}</div>
-                  <div className="font-label-sm text-xs text-on-surface-variant mt-0.5">{item.subtitle}</div>
-                </div>
+                <span className="text-[10px] text-on-surface-variant border border-white/10 rounded-md px-1.5 py-0.5">Managed</span>
               </div>
-              <span className="material-symbols-outlined text-on-surface-variant group-hover:text-secondary transition-colors">
-                chevron_right
-              </span>
-            </Link>
+            ) : (
+              <Link
+                key={idx}
+                href={item.href}
+                className="glass-panel p-md rounded-2xl flex items-center justify-between hover:bg-white/5 active:scale-98 transition-all group border border-white/10"
+              >
+                <div className="flex items-center gap-md">
+                  <div className="w-11 h-11 rounded-xl bg-surface-container flex items-center justify-center text-primary group-hover:text-secondary group-hover:scale-105 transition-all border border-white/5">
+                    <span className="material-symbols-outlined text-2xl">{item.icon}</span>
+                  </div>
+                  <div>
+                    <div className="font-label-md text-sm font-bold text-on-surface">{item.title}</div>
+                    <div className="font-label-sm text-xs text-on-surface-variant mt-0.5">{item.subtitle}</div>
+                  </div>
+                </div>
+                <span className="material-symbols-outlined text-on-surface-variant group-hover:text-secondary transition-colors">
+                  chevron_right
+                </span>
+              </Link>
+            )
           ))}
 
           {/* Location Sharing */}

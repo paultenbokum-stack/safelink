@@ -14,8 +14,10 @@ import { auth } from './firebase';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser]       = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser]             = useState(null);
+  const [loading, setLoading]       = useState(true);
+  // Partner session stored in memory only — never localStorage (POPIA)
+  const [partnerSession, setPartnerSession] = useState(null);
 
   useEffect(() => {
     // Check local storage for test session first
@@ -74,11 +76,60 @@ export function AuthProvider({ children }) {
     return customUser;
   };
 
+  /**
+   * Login via a security partner (Security Brokers, Thompsons, etc.)
+   * Credentials verified server-side via /api/partner/verify.
+   * No personal data stored — session lives in React state only.
+   *
+   * @param {string} partnerId  e.g. "SB-000001"
+   * @param {string} secret     PIN or password issued by the security company
+   */
+  const loginWithPartnerId = async (partnerId, secret) => {
+    const res = await fetch('/api/partner/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ partnerId: partnerId.trim().toUpperCase(), secret }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Partner login failed');
+    }
+
+    // Store session token + display info in state (NOT localStorage)
+    const session = {
+      sessionToken: data.sessionToken,
+      displayName: data.displayName,
+      tier: data.tier,
+      partnerName: data.partnerName,
+      deviceCount: data.deviceCount,
+      devices: data.devices || [],
+      partnerId: partnerId.trim().toUpperCase(),
+    };
+    setPartnerSession(session);
+
+    // Set a lightweight user object for AuthGuard compatibility
+    const partnerUser = {
+      uid: `partner_${partnerId.replace(/\W/g, '_')}`,
+      displayName: data.displayName,
+      phoneNumber: null,
+      isPartnerSession: true,
+      isTestSession: false,
+      partnerName: data.partnerName,
+      tier: data.tier,
+    };
+    setUser(partnerUser);
+
+    return session;
+  };
+
   const logout = async () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('safelink_user');
     }
     setUser(null);
+    setPartnerSession(null);
     try {
       await signOut(auth);
     } catch (e) {
@@ -96,9 +147,11 @@ export function AuthProvider({ children }) {
       value={{
         user,
         loading,
+        partnerSession,
         login,
         register,
         loginWithPhone,
+        loginWithPartnerId,
         logout,
         resetPassword,
         verifyEmail,

@@ -7,8 +7,81 @@ import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
 import { useAuth } from '@/lib/auth-context';
 
+const GOOGLE_MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
 const REFRESH_INTERVAL_MS = 15000; // Poll device locations every 15 seconds
+
+/* ─── Google Maps Tactical Dark Style ──────────────────────────── */
+const GOOGLE_MAPS_DARK_STYLE = [
+  { elementType: 'geometry', stylers: [{ color: '#0f1923' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0f1923' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#8a9ba8' }] },
+  {
+    featureType: 'administrative.locality',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#d1d5db' }],
+  },
+  {
+    featureType: 'poi',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#6b7280' }],
+  },
+  {
+    featureType: 'poi.park',
+    elementType: 'geometry',
+    stylers: [{ color: '#14251e' }],
+  },
+  {
+    featureType: 'poi.park',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#38a169' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'geometry',
+    stylers: [{ color: '#1e293b' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'geometry.stroke',
+    stylers: [{ color: '#0f172a' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#94a3b8' }],
+  },
+  {
+    featureType: 'road.highway',
+    elementType: 'geometry',
+    stylers: [{ color: '#2c3e50' }],
+  },
+  {
+    featureType: 'road.highway',
+    elementType: 'geometry.stroke',
+    stylers: [{ color: '#1a252f' }],
+  },
+  {
+    featureType: 'road.highway',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#ffc32f' }],
+  },
+  {
+    featureType: 'transit',
+    elementType: 'geometry',
+    stylers: [{ color: '#182635' }],
+  },
+  {
+    featureType: 'water',
+    elementType: 'geometry',
+    stylers: [{ color: '#0a131c' }],
+  },
+  {
+    featureType: 'water',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#3e5d7a' }],
+  },
+];
 
 /* ─── Device Type & Status Helpers ─────────────────────────────── */
 function formatDeviceType(type) {
@@ -47,6 +120,30 @@ function getDeviceIcon(type) {
 function getDeviceColor(index) {
   const colors = ['#9fcafb', '#ffc32f', '#38a169', '#2c5a85', '#ef4444', '#8b5cf6', '#f97316', '#06b6d4'];
   return colors[index % colors.length];
+}
+
+/* ─── Google Maps Loader ───────────────────────────────────────── */
+function loadGoogleMapsScript(apiKey) {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') return reject(new Error('Window not found'));
+    if (window.google && window.google.maps) return resolve(window.google.maps);
+
+    const existingScript = document.getElementById('google-maps-script');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve(window.google.maps));
+      existingScript.addEventListener('error', (err) => reject(err));
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'google-maps-script';
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry,places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve(window.google.maps);
+    script.onerror = (err) => reject(err);
+    document.head.appendChild(script);
+  });
 }
 
 /* ─── Demo fallback data ────────────────────────────────────────── */
@@ -150,6 +247,7 @@ function LiveFamilyMapContent() {
   const [selectedMember, setSelectedMember] = useState(DEMO_MEMBERS[0]);
   const [showGeofences, setShowGeofences] = useState(true);
   const [mapReady, setMapReady] = useState(false);
+  const [mapProvider, setMapProvider] = useState('leaflet'); // 'google' | 'mapbox' | 'leaflet'
   const [connectionStatus, setConnectionStatus] = useState('connecting');
 
   /* ─── Fetch device locations (Partner vs Standard Firebase) ─── */
@@ -345,7 +443,7 @@ function LiveFamilyMapContent() {
     }
   }, [user, isPartner]);
 
-  /* ─── Initialize Map (Mapbox GL or Leaflet Dark Fallback) ────── */
+  /* ─── Initialize Map (Google Maps -> Mapbox -> Leaflet Fallback) ── */
   useEffect(() => {
     if (!mapContainerRef.current) return;
     if (mapInstanceRef.current) return;
@@ -353,7 +451,33 @@ function LiveFamilyMapContent() {
     let cancelled = false;
 
     async function initMap() {
-      // 1. Try Mapbox if token configured
+      // ── 1. Try Google Maps if API key configured ──
+      if (GOOGLE_MAPS_KEY) {
+        try {
+          const googleMaps = await loadGoogleMapsScript(GOOGLE_MAPS_KEY);
+          if (cancelled || !mapContainerRef.current) return;
+
+          const map = new googleMaps.Map(mapContainerRef.current, {
+            center: { lat: -26.1076, lng: 28.0567 },
+            zoom: 13,
+            styles: GOOGLE_MAPS_DARK_STYLE,
+            disableDefaultUI: true,
+            zoomControl: true,
+            backgroundColor: '#0f1923',
+          });
+
+          mapInstanceRef.current = map;
+          mapInstanceRef.current._isGoogle = true;
+          mapInstanceRef.current._google = window.google;
+          setMapProvider('google');
+          setMapReady(true);
+          return;
+        } catch (e) {
+          console.warn('[map] Google Maps initialization failed, falling back:', e);
+        }
+      }
+
+      // ── 2. Try Mapbox if token configured ──
       if (MAPBOX_TOKEN) {
         try {
           const mapboxgl = (await import('mapbox-gl')).default;
@@ -366,7 +490,7 @@ function LiveFamilyMapContent() {
           const map = new mapboxgl.Map({
             container: mapContainerRef.current,
             style: 'mapbox://styles/mapbox/dark-v11',
-            center: [28.0567, -26.1076], // Sandton, Johannesburg
+            center: [28.0567, -26.1076],
             zoom: 13,
             attributionControl: false,
           });
@@ -377,6 +501,7 @@ function LiveFamilyMapContent() {
             if (!cancelled) {
               mapInstanceRef.current = map;
               mapInstanceRef.current._isMapbox = true;
+              setMapProvider('mapbox');
               setMapReady(true);
             }
           });
@@ -386,7 +511,7 @@ function LiveFamilyMapContent() {
         }
       }
 
-      // 2. Leaflet Fallback (Free OpenStreetMap / CartoDB Dark Tiles)
+      // ── 3. Leaflet Fallback (Free CartoDB Dark Tiles) ──
       try {
         const L = (await import('leaflet')).default;
 
@@ -410,7 +535,6 @@ function LiveFamilyMapContent() {
           attributionControl: false,
         });
 
-        // CartoDB Dark All tiles (sleek, high-contrast dark radar theme)
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
           maxZoom: 19,
           subdomains: 'abcd',
@@ -418,7 +542,6 @@ function LiveFamilyMapContent() {
 
         L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-        // Invalidate size after initial layout render
         setTimeout(() => {
           try { map.invalidateSize(); } catch {}
         }, 300);
@@ -426,6 +549,7 @@ function LiveFamilyMapContent() {
         mapInstanceRef.current = map;
         mapInstanceRef.current._isLeaflet = true;
         mapInstanceRef.current._L = L;
+        setMapProvider('leaflet');
         setMapReady(true);
       } catch (e) {
         console.error('[map] Leaflet init failed:', e);
@@ -439,23 +563,29 @@ function LiveFamilyMapContent() {
       cancelled = true;
       if (mapInstanceRef.current) {
         try {
-          mapInstanceRef.current.remove();
+          if (mapInstanceRef.current.remove) {
+            mapInstanceRef.current.remove();
+          }
         } catch {}
         mapInstanceRef.current = null;
       }
     };
   }, []);
 
-  /* ─── Render Markers and Geofences on Map ───────────────────── */
+  /* ─── Render Markers and Geofences across Google / Mapbox / Leaflet ── */
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
 
     const map = mapInstanceRef.current;
+    const isGoogle = !!map._isGoogle;
     const isLeaflet = !!map._isLeaflet;
 
     // Clear existing markers & shapes
     Object.values(markersRef.current).forEach((m) => {
-      try { m.remove(); } catch {}
+      try {
+        if (m.setMap) m.setMap(null); // Google Maps
+        else if (m.remove) m.remove(); // Leaflet / Mapbox
+      } catch {}
     });
     markersRef.current = {};
 
@@ -522,7 +652,48 @@ function LiveFamilyMapContent() {
         </div>
       `;
 
-      if (isLeaflet) {
+      if (isGoogle) {
+        const google = map._google;
+        // Custom Google Maps HTML Overlay
+        class HTMLMarkerOverlay extends google.maps.OverlayView {
+          constructor(latLng, html, onClick) {
+            super();
+            this.latLng = latLng;
+            this.html = html;
+            this.onClick = onClick;
+            this.div = null;
+          }
+          onAdd() {
+            this.div = document.createElement('div');
+            this.div.style.position = 'absolute';
+            this.div.style.cursor = 'pointer';
+            this.div.innerHTML = this.html;
+            if (this.onClick) this.div.addEventListener('click', this.onClick);
+            const panes = this.getPanes();
+            panes.overlayMouseTarget.appendChild(this.div);
+          }
+          draw() {
+            const overlayProjection = this.getProjection();
+            if (!overlayProjection || !this.div) return;
+            const point = overlayProjection.fromLatLngToDivPixel(this.latLng);
+            if (point) {
+              this.div.style.left = point.x - 30 + 'px';
+              this.div.style.top = point.y - 26 + 'px';
+            }
+          }
+          onRemove() {
+            if (this.div && this.div.parentNode) {
+              this.div.parentNode.removeChild(this.div);
+              this.div = null;
+            }
+          }
+        }
+
+        const latLng = new google.maps.LatLng(member.lat, member.lng);
+        const overlay = new HTMLMarkerOverlay(latLng, markerHtml, () => setSelectedMember(member));
+        overlay.setMap(map);
+        markersRef.current[member.id] = overlay;
+      } else if (isLeaflet) {
         const L = map._L;
         const icon = L.divIcon({
           html: markerHtml,
@@ -534,6 +705,7 @@ function LiveFamilyMapContent() {
         marker.on('click', () => setSelectedMember(member));
         markersRef.current[member.id] = marker;
       } else {
+        // Mapbox GL
         const el = document.createElement('div');
         el.className = 'safelink-radar-marker';
         el.innerHTML = markerHtml;
@@ -555,7 +727,20 @@ function LiveFamilyMapContent() {
     // ── 2. Add Geofence Zones ──
     if (showGeofences) {
       geofences.forEach((fence) => {
-        if (isLeaflet) {
+        if (isGoogle) {
+          const google = map._google;
+          const circle = new google.maps.Circle({
+            strokeColor: fence.color,
+            strokeOpacity: 0.65,
+            strokeWeight: 2,
+            fillColor: fence.color,
+            fillOpacity: 0.12,
+            map: map,
+            center: { lat: fence.lat, lng: fence.lng },
+            radius: fence.radius || 200,
+          });
+          markersRef.current[`geofence-${fence.id}`] = circle;
+        } else if (isLeaflet) {
           const L = map._L;
           const circle = L.circle([fence.lat, fence.lng], {
             radius: fence.radius || 200,
@@ -566,14 +751,9 @@ function LiveFamilyMapContent() {
             opacity: 0.65,
           }).addTo(map);
 
-          circle.bindTooltip(`<b>${fence.name}</b>`, {
-            permanent: false,
-            direction: 'top',
-            className: 'safelink-geofence-tooltip',
-          });
-
           markersRef.current[`geofence-${fence.id}`] = circle;
         } else {
+          // Mapbox
           const sourceId = `geofence-${fence.id}`;
           const layerFillId = `geofence-fill-${fence.id}`;
           const layerLineId = `geofence-line-${fence.id}`;
@@ -630,7 +810,10 @@ function LiveFamilyMapContent() {
     if (!mapReady || !mapInstanceRef.current || !selectedMember?.lat || !selectedMember?.lng) return;
 
     const map = mapInstanceRef.current;
-    if (map._isLeaflet) {
+    if (map._isGoogle) {
+      map.panTo({ lat: selectedMember.lat, lng: selectedMember.lng });
+      map.setZoom(14);
+    } else if (map._isLeaflet) {
       map.setView([selectedMember.lat, selectedMember.lng], 14, { animate: true, duration: 1 });
     } else if (map.flyTo) {
       map.flyTo({
@@ -646,7 +829,12 @@ function LiveFamilyMapContent() {
     if (!mapInstanceRef.current || members.length === 0) return;
     const map = mapInstanceRef.current;
 
-    if (map._isLeaflet) {
+    if (map._isGoogle) {
+      const google = map._google;
+      const bounds = new google.maps.LatLngBounds();
+      members.forEach((m) => bounds.extend({ lat: m.lat, lng: m.lng }));
+      map.fitBounds(bounds, 60);
+    } else if (map._isLeaflet) {
       const L = map._L;
       const bounds = L.latLngBounds(members.map((m) => [m.lat, m.lng]));
       map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
@@ -673,7 +861,7 @@ function LiveFamilyMapContent() {
     <div className="bg-background text-on-background font-body-md h-screen w-screen overflow-hidden flex flex-col relative">
       <Header title="Live Radar & GPS" showNotification={true} />
 
-      {/* Map Container — ALWAYS in DOM so Leaflet or Mapbox can mount */}
+      {/* Map Container — ALWAYS in DOM */}
       <div className="absolute inset-0 z-0 pt-16 pb-20">
         <div ref={mapContainerRef} className="w-full h-full bg-[#0a0f14]" />
       </div>
@@ -683,9 +871,9 @@ function LiveFamilyMapContent() {
         <div className="glass-panel px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg border border-white/10">
           <span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ backgroundColor: statusColor }} />
           <span className="font-label-sm text-xs font-bold text-on-surface">{statusText}</span>
-          {isPartner && (
-            <span className="text-[10px] text-primary font-semibold">({partnerSession?.partnerName || 'Security Brokers'})</span>
-          )}
+          <span className="text-[10px] text-primary font-semibold uppercase tracking-wider">
+            [{mapProvider === 'google' ? 'Google Maps' : mapProvider === 'mapbox' ? 'Mapbox' : 'Radar'}]
+          </span>
         </div>
 
         <div className="flex items-center gap-2">

@@ -14,10 +14,15 @@ All mock and fictitious data have been completely purged from SafeLink, and the 
   - Removed `DEMO_MEMBERS` (`Thabo`, `Lesedi`, `Naledi`, `Sipho`) and `DEMO_GEOFENCES`.
   - Empty state now shows a live radar scanning pulse when no hardware beacons or phones are active.
   - Header features a live "Share Phone" GPS tracking pill.
-- **Dashboard (`src/app/dashboard/page.js`):**
-  - Removed "Molefe Family — 4 members" hardcoding.
-  - Bound directly to authenticated user profile and real device count.
-  - Removed fictitious geofence alerts and replaced with real TrackSolid / Phone telemetry feed.
+- **Profile & Avatar Management ([`src/app/profile/page.js`](file:///c:/Projects/Safe_Link/safelink/src/app/profile/page.js) & [`src/app/profile/edit/page.js`](file:///c:/Projects/Safe_Link/safelink/src/app/profile/edit/page.js)):**
+  - **Interactive Avatar Editor ([`AvatarEditorModal.js`](file:///c:/Projects/Safe_Link/safelink/src/app/components/AvatarEditorModal.js)):**
+    - Tap on the profile picture or the golden camera icon badge on `/profile` or `/profile/edit` to open the editor.
+    - **Take Photo:** Directly opens your device's camera (`capture="user"`).
+    - **Upload from Gallery:** Pick any custom photo or picture from your phone.
+    - **Automatic Center Crop & Compression:** Uses an HTML5 canvas to crop to a clean square and compress to a lightweight image for instant loading.
+    - **Curated Avatar Library:** Select from preset executive and tactical styles.
+    - **Instant Cross-App Sync:** Updates the header icon, dashboard, family list, and persists to Firestore via [`/api/profile/avatar`](file:///c:/Projects/Safe_Link/safelink/src/app/api/profile/avatar/route.js).
+
 
 ---
 
@@ -70,4 +75,20 @@ Refactored [`src/lib/aura.js`](file:///c:/Projects/Safe_Link/safelink/src/lib/au
 
 ## 6. Build & Verification Results
 - `node -c` passed on all backend API routes and libraries.
-- `npm run build` completed with **code 0** across all 58 routes with Next.js Turbopack.
+- `npm run build` completed with **code 0** across all 59 routes with Next.js Turbopack.
+
+---
+
+## 7. Resolution: Live Radar Map Crash & "This page couldn't load" Fix
+- **Problem**: When users navigated to `/map` to view their Sentinel devices or Phone GPS, the mobile browser crashed to Next.js's error boundary: *"This page couldn't load. Reload to try again, or go back."*
+- **Root Cause**:
+  - In [`src/app/map/page.js`](file:///c:/Projects/Safe_Link/safelink/src/app/map/page.js), `useLocationSharing()` was called, but `lastPosition` was omitted from the destructuring list.
+  - At line 411, `let localPhoneGps = lastPosition;` was evaluated, throwing `ReferenceError: lastPosition is not defined`.
+  - In React 19 / Next.js 16, unhandled runtime errors in effects and callbacks trigger the top-level error boundary.
+- **Resolution**:
+  - Properly destructured `lastPosition` and `isSharing` from `useLocationSharing()`.
+  - Hardened token resolution with `user.getIdToken()` or active test tokens.
+  - Validated coordinates with `isNaN(parseFloat(...))` before feeding into Google Maps or Leaflet.
+  - Added dedicated Next.js Error Boundary [`src/app/map/error.js`](file:///c:/Projects/Safe_Link/safelink/src/app/map/error.js) so that even if network or display issues occur, users get an in-app tactical recovery UI rather than a generic white crash screen.
+- **Deployed to Production**: Build tested cleanly and deployed to `https://safelink-app-peach.vercel.app/map`.
+

@@ -14,6 +14,9 @@ export const viewport = {
   themeColor: '#041522',
 };
 
+import PwaRegister from '@/app/components/PwaRegister';
+import GpsConsentModal from '@/app/components/GpsConsentModal';
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className="dark">
@@ -28,6 +31,8 @@ export default function RootLayout({ children }) {
       </head>
       <body className="bg-background text-on-background min-h-screen selection:bg-secondary/30 selection:text-secondary">
         <AuthProvider>
+          <PwaRegister />
+          <GpsConsentModal />
           {children}
         </AuthProvider>
       </body>

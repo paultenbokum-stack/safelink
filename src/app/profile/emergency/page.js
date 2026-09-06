@@ -28,6 +28,15 @@ function EmergencyContent() {
     bloodType: '',
   });
 
+  const [phoneError, setPhoneError] = useState('');
+
+  // Validate South African phone number: must be either 10 digits starting with 0 (e.g. 0821234567) or +27 followed by 9 digits
+  const validateSaPhone = (phone) => {
+    const cleaned = (phone || '').replace(/[\s\-\(\)]/g, '');
+    const saRegex = /^(?:\+27|0)[1-9][0-9]{8}$/;
+    return saRegex.test(cleaned);
+  };
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const h = localStorage.getItem('active_household');
@@ -53,18 +62,41 @@ function EmergencyContent() {
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setSaved(false);
+    if (field === 'phone') setPhoneError('');
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!form.name.trim()) {
+      alert('Please enter primary contact name.');
+      return;
+    }
+    if (!validateSaPhone(form.phone)) {
+      setPhoneError('Please enter a valid South African phone number (e.g. 082 123 4567 or +27 82 123 4567). Real numbers are required for dispatch.');
+      return;
+    }
+
     setSaving(true);
+    setPhoneError('');
 
     const existing = JSON.parse(localStorage.getItem('active_household') || '{}');
     existing.emergency = { ...form };
     existing.updatedAt = new Date().toISOString();
     localStorage.setItem('active_household', JSON.stringify(existing));
 
-    await new Promise((r) => setTimeout(r, 600));
+    // Also persist to backend profile if signed in
+    try {
+      const savedUser = JSON.parse(localStorage.getItem('safelink_user') || '{}');
+      if (savedUser?.uid) {
+        await fetch('/api/household/emergency', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uid: savedUser.uid, emergency: form }),
+        }).catch(() => {});
+      }
+    } catch (e) {}
+
+    await new Promise((r) => setTimeout(r, 400));
     setSaving(false);
     setSaved(true);
   };
@@ -86,7 +118,19 @@ function EmergencyContent() {
               </h3>
             </div>
             <input type="text" value={form.name} onChange={(e) => handleChange('name', e.target.value)} placeholder="Full Name" className="w-full bg-surface-container border border-white/10 rounded-xl px-3 py-2.5 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:border-primary focus:outline-none" />
-            <input type="tel" value={form.phone} onChange={(e) => handleChange('phone', e.target.value)} placeholder="Phone Number" className="w-full bg-surface-container border border-white/10 rounded-xl px-3 py-2.5 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:border-primary focus:outline-none" />
+            <div>
+              <input type="tel" value={form.phone} onChange={(e) => handleChange('phone', e.target.value)} placeholder="Phone Number (e.g. 082 123 4567 or +27 82 123 4567)" className={`w-full bg-surface-container border ${phoneError ? 'border-error ring-1 ring-error' : 'border-white/10'} rounded-xl px-3 py-2.5 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:border-primary focus:outline-none`} />
+              {phoneError ? (
+                <p className="text-xs text-error mt-1 flex items-center gap-1 font-semibold">
+                  <span className="material-symbols-outlined text-sm">warning</span>
+                  {phoneError}
+                </p>
+              ) : (
+                <p className="text-[11px] text-on-surface-variant mt-1">
+                  Required for emergency dispatch voice confirmation & armed response contact.
+                </p>
+              )}
+            </div>
             <select value={form.relation} onChange={(e) => handleChange('relation', e.target.value)} className="w-full bg-surface-container border border-white/10 rounded-xl px-3 py-2.5 text-sm text-on-surface focus:border-primary focus:outline-none appearance-none cursor-pointer">
               {relations.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>

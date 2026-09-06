@@ -43,7 +43,7 @@ function DashboardContent() {
       .finally(() => setLoading(false));
   }, [user]);
 
-  const userName = household?.adminFirstName || user?.displayName?.split(' ')[0] || 'Thabo';
+  const userName = household?.adminFirstName || user?.displayName?.split(' ')[0] || 'Member';
 
   const triggerTestAlarm = () => {
     setTestAlarmActive(true);
@@ -64,7 +64,7 @@ function DashboardContent() {
               <span className="material-symbols-outlined text-secondary text-2xl">notifications_active</span>
               <div>
                 <p className="font-label-md text-secondary font-bold">Alarm Siren Test Active</p>
-                <p className="font-label-sm text-on-surface-variant">Silent telemetry signal verified with Help24 Command.</p>
+                <p className="font-label-sm text-on-surface-variant">Silent telemetry signal verified with Control Room Command.</p>
               </div>
             </div>
             <span className="text-secondary font-label-sm uppercase font-bold">OK 100%</span>
@@ -94,9 +94,9 @@ function DashboardContent() {
         <section className="glass-panel rounded-xl overflow-hidden map-glow">
           <div className="p-md border-b border-white/10 flex justify-between items-center bg-surface-container/40">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-secondary animate-pulse"></span>
+              <span className={`w-2.5 h-2.5 rounded-full ${devices.length > 0 ? 'bg-secondary animate-pulse' : 'bg-[#38a169]'}`}></span>
               <h2 className="font-label-md text-label-md text-on-surface font-semibold">
-                {household?.householdName || 'Molefe Family'} — 4 members
+                {household?.householdName || `${userName}'s SafeLink`} — {devices.length} Active {devices.length === 1 ? 'Device' : 'Devices'}
               </h2>
             </div>
             <Link
@@ -113,32 +113,41 @@ function DashboardContent() {
             className="relative h-48 w-full bg-surface-container-high cursor-pointer group overflow-hidden"
           >
             <div className="absolute inset-0 map-bg opacity-90"></div>
-            {/* Map Geofence Rings */}
-            <div className="absolute top-[35%] left-[25%] w-[120px] h-[120px] rounded-full border border-[#38a169]/50 bg-[#38a169]/10 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
-              <span className="text-[#38a169] text-[10px] uppercase font-bold bg-[#0f1923]/80 px-1.5 py-0.5 rounded">Home</span>
-            </div>
-            <div className="absolute top-[60%] left-[70%] w-[100px] h-[100px] rounded-full border border-secondary/50 bg-secondary/10 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
-              <span className="text-secondary text-[10px] uppercase font-bold bg-[#0f1923]/80 px-1.5 py-0.5 rounded">School</span>
-            </div>
-
-            {/* Glowing Family Member Pins */}
-            <div className="absolute top-[35%] left-[25%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-              <div className="w-4 h-4 bg-secondary rounded-full border-2 border-background shadow-[0_0_12px_rgba(255,195,47,0.9)] animate-ping"></div>
-              <div className="w-4 h-4 bg-secondary rounded-full border-2 border-background shadow-[0_0_12px_rgba(255,195,47,0.9)] -mt-4"></div>
-              <span className="text-[10px] bg-surface-container px-1 rounded text-on-surface mt-1">Thabo</span>
-            </div>
-            <div className="absolute top-[60%] left-[70%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-              <div className="w-4 h-4 bg-secondary rounded-full border-2 border-background shadow-[0_0_12px_rgba(255,195,47,0.9)]"></div>
-              <span className="text-[10px] bg-surface-container px-1 rounded text-on-surface mt-1">Lesedi</span>
-            </div>
-            <div className="absolute top-[30%] right-[20%] flex flex-col items-center">
-              <div className="w-4 h-4 bg-secondary rounded-full border-2 border-background shadow-[0_0_12px_rgba(255,195,47,0.9)]"></div>
-              <span className="text-[10px] bg-surface-container px-1 rounded text-on-surface mt-1">Naledi</span>
-            </div>
-            <div className="absolute bottom-[20%] left-[45%] flex flex-col items-center">
-              <div className="w-4 h-4 bg-secondary rounded-full border-2 border-background shadow-[0_0_12px_rgba(255,195,47,0.9)]"></div>
-              <span className="text-[10px] bg-surface-container px-1 rounded text-on-surface mt-1">Sipho</span>
-            </div>
+            
+            {/* Live Beacons or Clean Empty Scanner */}
+            {devices.length === 0 ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-4 text-center">
+                <div className="relative flex items-center justify-center mb-2">
+                  <div className="w-16 h-16 rounded-full border border-secondary/30 animate-ping absolute"></div>
+                  <div className="w-10 h-10 rounded-full bg-secondary/10 border border-secondary/50 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-secondary text-xl">radar</span>
+                  </div>
+                </div>
+                <p className="text-xs text-on-surface font-semibold">No Hardware Beacons Active</p>
+                <p className="text-[11px] text-on-surface-variant max-w-xs">Tap to pair your Sentinel GPS device or share Phone GPS on the live map.</p>
+              </div>
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="relative w-full h-full">
+                  {devices.map((dev, idx) => {
+                    const topPos = 40 + (idx % 2) * 20;
+                    const leftPos = 35 + (idx % 3) * 25;
+                    return (
+                      <div
+                        key={dev.id || dev.imei || idx}
+                        className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
+                        style={{ top: `${topPos}%`, left: `${leftPos}%` }}
+                      >
+                        <div className="w-4 h-4 bg-secondary rounded-full border-2 border-background shadow-[0_0_12px_rgba(255,195,47,0.9)] animate-pulse"></div>
+                        <span className="text-[10px] bg-surface-container/90 px-1.5 py-0.5 rounded text-on-surface mt-1 border border-white/10 font-bold">
+                          {dev.nickname || dev.deviceName || 'Sentinel'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Bottom tap banner */}
             <div className="absolute bottom-2 right-2 bg-surface-container-highest/90 px-2.5 py-1 rounded-lg text-[11px] text-on-surface flex items-center gap-1 backdrop-blur-md">
@@ -248,41 +257,37 @@ function DashboardContent() {
           </div>
 
           <div className="space-y-sm">
-            <div className="flex items-start gap-sm pb-sm border-b border-white/5">
-              <div className="w-8 h-8 rounded-full bg-primary-container/40 flex items-center justify-center mt-1 shrink-0">
-                <span className="material-symbols-outlined text-primary text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
-                  location_on
-                </span>
+            {devices.length > 0 ? (
+              devices.map((device, idx) => (
+                <div key={device.id || device.imei || idx} className="flex items-start gap-sm pb-sm border-b border-white/5 last:border-b-0 last:pb-0">
+                  <div className="w-8 h-8 rounded-full bg-[#38a169]/20 flex items-center justify-center mt-1 shrink-0">
+                    <span className="material-symbols-outlined text-[#38a169] text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
+                      satellite_alt
+                    </span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-body-md text-body-md text-on-surface font-medium">
+                      {device.nickname || device.deviceName || 'Sentinel GPS'} • Telemetry Linked
+                    </p>
+                    <p className="font-label-sm text-label-sm text-on-surface-variant">
+                      TrackSolid EMEA Active • Status: Online
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="flex items-start gap-sm">
+                <div className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center mt-1 shrink-0">
+                  <span className="material-symbols-outlined text-secondary text-sm">info</span>
+                </div>
+                <div className="flex-1">
+                  <p className="font-body-md text-body-md text-on-surface font-medium">Telemetry Standby</p>
+                  <p className="font-label-sm text-label-sm text-on-surface-variant">
+                    No alerts registered. Register a Sentinel device or share Phone GPS to record geofence events.
+                  </p>
+                </div>
               </div>
-              <div className="flex-1">
-                <p className="font-body-md text-body-md text-on-surface font-medium">Lesedi arrived at Crawford International School</p>
-                <p className="font-label-sm text-label-sm text-on-surface-variant">Today, 07:45 AM • Geofence Safe</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-sm pb-sm border-b border-white/5">
-              <div className="w-8 h-8 rounded-full bg-primary-container/40 flex items-center justify-center mt-1 shrink-0">
-                <span className="material-symbols-outlined text-primary text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
-                  location_on
-                </span>
-              </div>
-              <div className="flex-1">
-                <p className="font-body-md text-body-md text-on-surface font-medium">Naledi arrived at Sandton City Office</p>
-                <p className="font-label-sm text-label-sm text-on-surface-variant">Today, 08:15 AM • Geofence Safe</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-sm">
-              <div className="w-8 h-8 rounded-full bg-[#38a169]/20 flex items-center justify-center mt-1 shrink-0">
-                <span className="material-symbols-outlined text-[#38a169] text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
-                  shield
-                </span>
-              </div>
-              <div className="flex-1">
-                <p className="font-body-md text-body-md text-on-surface font-medium">Perimeter Armed • Sentinel Home Hub Online</p>
-                <p className="font-label-sm text-label-sm text-on-surface-variant">Today, 06:00 AM • System Armed</p>
-              </div>
-            </div>
+            )}
           </div>
         </section>
 

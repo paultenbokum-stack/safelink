@@ -28,7 +28,14 @@ function FamilyContent() {
     if (h) {
       try {
         const household = JSON.parse(h);
-        setMembers(household.members || []);
+        const mockNames = ['Thabo', 'Lesedi', 'Naledi', 'Sipho'];
+        const cleanMembers = (household.members || []).filter(
+          (m) => !mockNames.includes(m.name) && !m.id?.includes('demo')
+        );
+        setMembers(cleanMembers);
+        if (cleanMembers.length !== (household.members || []).length) {
+          saveToStorage(cleanMembers);
+        }
       } catch (e) {}
     }
     // Add self as admin if no members yet
@@ -61,7 +68,7 @@ function FamilyContent() {
       phone: newMember.phone.trim(),
       role: newMember.role,
       isSelf: false,
-      locationSharing: false,
+      locationSharing: true,
       addedAt: new Date().toISOString(),
     };
 
@@ -71,6 +78,17 @@ function FamilyContent() {
     setNewMember({ name: '', phone: '', role: 'Member' });
     setShowAdd(false);
     setSaving(false);
+  };
+
+  const toggleLocationSharing = (id) => {
+    const updated = members.map((m) => {
+      if (m.id === id) {
+        return { ...m, locationSharing: !m.locationSharing };
+      }
+      return m;
+    });
+    setMembers(updated);
+    saveToStorage(updated);
   };
 
   const handleRemoveMember = (id) => {
@@ -97,6 +115,23 @@ function FamilyContent() {
       <Header title="Family Members" showBack={true} />
 
       <main className="pt-20 px-gutter max-w-2xl mx-auto space-y-4">
+        {/* POPIA Location Notice */}
+        <div className="glass-panel rounded-2xl p-4 border border-secondary/30 bg-secondary/5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-secondary text-2xl">verified_user</span>
+            <div>
+              <h4 className="font-label-md text-xs font-bold text-on-surface">POPIA GPS Compliance</h4>
+              <p className="text-[11px] text-on-surface-variant">Real-time tracking for armed response & family safety.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('open_gps_consent_modal'))}
+            className="px-3 py-1.5 rounded-lg bg-secondary/20 hover:bg-secondary/30 text-secondary text-xs font-bold transition-all cursor-pointer"
+          >
+            Review Consent
+          </button>
+        </div>
+
         {/* Members List */}
         {members.map((member) => (
           <div key={member.id} className="glass-panel rounded-2xl p-4 border border-white/10 flex items-center justify-between">
@@ -118,12 +153,15 @@ function FamilyContent() {
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${roleColors[member.role] || roleColors.Member}`}>
                     {member.role}
                   </span>
-                  {member.locationSharing && (
-                    <span className="text-[10px] text-[#38a169] flex items-center gap-0.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#38a169] animate-pulse" />
-                      Sharing Location
+                  <button
+                    onClick={() => toggleLocationSharing(member.id)}
+                    className="text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <span className={`w-2 h-2 rounded-full ${member.locationSharing ? 'bg-[#38a169] animate-pulse' : 'bg-white/20'}`} />
+                    <span className={member.locationSharing ? 'text-[#38a169] font-medium' : 'text-on-surface-variant'}>
+                      {member.locationSharing ? 'GPS Active' : 'GPS Off'}
                     </span>
-                  )}
+                  </button>
                 </div>
               </div>
             </div>

@@ -6,6 +6,7 @@ import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
 import { useAuth } from '@/lib/auth-context';
+import { useLocationSharing } from '@/lib/location-sharing';
 
 /* ─── Device type helpers ────────────────────────────────────────── */
 function formatDeviceType(type) {
@@ -61,54 +62,6 @@ function formatRelativeTime(ts) {
   return `${Math.floor(diff / 86400)} days ago`;
 }
 
-/* ─── Demo data (test session) ───────────────────────────────────── */
-const DEMO_DEVICES = [
-  {
-    id: 'dev-1',
-    name: "Lesedi's School Bag",
-    category: 'BLE Tag',
-    icon: 'backpack',
-    status: 'Online',
-    statusColor: '#38a169',
-    battery: 87,
-    lastPing: '2 mins ago',
-    location: 'Crawford College, Benmore',
-  },
-  {
-    id: 'dev-2',
-    name: 'Toyota Fortuner GD-6',
-    category: 'Vehicle GPS',
-    icon: 'directions_car',
-    status: 'In Motion',
-    statusColor: '#ffc32f',
-    battery: 100,
-    lastPing: 'Just now • 45 km/h',
-    location: 'N1 North Highway, Midrand',
-  },
-  {
-    id: 'dev-3',
-    name: 'Sentinel Home Base Hub',
-    category: 'IoT Hub',
-    icon: 'hub',
-    status: 'Armed & Online',
-    statusColor: '#38a169',
-    battery: 100,
-    lastPing: 'Live Telemetry',
-    location: '42 Sandhurst Dr, Sandton',
-  },
-  {
-    id: 'dev-4',
-    name: 'Thabo Emergency Panic FOB',
-    category: 'Panic FOB',
-    icon: 'key',
-    status: 'Standby Ready',
-    statusColor: '#9fcafb',
-    battery: 94,
-    lastPing: '15 mins ago',
-    location: 'Carried by Thabo',
-  },
-];
-
 /* ─── Page wrapper ───────────────────────────────────────────────── */
 export default function DevicesPage() {
   return (
@@ -124,16 +77,51 @@ function DevicesContent() {
   const { user, partnerSession } = useAuth();
   const isPartner = !!user?.isPartnerSession;
 
-  const [devices, setDevices]         = useState(isPartner ? [] : DEMO_DEVICES);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [devices, setDevices]           = useState([]);
+  const [showAddModal, setShowAddModal]   = useState(false);
   const [showRenameModal, setShowRenameModal] = useState(null); // device obj
-  const [newLabel, setNewLabel]        = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(null); // device obj to delete
+  const [deleting, setDeleting]         = useState(false);
+  const [newLabel, setNewLabel]          = useState('');
   const [newDeviceName, setNewDeviceName] = useState('');
   const [newDeviceImei, setNewDeviceImei] = useState('');
-  const [isLive, setIsLive]           = useState(false);
-  const [loading, setLoading]         = useState(true);
-  const [addError, setAddError]       = useState('');
-  const [adding, setAdding]           = useState(false);
+  const [isLive, setIsLive]             = useState(false);
+  const [loading, setLoading]           = useState(true);
+  const [addError, setAddError]         = useState('');
+  const [adding, setAdding]             = useState(false);
+
+  /* ── Phone GPS Location Sharing Hook ── */
+  const {
+    isOptedIn: isPhoneSharing,
+    isSharing,
+    lastPosition: phonePosition,
+    error: phoneSharingError,
+    nickname: phoneNickname,
+    optIn: optInPhoneSharing,
+    optOut: optOutPhoneSharing,
+    setNickname: setPhoneNickname,
+  } = useLocationSharing();
+  const [editingPhoneName, setEditingPhoneName] = useState(false);
+  const [tempPhoneName, setTempPhoneName] = useState('');
+  const [phoneToggling, setPhoneToggling] = useState(false);
+
+  const handleTogglePhoneSharing = async () => {
+    setPhoneToggling(true);
+    if (isPhoneSharing) {
+      await optOutPhoneSharing();
+    } else {
+      await optInPhoneSharing();
+    }
+    setPhoneToggling(false);
+  };
+
+  const handleSavePhoneNickname = (e) => {
+    e.preventDefault();
+    if (tempPhoneName.trim()) {
+      setPhoneNickname(tempPhoneName.trim());
+    }
+    setEditingPhoneName(false);
+  };
 
   /* ── Fetch devices ── */
   useEffect(() => {
@@ -176,15 +164,9 @@ function DevicesContent() {
         return;
       }
 
-      /* Test session — use demo data */
-      if (user.isTestSession) {
-        setLoading(false);
-        return;
-      }
-
-      /* Live Firebase session — TrackSolid via /api/devices */
+      /* Live Firebase & Test sessions — TrackSolid via /api/devices */
       try {
-        const token = user.accessToken || user.stsTokenManager?.accessToken;
+        const token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : null);
         if (!token) { setLoading(false); return; }
 
         const res = await fetch('/api/devices', {
@@ -195,8 +177,9 @@ function DevicesContent() {
           const devs = (data.devices || []).filter((d) => !d.isPhoneDevice);
           if (devs.length > 0) {
             setDevices(devs.map((d) => ({
-              id: d.id || d.imei,
-              name: d.nickname || d.deviceName || `Device ${(d.imei || '').slice(-4)}`,
+              id: d.id || d.imei || d.imei_plain,
+              imei: d.imei || d.imei_plain,
+              name: d.nickname || d.deviceName || `Device ${(d.imei || d.imei_plain || '').slice(-4)}`,
               category: d.model || 'Sentinel Tracker',
               icon: d.deviceType === 'phone' ? 'phone_android' : 'sensors',
               status: d.status === 'active' ? 'Online' : 'Offline',
@@ -206,6 +189,8 @@ function DevicesContent() {
               location: d.lastAddress || 'Locating...',
             })));
             setIsLive(true);
+          } else {
+            setDevices([]);
           }
         }
       } catch (e) {
@@ -216,6 +201,31 @@ function DevicesContent() {
     fetchDevices();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isPartner]);
+
+  /* ── Delete / Unlink Device ── */
+  const handleDeleteDevice = async () => {
+    if (!showDeleteModal) return;
+    const device = showDeleteModal;
+    setDeleting(true);
+
+    try {
+      const token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : null);
+      const imeiToDelete = device.imei || device.id;
+
+      if (token && imeiToDelete) {
+        await fetch(`/api/devices/${imeiToDelete}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+
+      setDevices((prev) => prev.filter((d) => d.id !== device.id && d.imei !== device.imei));
+      setShowDeleteModal(null);
+    } catch (e) {
+      console.warn('[devices] Failed to delete device:', e);
+    }
+    setDeleting(false);
+  };
 
   /* ── Add device (test/Firebase sessions only) ── */
   const handleAddDevice = async (e) => {
@@ -235,8 +245,8 @@ function DevicesContent() {
 
     setAdding(true);
     try {
-      const token = user?.accessToken || user?.stsTokenManager?.accessToken;
-      if (token && !user?.isTestSession) {
+      const token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : null);
+      if (token) {
         const res = await fetch('/api/devices', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -250,9 +260,10 @@ function DevicesContent() {
         }
       }
 
-      // Add to local UI state — no IMEI stored in state
+      // Add to local UI state
       setDevices((prev) => [{
-        id: `dev-${Date.now()}`,
+        id: cleanImei,
+        imei: cleanImei,
         name: newDeviceName.trim(),
         category: 'Sentinel Tracker',
         icon: 'sensors',
@@ -352,6 +363,141 @@ function DevicesContent() {
           </div>
         )}
 
+        {/* ── Phone as GPS Tracker (PWA Mobile Beacon) ── */}
+        <section className="glass-card rounded-2xl p-md border border-secondary/30 bg-gradient-to-r from-secondary/10 via-surface-container-high to-surface-container relative overflow-hidden shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-md">
+            <div className="flex items-start sm:items-center gap-sm">
+              <div className={`p-3 rounded-2xl flex items-center justify-center border transition-all ${
+                isPhoneSharing
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-[0_0_16px_rgba(16,185,129,0.3)]'
+                  : 'bg-surface-container text-on-surface-variant border-white/10'
+              }`}>
+                <span className="material-symbols-outlined text-3xl">
+                  {isPhoneSharing ? 'satellite_alt' : 'smartphone'}
+                </span>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2">
+                  {editingPhoneName ? (
+                    <form onSubmit={handleSavePhoneNickname} className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={tempPhoneName}
+                        onChange={(e) => setTempPhoneName(e.target.value)}
+                        placeholder="Device nickname"
+                        className="bg-surface-container-low border border-secondary/50 rounded-lg px-2 py-0.5 text-xs text-on-surface outline-none"
+                        autoFocus
+                      />
+                      <button type="submit" className="text-secondary text-xs hover:text-white p-1">
+                        <span className="material-symbols-outlined text-sm">check</span>
+                      </button>
+                      <button type="button" onClick={() => setEditingPhoneName(false)} className="text-on-surface-variant text-xs hover:text-white p-1">
+                        <span className="material-symbols-outlined text-sm">close</span>
+                      </button>
+                    </form>
+                  ) : (
+                    <>
+                      <h4 className="font-headline-md text-base font-bold text-on-surface flex items-center gap-1.5">
+                        {phoneNickname || 'This Device (Phone GPS)'}
+                      </h4>
+                      <button
+                        onClick={() => {
+                          setTempPhoneName(phoneNickname || 'My Phone');
+                          setEditingPhoneName(true);
+                        }}
+                        className="text-on-surface-variant hover:text-secondary p-0.5 rounded transition-colors"
+                        title="Rename phone label"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">edit</span>
+                      </button>
+                    </>
+                  )}
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                    isPhoneSharing
+                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 animate-pulse'
+                      : 'bg-surface-container-highest text-on-surface-variant border-white/10'
+                  }`}>
+                    {isPhoneSharing ? 'PWA Beacon Active' : 'Standby'}
+                  </span>
+                </div>
+                <p className="font-body-md text-xs text-on-surface-variant mt-0.5">
+                  {isPhoneSharing
+                    ? 'Transmitting real-time GPS coordinates directly to Family Radar map'
+                    : 'Turn your smartphone into an active tracker alongside Sentinel BLE & vehicle tags.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Toggle Switch */}
+            <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
+              <span className="text-xs font-semibold text-on-surface-variant hidden sm:inline">
+                {isPhoneSharing ? 'Tracking Enabled' : 'Tracking Off'}
+              </span>
+              <button
+                type="button"
+                onClick={handleTogglePhoneSharing}
+                disabled={phoneToggling}
+                className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
+                  isPhoneSharing ? 'bg-emerald-500' : 'bg-surface-container-highest'
+                } ${phoneToggling ? 'opacity-50 cursor-wait' : ''}`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow-md ${
+                    isPhoneSharing ? 'translate-x-8' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Telemetry diagnostics when active */}
+          {isPhoneSharing && (
+            <div className="mt-md pt-sm border-t border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="bg-surface-container-low/70 p-2 rounded-xl border border-white/5">
+                <span className="text-[10px] text-on-surface-variant uppercase font-semibold block">Latitude</span>
+                <span className="text-xs font-mono font-bold text-on-surface">
+                  {phonePosition?.lat ? `${phonePosition.lat.toFixed(5)}°` : 'Acquiring...'}
+                </span>
+              </div>
+              <div className="bg-surface-container-low/70 p-2 rounded-xl border border-white/5">
+                <span className="text-[10px] text-on-surface-variant uppercase font-semibold block">Longitude</span>
+                <span className="text-xs font-mono font-bold text-on-surface">
+                  {phonePosition?.lng ? `${phonePosition.lng.toFixed(5)}°` : 'Acquiring...'}
+                </span>
+              </div>
+              <div className="bg-surface-container-low/70 p-2 rounded-xl border border-white/5">
+                <span className="text-[10px] text-on-surface-variant uppercase font-semibold block">Accuracy</span>
+                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">gps_fixed</span>
+                  {phonePosition?.accuracy ? `±${Math.round(phonePosition.accuracy)}m` : 'High precision'}
+                </span>
+              </div>
+              <div className="bg-surface-container-low/70 p-2 rounded-xl border border-white/5 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-on-surface-variant uppercase font-semibold block">Radar View</span>
+                  <span className="text-xs font-semibold text-secondary">Live on Map</span>
+                </div>
+                <button
+                  onClick={() => router.push('/map')}
+                  className="bg-secondary/20 hover:bg-secondary/30 text-secondary p-1.5 rounded-lg transition-colors cursor-pointer"
+                  title="View on Live Map"
+                >
+                  <span className="material-symbols-outlined text-[16px]">explore</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Error notice if permission denied */}
+          {phoneSharingError && (
+            <div className="mt-sm bg-red-500/15 border border-red-500/30 rounded-xl p-2.5 flex items-center gap-2 text-xs text-red-300">
+              <span className="material-symbols-outlined text-sm shrink-0">warning</span>
+              <span>{phoneSharingError}</span>
+            </div>
+          )}
+        </section>
+
         {/* Device Grid */}
         <section className="space-y-md">
           <h3 className="font-label-md text-xs font-bold text-primary uppercase tracking-wider border-b border-white/10 pb-xs">
@@ -438,7 +584,7 @@ function DevicesContent() {
                   </div>
 
                   {/* Actions */}
-                  <div className="grid grid-cols-2 gap-2 mt-sm pt-sm border-t border-white/5">
+                  <div className="grid grid-cols-3 gap-2 mt-sm pt-sm border-t border-white/5">
                     {isPartner ? (
                       <>
                         <button
@@ -446,14 +592,22 @@ function DevicesContent() {
                           className="py-1.5 rounded-lg glass-panel hover:bg-white/10 text-on-surface font-label-sm text-xs font-semibold flex items-center justify-center gap-1 active:scale-95 transition-all"
                         >
                           <span className="material-symbols-outlined text-[16px] text-secondary">edit</span>
-                          Rename Label
+                          Rename
                         </button>
                         <button
                           onClick={() => router.push('/map')}
                           className="py-1.5 rounded-lg bg-primary-container/30 hover:bg-primary-container/50 text-primary font-label-sm text-xs font-semibold flex items-center justify-center gap-1 active:scale-95 transition-all border border-primary/30"
                         >
                           <span className="material-symbols-outlined text-[16px]">map</span>
-                          Live Track
+                          Track
+                        </button>
+                        <button
+                          onClick={() => setShowDeleteModal(device)}
+                          className="py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 font-label-sm text-xs font-semibold flex items-center justify-center gap-1 active:scale-95 transition-all border border-red-500/20"
+                          title="Unlink device"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">delete_outline</span>
+                          Unlink
                         </button>
                       </>
                     ) : (
@@ -463,14 +617,22 @@ function DevicesContent() {
                           className="py-1.5 rounded-lg glass-panel hover:bg-white/10 text-on-surface font-label-sm text-xs font-semibold flex items-center justify-center gap-1 active:scale-95 transition-all"
                         >
                           <span className="material-symbols-outlined text-[16px] text-secondary">volume_up</span>
-                          Ring Tag
+                          Ring
                         </button>
                         <button
                           onClick={() => router.push('/map')}
                           className="py-1.5 rounded-lg bg-primary-container/30 hover:bg-primary-container/50 text-primary font-label-sm text-xs font-semibold flex items-center justify-center gap-1 active:scale-95 transition-all border border-primary/30"
                         >
                           <span className="material-symbols-outlined text-[16px]">map</span>
-                          Live Track
+                          Track
+                        </button>
+                        <button
+                          onClick={() => setShowDeleteModal(device)}
+                          className="py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 font-label-sm text-xs font-semibold flex items-center justify-center gap-1 active:scale-95 transition-all border border-red-500/20"
+                          title="Remove device"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">delete_outline</span>
+                          Remove
                         </button>
                       </>
                     )}
@@ -594,6 +756,51 @@ function DevicesContent() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Remove Device Confirmation Modal ── */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-gutter animate-fadeIn">
+          <div className="glass-panel w-full max-w-sm rounded-2xl p-lg bg-surface-container-high border border-red-500/30 shadow-2xl">
+            <div className="flex items-center gap-3 mb-sm text-red-400">
+              <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center border border-red-500/30 shrink-0">
+                <span className="material-symbols-outlined text-2xl">delete_forever</span>
+              </div>
+              <div>
+                <h3 className="font-headline-md text-base font-bold text-on-surface">Remove Device?</h3>
+                <p className="font-label-sm text-[11px] text-on-surface-variant">This will unlink the tracker from your account.</p>
+              </div>
+            </div>
+
+            <div className="bg-surface-container-low p-sm rounded-xl border border-white/5 my-md">
+              <p className="text-xs font-bold text-on-surface">{showDeleteModal.name}</p>
+              <p className="text-[11px] text-on-surface-variant mt-0.5">{showDeleteModal.category} {showDeleteModal.imei ? `• IMEI: ${showDeleteModal.imei}` : ''}</p>
+            </div>
+
+            <p className="text-xs text-on-surface-variant mb-md leading-relaxed">
+              Once removed, telemetry pings and GPS radar tracking for this device will cease until it is paired again.
+            </p>
+
+            <div className="flex gap-sm">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(null)}
+                disabled={deleting}
+                className="flex-1 glass-panel py-2.5 rounded-xl font-label-md text-xs font-semibold text-on-surface cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteDevice}
+                disabled={deleting}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2.5 rounded-xl font-label-md text-xs font-bold shadow-[0_0_15px_rgba(239,68,68,0.4)] cursor-pointer disabled:opacity-60"
+              >
+                {deleting ? 'Removing...' : 'Yes, Remove'}
+              </button>
+            </div>
           </div>
         </div>
       )}

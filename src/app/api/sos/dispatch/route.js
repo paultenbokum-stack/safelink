@@ -59,18 +59,21 @@ export async function POST(request) {
     // Get user profile for contact info
     const profile = householdDoc.data() || {};
     const partnerCode = profile.securityPartner || null;
+    const companyId = profile.securityCompanyId || partnerCode || 'help24_security';
 
     const result = await dispatchEmergency({
       uid: decoded.uid,
       type: type || 'armed_response',
       lat: parseFloat(lat),
       lng: parseFloat(lng),
+      accuracy: body.accuracy || 10,
       address,
       contactName: profile.adminFirstName
-        ? `${profile.adminFirstName} ${profile.adminLastName || ''}`
-        : decoded.email,
-      contactPhone: profile.phone || decoded.phone_number || '',
+        ? `${profile.adminFirstName} ${profile.adminLastName || ''}`.trim()
+        : (decoded.email || 'SafeLink Member'),
+      contactPhone: profile.phone || decoded.phone_number || profile.emergency?.phone || '',
       partnerCode,
+      companyId,
     });
 
     return NextResponse.json(result);

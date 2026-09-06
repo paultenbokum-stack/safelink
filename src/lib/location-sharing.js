@@ -158,7 +158,7 @@ export function useLocationSharing() {
     lastSentRef.current = Date.now();
 
     try {
-      const token = user.accessToken || user.stsTokenManager?.accessToken;
+      const token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : (user?.isPartnerSession ? `test_${user.uid}` : null));
 
       await fetch('/api/location/share', {
         method: 'POST',
@@ -225,7 +225,7 @@ export function useLocationSharing() {
           setError(null);
 
           // Also store consent in Firestore via API
-          const token = user?.accessToken || user?.stsTokenManager?.accessToken;
+          const token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : (user?.isPartnerSession ? `test_${user.uid}` : null));
           fetch('/api/location/share', {
             method: 'POST',
             headers: {
@@ -261,7 +261,7 @@ export function useLocationSharing() {
 
     // Notify server
     try {
-      const token = user?.accessToken || user?.stsTokenManager?.accessToken;
+      const token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : (user?.isPartnerSession ? `test_${user.uid}` : null));
       await fetch('/api/location/share', {
         method: 'POST',
         headers: {

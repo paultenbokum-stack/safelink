@@ -6,6 +6,7 @@ import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
 import { useAuth } from '@/lib/auth-context';
+import { useLocationSharing } from '@/lib/location-sharing';
 
 const GOOGLE_MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
@@ -146,84 +147,7 @@ function loadGoogleMapsScript(apiKey) {
   });
 }
 
-/* ─── Demo fallback data ────────────────────────────────────────── */
-const DEMO_MEMBERS = [
-  {
-    id: 'demo-1',
-    name: 'Thabo Molefe',
-    role: 'Admin (Father)',
-    status: 'At Home',
-    zone: 'Home Safe Zone',
-    battery: 92,
-    speed: 0,
-    address: '42 Sandhurst Dr, Sandton',
-    lastSeen: 'Just now',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    color: '#9fcafb',
-    lat: -26.1076,
-    lng: 28.0567,
-    device: 'iPhone 15 Pro • BLE Tag #01',
-    isDemo: true,
-  },
-  {
-    id: 'demo-2',
-    name: 'Lesedi Molefe',
-    role: 'Daughter (Grade 8)',
-    status: 'At School',
-    zone: 'School Safe Zone',
-    battery: 87,
-    speed: 0,
-    address: 'Crawford College, Benmore',
-    lastSeen: '2m ago',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    color: '#ffc32f',
-    lat: -26.1022,
-    lng: 28.0412,
-    device: 'Sentinel Smartwatch • GPS Tag #04',
-    isDemo: true,
-  },
-  {
-    id: 'demo-3',
-    name: 'Naledi Molefe',
-    role: 'Mother',
-    status: 'At Office',
-    zone: 'Work Safe Zone',
-    battery: 64,
-    speed: 0,
-    address: '150 Rivonia Rd, Morningside',
-    lastSeen: '5m ago',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-    color: '#2c5a85',
-    lat: -26.0961,
-    lng: 28.0569,
-    device: 'Samsung Galaxy S24 • BLE Tag #02',
-    isDemo: true,
-  },
-  {
-    id: 'demo-4',
-    name: 'Toyota Fortuner GD-6',
-    role: 'Vehicle GPS Tracker',
-    status: 'In Transit',
-    zone: 'Heading to Campus',
-    battery: 100,
-    speed: 45,
-    address: 'N1 North, Midrand',
-    lastSeen: 'Live',
-    avatar: null,
-    color: '#38a169',
-    lat: -26.0200,
-    lng: 28.0700,
-    device: 'Toyota Fortuner GPS Hardwire',
-    isDemo: true,
-  },
-];
-
-const DEMO_GEOFENCES = [
-  { id: 'home', name: 'Home Zone', lat: -26.1076, lng: 28.0567, radius: 180, color: '#38a169' },
-  { id: 'school', name: 'School Zone', lat: -26.1022, lng: 28.0412, radius: 140, color: '#ffc32f' },
-  { id: 'work', name: 'Corporate Zone', lat: -26.0961, lng: 28.0569, radius: 220, color: '#2c5a85' },
-];
-
+/* ─── Page wrapper ───────────────────────────────────────────────── */
 export default function MapPage() {
   return (
     <AuthGuard>
@@ -242,14 +166,24 @@ function LiveFamilyMapContent() {
   const markersRef = useRef({});
   const pollTimerRef = useRef(null);
 
-  const [members, setMembers] = useState(DEMO_MEMBERS);
-  const [geofences, setGeofences] = useState(DEMO_GEOFENCES);
-  const [selectedMember, setSelectedMember] = useState(DEMO_MEMBERS[0]);
+  const [members, setMembers] = useState([]);
+  const [geofences, setGeofences] = useState([]);
+  const [selectedMember, setSelectedMember] = useState(null);
   const [showGeofences, setShowGeofences] = useState(true);
   const [mapReady, setMapReady] = useState(false);
   const [mapProvider, setMapProvider] = useState('leaflet'); // 'google' | 'mapbox' | 'leaflet'
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [isDrawerCollapsed, setIsDrawerCollapsed] = useState(false);
+  const [phoneToggling, setPhoneToggling] = useState(false);
+
+  /* ─── Phone GPS Location Sharing Hook ─── */
+  const {
+    isOptedIn: isPhoneSharing,
+    error: phoneSharingError,
+    nickname: phoneNickname,
+    optIn: optInPhoneSharing,
+    optOut: optOutPhoneSharing,
+  } = useLocationSharing();
 
   /* ─── Fetch device locations (Partner vs Standard Firebase) ─── */
   const fetchDeviceLocations = useCallback(async () => {
@@ -295,27 +229,27 @@ function LiveFamilyMapContent() {
             });
             setConnectionStatus('partner_live');
             return;
+          } else {
+            setMembers([]);
+            setSelectedMember(null);
+            setConnectionStatus('partner_live');
+            return;
           }
         }
       } catch (err) {
         console.warn('[map] Partner device fetch error:', err);
       }
-      setConnectionStatus('demo');
+      setMembers([]);
+      setConnectionStatus('live');
       return;
     }
 
-    /* 2. Test Session Path (Hardcoded 0827675092) */
-    if (user.isTestSession) {
-      setMembers(DEMO_MEMBERS);
-      setConnectionStatus('demo');
-      return;
-    }
-
-    /* 3. Live Firebase + TrackSolid Path */
+    /* 2. Live Firebase & Test Session Path */
     try {
-      const token = user.accessToken || user.stsTokenManager?.accessToken;
+      const token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : null);
       if (!token) {
-        setConnectionStatus('demo');
+        setMembers([]);
+        setConnectionStatus('live');
         return;
       }
 
@@ -405,14 +339,21 @@ function LiveFamilyMapContent() {
 
       if (allMembers.length > 0) {
         setMembers(allMembers);
-        setSelectedMember(allMembers[0]);
+        setSelectedMember((prev) => {
+          if (!prev) return allMembers[0];
+          const match = allMembers.find((m) => m.id === prev.id);
+          return match || allMembers[0];
+        });
         setConnectionStatus('live');
       } else {
-        setConnectionStatus('demo');
+        setMembers([]);
+        setSelectedMember(null);
+        setConnectionStatus('live');
       }
     } catch (err) {
       console.warn('[map] Failed to fetch device locations:', err);
-      setConnectionStatus('demo');
+      setMembers([]);
+      setConnectionStatus('live');
     }
   }, [user, isPartner, partnerSession]);
 
@@ -855,14 +796,27 @@ function LiveFamilyMapContent() {
     }
   };
 
+  /* ─── Toggle Phone GPS Sharing on Radar ─── */
+  const handleTogglePhoneSharing = async () => {
+    setPhoneToggling(true);
+    if (isPhoneSharing) {
+      await optOutPhoneSharing();
+    } else {
+      await optInPhoneSharing();
+    }
+    // Immediate refresh
+    setTimeout(() => {
+      fetchDeviceLocations();
+    }, 800);
+    setPhoneToggling(false);
+  };
+
   /* ─── Status badge styling ──────────────────────────────────── */
-  const statusColor = connectionStatus === 'partner_live' || connectionStatus === 'live' ? '#38a169' : '#ffc32f';
+  const statusColor = '#38a169';
   const statusText =
     connectionStatus === 'partner_live'
-      ? `${members.length} Partner Devices Live`
-      : connectionStatus === 'live'
-      ? `${members.length} Devices Live`
-      : `${members.length} Trackers (Active Demo)`;
+      ? `${members.length} Partner Device${members.length !== 1 ? 's' : ''} Live`
+      : `${members.length} Active Device${members.length !== 1 ? 's' : ''} & Beacon${members.length !== 1 ? 's' : ''}`;
 
   return (
     <div className="bg-background text-on-background font-body-md h-screen w-screen overflow-hidden flex flex-col relative">
@@ -902,7 +856,25 @@ function LiveFamilyMapContent() {
             title="Toggle Safe Zones"
           >
             <span className="material-symbols-outlined text-[18px]">share_location</span>
-            <span className="text-xs font-semibold pr-1">Zones</span>
+            <span className="text-xs font-semibold pr-1 hidden sm:inline">Zones</span>
+          </button>
+
+          {/* Share Phone GPS Switch */}
+          <button
+            onClick={handleTogglePhoneSharing}
+            disabled={phoneToggling}
+            className={`glass-panel px-3 py-1.5 rounded-full hover:bg-white/10 active:scale-95 transition-all text-xs font-bold flex items-center gap-1.5 border shadow-lg cursor-pointer ${
+              isPhoneSharing
+                ? 'text-emerald-400 border-emerald-500/50 bg-emerald-500/15 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                : 'text-on-surface border-white/10'
+            } ${phoneToggling ? 'opacity-50 cursor-wait' : ''}`}
+            title={isPhoneSharing ? 'Phone GPS is broadcasting live to radar' : 'Broadcast this phone GPS to radar'}
+          >
+            <span className={`w-2 h-2 rounded-full ${isPhoneSharing ? 'bg-emerald-400 animate-ping' : 'bg-on-surface-variant'}`} />
+            <span className="material-symbols-outlined text-[16px]">
+              {isPhoneSharing ? 'satellite_alt' : 'smartphone'}
+            </span>
+            <span className="hidden xs:inline">{isPhoneSharing ? 'Phone Live' : 'Share Phone'}</span>
           </button>
 
           {/* Add Device / Device List */}
@@ -911,10 +883,33 @@ function LiveFamilyMapContent() {
             className="glass-panel px-3 py-1.5 rounded-full hover:bg-white/10 active:scale-95 transition-all text-xs font-bold text-primary flex items-center gap-1 border border-white/10"
           >
             <span className="material-symbols-outlined text-[16px]">devices</span>
-            Devices
+            <span className="hidden sm:inline">Devices</span>
           </button>
         </div>
       </div>
+
+      {/* GPS Permission Error Notice */}
+      {phoneSharingError && (
+        <div className="absolute top-32 left-4 right-4 z-30 max-w-md mx-auto pointer-events-auto bg-red-500/20 border border-red-500/50 backdrop-blur-md rounded-xl p-2.5 text-xs text-red-200 flex items-center gap-2 shadow-xl">
+          <span className="material-symbols-outlined text-sm shrink-0">warning</span>
+          <span className="flex-1">{phoneSharingError}</span>
+        </div>
+      )}
+
+      {/* Radar Scanning Empty State Banner when no members/devices are active */}
+      {members.length === 0 && (
+        <div className="absolute bottom-24 left-4 right-4 z-20 max-w-md mx-auto pointer-events-auto animate-fadeIn">
+          <div className="glass-panel p-4 rounded-2xl border border-secondary/40 bg-surface-container-high/95 backdrop-blur-xl shadow-2xl text-center space-y-2">
+            <div className="flex items-center justify-center gap-2 text-secondary">
+              <span className="material-symbols-outlined text-2xl animate-pulse">radar</span>
+              <span className="font-headline-md text-xs font-bold uppercase tracking-wider">Radar Online • Clean Slate</span>
+            </div>
+            <p className="font-body-md text-xs text-on-surface-variant leading-relaxed">
+              No active GPS beacons or Sentinel devices detected. Tap <strong className="text-secondary">&quot;Share Phone&quot;</strong> in the top controls or pair your Sentinel hardware to track on the radar.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Selected Device Drawer with Pull Tab */}
       {selectedMember && (

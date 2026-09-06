@@ -214,6 +214,8 @@ function LiveFamilyMapContent() {
   /* ─── Phone GPS Location Sharing Hook ─── */
   const {
     isOptedIn: isPhoneSharing,
+    isSharing,
+    lastPosition,
     error: phoneSharingError,
     nickname: phoneNickname,
     optIn: optInPhoneSharing,
@@ -281,10 +283,16 @@ function LiveFamilyMapContent() {
 
     /* 2. Live Firebase & Test Session Path */
     try {
-      const token =
-        user?.accessToken ||
-        user?.stsTokenManager?.accessToken ||
-        (user?.isTestSession ? `test_${user.uid}` : (user?.uid ? `test_${user.uid}` : 'demo-test-token'));
+      let token = null;
+      if (user && typeof user.getIdToken === 'function') {
+        try { token = await user.getIdToken(); } catch {}
+      }
+      if (!token) {
+        token =
+          user?.accessToken ||
+          user?.stsTokenManager?.accessToken ||
+          (user?.isTestSession ? `test_${user.uid}` : (user?.uid ? `test_${user.uid}` : 'demo-test-token'));
+      }
 
       const [devicesRes, phonesRes] = await Promise.all([
         fetch('/api/devices', { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),

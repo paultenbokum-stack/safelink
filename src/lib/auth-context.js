@@ -8,6 +8,7 @@ import {
   signOut,
   sendPasswordResetEmail,
   sendEmailVerification,
+  updateProfile,
 } from 'firebase/auth';
 import { auth } from './firebase';
 
@@ -124,6 +125,30 @@ export function AuthProvider({ children }) {
     return session;
   };
 
+  const updateProfileAvatar = async (photoURL) => {
+    if (user) {
+      const updated = { ...user, photoURL };
+      setUser(updated);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('safelink_user', JSON.stringify(updated));
+        const h = localStorage.getItem('active_household');
+        if (h) {
+          try {
+            const parsed = JSON.parse(h);
+            parsed.avatarUrl = photoURL;
+            localStorage.setItem('active_household', JSON.stringify(parsed));
+          } catch (e) {}
+        }
+        window.dispatchEvent(new CustomEvent('safelink_avatar_updated', { detail: { photoURL } }));
+      }
+      try {
+        if (auth.currentUser) {
+          await updateProfile(auth.currentUser, { photoURL });
+        }
+      } catch (e) {}
+    }
+  };
+
   const logout = async () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('safelink_user');
@@ -152,6 +177,7 @@ export function AuthProvider({ children }) {
         register,
         loginWithPhone,
         loginWithPartnerId,
+        updateProfileAvatar,
         logout,
         resetPassword,
         verifyEmail,

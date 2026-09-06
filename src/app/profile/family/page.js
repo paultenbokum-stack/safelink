@@ -20,6 +20,7 @@ function FamilyContent() {
   const [showAdd, setShowAdd] = useState(false);
   const [newMember, setNewMember] = useState({ name: '', phone: '', role: 'Member' });
   const [saving, setSaving] = useState(false);
+  const [household, setHousehold] = useState(null);
 
   // Load members from localStorage
   useEffect(() => {
@@ -27,17 +28,26 @@ function FamilyContent() {
     const h = localStorage.getItem('active_household');
     if (h) {
       try {
-        const household = JSON.parse(h);
+        const hh = JSON.parse(h);
+        setHousehold(hh);
         const mockNames = ['Thabo', 'Lesedi', 'Naledi', 'Sipho'];
-        const cleanMembers = (household.members || []).filter(
+        const cleanMembers = (hh.members || []).filter(
           (m) => !mockNames.includes(m.name) && !m.id?.includes('demo')
         );
         setMembers(cleanMembers);
-        if (cleanMembers.length !== (household.members || []).length) {
+        if (cleanMembers.length !== (hh.members || []).length) {
           saveToStorage(cleanMembers);
         }
       } catch (e) {}
     }
+
+    const handleAvatarUpdated = (e) => {
+      if (e.detail?.photoURL) {
+        setHousehold((prev) => (prev ? { ...prev, avatarUrl: e.detail.photoURL } : null));
+      }
+    };
+    window.addEventListener('safelink_avatar_updated', handleAvatarUpdated);
+    return () => window.removeEventListener('safelink_avatar_updated', handleAvatarUpdated);
     // Add self as admin if no members yet
     if (members.length === 0) {
       const savedUser = localStorage.getItem('safelink_user');
@@ -133,48 +143,55 @@ function FamilyContent() {
         </div>
 
         {/* Members List */}
-        {members.map((member) => (
-          <div key={member.id} className="glass-panel rounded-2xl p-4 border border-white/10 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-full bg-surface-container border border-white/10 flex items-center justify-center">
-                <span className="material-symbols-outlined text-xl text-primary">
-                  {member.role === 'Child' ? 'child_care' : 'person'}
-                </span>
-              </div>
-              <div>
-                <div className="font-label-md text-sm font-bold text-on-surface flex items-center gap-2">
-                  {member.name}
-                  {member.isSelf && (
-                    <span className="text-[10px] text-on-surface-variant">(You)</span>
+        {members.map((member) => {
+          const memberPhoto = member.avatarUrl || (member.isSelf ? (household?.avatarUrl || user?.photoURL) : null);
+          return (
+            <div key={member.id} className="glass-panel rounded-2xl p-4 border border-white/10 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-full bg-surface-container border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+                  {memberPhoto ? (
+                    <img src={memberPhoto} alt={member.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="material-symbols-outlined text-xl text-primary">
+                      {member.role === 'Child' ? 'child_care' : 'person'}
+                    </span>
                   )}
                 </div>
-                <div className="font-label-sm text-xs text-on-surface-variant">{member.phone || 'No phone'}</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${roleColors[member.role] || roleColors.Member}`}>
-                    {member.role}
-                  </span>
-                  <button
-                    onClick={() => toggleLocationSharing(member.id)}
-                    className="text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
-                  >
-                    <span className={`w-2 h-2 rounded-full ${member.locationSharing ? 'bg-[#38a169] animate-pulse' : 'bg-white/20'}`} />
-                    <span className={member.locationSharing ? 'text-[#38a169] font-medium' : 'text-on-surface-variant'}>
-                      {member.locationSharing ? 'GPS Active' : 'GPS Off'}
+                <div>
+                  <div className="font-label-md text-sm font-bold text-on-surface flex items-center gap-2">
+                    {member.name}
+                    {member.isSelf && (
+                      <span className="text-[10px] text-on-surface-variant">(You)</span>
+                    )}
+                  </div>
+                  <div className="font-label-sm text-xs text-on-surface-variant">{member.phone || 'No phone'}</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${roleColors[member.role] || roleColors.Member}`}>
+                      {member.role}
                     </span>
-                  </button>
+                    <button
+                      onClick={() => toggleLocationSharing(member.id)}
+                      className="text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <span className={`w-2 h-2 rounded-full ${member.locationSharing ? 'bg-[#38a169] animate-pulse' : 'bg-white/20'}`} />
+                      <span className={member.locationSharing ? 'text-[#38a169] font-medium' : 'text-on-surface-variant'}>
+                        {member.locationSharing ? 'GPS Active' : 'GPS Off'}
+                      </span>
+                    </button>
+                  </div>
                 </div>
               </div>
+              {!member.isSelf && (
+                <button
+                  onClick={() => handleRemoveMember(member.id)}
+                  className="w-9 h-9 rounded-xl bg-error/10 border border-error/20 flex items-center justify-center text-error hover:bg-error/20 transition-all cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-lg">close</span>
+                </button>
+              )}
             </div>
-            {!member.isSelf && (
-              <button
-                onClick={() => handleRemoveMember(member.id)}
-                className="w-9 h-9 rounded-xl bg-error/10 border border-error/20 flex items-center justify-center text-error hover:bg-error/20 transition-all cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-lg">close</span>
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
 
         {/* Empty State */}
         {members.length === 0 && (

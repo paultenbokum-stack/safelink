@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
@@ -8,7 +9,30 @@ export default function Header({ title, showBack = false, showNotification = tru
   const { user } = useAuth();
   const router = useRouter();
 
-  const userName = user?.displayName || user?.email?.split('@')[0] || 'Thabo';
+  const [avatarSrc, setAvatarSrc] = React.useState(
+    user?.photoURL || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'
+  );
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const h = localStorage.getItem('active_household');
+      if (h) {
+        try {
+          const parsed = JSON.parse(h);
+          if (parsed.avatarUrl) setAvatarSrc(parsed.avatarUrl);
+        } catch (e) {}
+      }
+      if (user?.photoURL) setAvatarSrc(user.photoURL);
+
+      const handleAvatarUpdated = (e) => {
+        if (e.detail?.photoURL) setAvatarSrc(e.detail.photoURL);
+      };
+      window.addEventListener('safelink_avatar_updated', handleAvatarUpdated);
+      return () => window.removeEventListener('safelink_avatar_updated', handleAvatarUpdated);
+    }
+  }, [user]);
+
+  const userName = user?.displayName || user?.email?.split('@')[0] || 'Member';
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-surface/80 backdrop-blur-md border-b border-white/10 shadow-sm flex justify-between items-center px-gutter h-16 w-full transition-all">
@@ -22,11 +46,11 @@ export default function Header({ title, showBack = false, showNotification = tru
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
           ) : (
-            <Link href="/profile" className="w-10 h-10 rounded-full overflow-hidden border border-outline/30 flex items-center justify-center bg-surface-container-high shrink-0 hover:border-secondary transition-colors">
+            <Link href="/profile" className="w-10 h-10 rounded-full overflow-hidden border border-outline/30 flex items-center justify-center bg-surface-container-high shrink-0 hover:border-secondary transition-colors ring-1 ring-secondary/30">
               <img
                 className="w-full h-full object-cover"
                 alt="Profile"
-                src={user?.photoURL || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80"}
+                src={avatarSrc}
               />
             </Link>
           )}

@@ -6,6 +6,7 @@ import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
 import { useAuth } from '@/lib/auth-context';
+import AvatarEditorModal from '@/app/components/AvatarEditorModal';
 
 export default function EditProfilePage() {
   return (
@@ -20,6 +21,10 @@ function EditProfileContent() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(
+    user?.photoURL || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80'
+  );
 
   const [form, setForm] = useState({
     firstName: '',
@@ -40,6 +45,7 @@ function EditProfileContent() {
     if (h) {
       try {
         const household = JSON.parse(h);
+        if (household.avatarUrl) setAvatarUrl(household.avatarUrl);
         setForm((prev) => ({
           ...prev,
           firstName: household.adminFirstName || '',
@@ -54,12 +60,19 @@ function EditProfileContent() {
         }));
       } catch (e) {}
     } else if (user) {
+      if (user.photoURL) setAvatarUrl(user.photoURL);
       setForm((prev) => ({
         ...prev,
         phone: user.phoneNumber || '',
         email: user.email || '',
       }));
     }
+
+    const handleAvatarUpdated = (e) => {
+      if (e.detail?.photoURL) setAvatarUrl(e.detail.photoURL);
+    };
+    window.addEventListener('safelink_avatar_updated', handleAvatarUpdated);
+    return () => window.removeEventListener('safelink_avatar_updated', handleAvatarUpdated);
   }, [user]);
 
   const handleChange = (field, value) => {
@@ -83,6 +96,7 @@ function EditProfileContent() {
       phone: form.phone,
       email: form.email,
       idNumber: form.idNumber,
+      avatarUrl: avatarUrl || existing.avatarUrl,
       address: {
         street: form.address,
         suburb: form.suburb,
@@ -120,6 +134,47 @@ function EditProfileContent() {
 
       <main className="pt-20 px-gutter max-w-2xl mx-auto">
         <form onSubmit={handleSave} className="space-y-4">
+          {/* Avatar Section */}
+          <div className="glass-panel rounded-2xl p-4 border border-white/10 flex flex-col items-center justify-center text-center space-y-2">
+            <div className="relative group">
+              <button
+                type="button"
+                onClick={() => setShowAvatarModal(true)}
+                className="relative w-24 h-24 rounded-full overflow-hidden border-2 border-secondary/80 p-1 bg-surface-container block cursor-pointer hover:border-secondary transition-all active:scale-95 shadow-md"
+                title="Change Photo"
+              >
+                <img
+                  src={avatarUrl}
+                  alt="Profile Avatar"
+                  className="w-full h-full rounded-full object-cover"
+                />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-full">
+                  <span className="material-symbols-outlined text-white text-xl">photo_camera</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAvatarModal(true)}
+                className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center shadow-lg border-2 border-[#091422] hover:scale-110 active:scale-95 transition-all cursor-pointer"
+                title="Change Photo"
+              >
+                <span className="material-symbols-outlined text-sm font-bold">photo_camera</span>
+              </button>
+            </div>
+
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowAvatarModal(true)}
+                className="text-xs font-bold text-secondary hover:underline cursor-pointer flex items-center gap-1 mx-auto"
+              >
+                <span className="material-symbols-outlined text-sm">edit</span>
+                Change Profile Photo
+              </button>
+              <p className="text-[11px] text-on-surface-variant">Tap to upload a new picture or choose an avatar</p>
+            </div>
+          </div>
+
           {/* Name */}
           <div className="glass-panel rounded-2xl p-4 border border-white/10 space-y-3">
             <h3 className="font-label-md text-xs uppercase tracking-wider font-bold text-on-surface-variant">
@@ -181,6 +236,13 @@ function EditProfileContent() {
           </button>
         </form>
       </main>
+
+      <AvatarEditorModal
+        isOpen={showAvatarModal}
+        onClose={() => setShowAvatarModal(false)}
+        currentAvatar={avatarUrl}
+        onAvatarSaved={(newUrl) => setAvatarUrl(newUrl)}
+      />
 
       <BottomNav />
     </div>

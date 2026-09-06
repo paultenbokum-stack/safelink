@@ -8,6 +8,7 @@ import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
 import LocationSharingSettings from '@/app/components/LocationSharingSettings';
+import AvatarEditorModal from '@/app/components/AvatarEditorModal';
 
 export default function ProfilePage() {
   return (
@@ -21,6 +22,10 @@ function ProfileContent() {
   const { user, logout, partnerSession } = useAuth();
   const router = useRouter();
   const [household, setHousehold] = React.useState(null);
+  const [showAvatarModal, setShowAvatarModal] = React.useState(false);
+  const [avatarUrl, setAvatarUrl] = React.useState(
+    user?.photoURL || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80'
+  );
   const isPartner = !!user?.isPartnerSession;
 
   React.useEffect(() => {
@@ -28,10 +33,21 @@ function ProfileContent() {
     if (typeof window !== 'undefined') {
       const h = localStorage.getItem('active_household');
       if (h) {
-        try { setHousehold(JSON.parse(h)); } catch(e) {}
+        try {
+          const parsed = JSON.parse(h);
+          setHousehold(parsed);
+          if (parsed.avatarUrl) setAvatarUrl(parsed.avatarUrl);
+        } catch(e) {}
       }
+      if (user?.photoURL) setAvatarUrl(user.photoURL);
+
+      const handleAvatarUpdated = (e) => {
+        if (e.detail?.photoURL) setAvatarUrl(e.detail.photoURL);
+      };
+      window.addEventListener('safelink_avatar_updated', handleAvatarUpdated);
+      return () => window.removeEventListener('safelink_avatar_updated', handleAvatarUpdated);
     }
-  }, [isPartner]);
+  }, [isPartner, user]);
 
   const handleSignOut = async () => {
     try {
@@ -54,8 +70,6 @@ function ProfileContent() {
   const displayPhone = isPartner
     ? (partnerSession?.partnerId || 'Security Partner')
     : (household?.phone || user?.phoneNumber || '+27 82 345 6789');
-
-  const avatarSrc = household?.avatarUrl || user?.photoURL || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80';
 
   const memberCount = household?.members?.length || household?.memberCount || 1;
 
@@ -151,15 +165,41 @@ function ProfileContent() {
       <main className="pt-20 px-gutter max-w-2xl mx-auto space-y-lg">
         {/* Profile Header */}
         <section className="glass-panel rounded-2xl p-md md:p-lg flex flex-col items-center text-center shadow-lg relative overflow-hidden border border-white/10">
-          <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary/20 rounded-full blur-3xl pointer-events-none"></div>
-
-          <div className="relative w-24 h-24 mb-sm rounded-full overflow-hidden border-2 border-secondary/60 p-1">
-            <img
-              src={avatarSrc}
-              alt={displayName}
-              className="w-full h-full rounded-full object-cover"
-            />
+          {/* Avatar with Camera Edit Badge */}
+          <div className="relative mb-2 group">
+            <button
+              type="button"
+              onClick={() => setShowAvatarModal(true)}
+              className="relative w-24 h-24 rounded-full overflow-hidden border-2 border-secondary/80 p-1 bg-surface-container block cursor-pointer hover:border-secondary transition-all active:scale-95 shadow-[0_0_20px_rgba(255,195,47,0.2)]"
+              title="Click to change profile picture"
+            >
+              <img
+                src={avatarUrl}
+                alt={displayName}
+                className="w-full h-full rounded-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-full">
+                <span className="material-symbols-outlined text-white text-xl">photo_camera</span>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAvatarModal(true)}
+              className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center shadow-lg border-2 border-[#091422] hover:scale-110 active:scale-95 transition-all cursor-pointer"
+              title="Edit avatar"
+            >
+              <span className="material-symbols-outlined text-sm font-bold">photo_camera</span>
+            </button>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowAvatarModal(true)}
+            className="text-[11px] text-secondary hover:underline font-semibold flex items-center gap-1 mb-2 cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-xs">edit</span>
+            Change Profile Photo
+          </button>
 
           <h1 className="font-headline-lg text-2xl font-bold text-on-surface mb-0.5">{displayName}</h1>
           <p className="font-body-md text-sm text-on-surface-variant mb-md">{displayPhone}</p>
@@ -249,6 +289,13 @@ function ProfileContent() {
           </button>
         </section>
       </main>
+
+      <AvatarEditorModal
+        isOpen={showAvatarModal}
+        onClose={() => setShowAvatarModal(false)}
+        currentAvatar={avatarUrl}
+        onAvatarSaved={(newUrl) => setAvatarUrl(newUrl)}
+      />
 
       <BottomNav />
     </div>

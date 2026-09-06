@@ -1,5 +1,5 @@
 // SafeLink Service Worker — PWA & Offline Support
-const CACHE_NAME = 'safelink-cache-v1';
+const CACHE_NAME = 'safelink-cache-v2';
 
 const PRECACHE_ASSETS = [
   '/',

@@ -315,30 +315,62 @@ function LiveFamilyMapContent() {
 
           devices.forEach((device, i) => {
             const loc = locations[i];
-            if (loc?.lat && loc?.lng) {
-              allMembers.push({
-                id: device.imei,
-                name: device.nickname || device.deviceName || `Device ${device.imei.slice(-4)}`,
-                role: device.model || 'Sentinel Device',
-                status: loc.isOnline ? 'Online' : 'Offline',
-                zone: '',
-                battery: loc.batteryLevel || null,
-                speed: loc.speed || 0,
-                address: loc.address || 'Locating...',
-                lastSeen: loc.gpsTime || 'Unknown',
-                avatar: null,
-                color: getDeviceColor(allMembers.length),
-                lat: loc.lat,
-                lng: loc.lng,
-                device: `${device.model || 'Sentinel'} • ${device.imei.slice(-6)}`,
-                isTag: loc.isTag || false,
-                isPhone: false,
-                isDemo: false,
-              });
-            }
+            const hasGps = loc?.lat && loc?.lng;
+            allMembers.push({
+              id: device.imei,
+              name: device.nickname || device.deviceName || `Device ${device.imei.slice(-4)}`,
+              role: device.model || 'Sentinel Device',
+              status: loc?.isOnline ? 'Online' : (hasGps ? 'Offline' : 'Awaiting GPS Fix'),
+              zone: '',
+              battery: loc?.batteryLevel || null,
+              speed: loc?.speed || 0,
+              address: loc?.address || (hasGps ? `${loc.lat.toFixed(4)}°S, ${loc.lng.toFixed(4)}°E` : 'Awaiting GPS fix...'),
+              lastSeen: loc?.gpsTime || 'Connected',
+              avatar: null,
+              color: getDeviceColor(allMembers.length),
+              lat: hasGps ? loc.lat : (SHEFFIELD_BALLITO_COORDS.lat + (i * 0.004)),
+              lng: hasGps ? loc.lng : (SHEFFIELD_BALLITO_COORDS.lng + (i * 0.004)),
+              device: `${device.model || 'Sentinel'} • ${device.imei.slice(-6)}`,
+              isTag: loc?.isTag || false,
+              isPhone: false,
+              isDemo: false,
+            });
           });
         }
       }
+
+      // Merge locally linked Sentinel devices if not yet in backend response
+      try {
+        const cached = localStorage.getItem('safelink_user_devices');
+        if (cached) {
+          const localDevs = JSON.parse(cached);
+          if (Array.isArray(localDevs)) {
+            localDevs.forEach((ld, idx) => {
+              if (ld.imei && !allMembers.some((m) => m.id === ld.imei)) {
+                allMembers.push({
+                  id: ld.imei,
+                  name: ld.name || `Device ${ld.imei.slice(-4)}`,
+                  role: ld.category || 'Sentinel Tracker',
+                  status: 'Connecting...',
+                  zone: '',
+                  battery: null,
+                  speed: 0,
+                  address: 'Awaiting first GPS fix...',
+                  lastSeen: 'Just linked',
+                  avatar: null,
+                  color: getDeviceColor(allMembers.length),
+                  lat: SHEFFIELD_BALLITO_COORDS.lat + ((allMembers.length + 1) * 0.004),
+                  lng: SHEFFIELD_BALLITO_COORDS.lng + ((allMembers.length + 1) * 0.004),
+                  device: `Sentinel • ${ld.imei.slice(-6)}`,
+                  isTag: false,
+                  isPhone: false,
+                  isDemo: false,
+                });
+              }
+            });
+          }
+        }
+      } catch {}
 
       // Process phone GPS sharing from backend
       if (phonesRes?.ok) {

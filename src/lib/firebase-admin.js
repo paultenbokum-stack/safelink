@@ -1,10 +1,31 @@
 import 'server-only';
 
-import { getApps, initializeApp } from 'firebase-admin/app';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore';
 
-const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-const adminApp = getApps()[0] ?? initializeApp(projectId ? { projectId } : undefined);
+const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'safelink-b8071';
+const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+const privateKey = process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined;
+
+let credential;
+if (clientEmail && privateKey) {
+  try {
+    credential = cert({
+      projectId,
+      clientEmail,
+      privateKey,
+    });
+  } catch (err) {
+    console.warn('[firebase-admin] Service account cert parse warning:', err.message);
+  }
+}
+
+const adminApp =
+  getApps()[0] ??
+  initializeApp({
+    projectId: projectId || undefined,
+    ...(credential ? { credential } : {}),
+  });
 
 export function getAdminFirestore() {
   return getFirestore(adminApp);

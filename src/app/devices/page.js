@@ -166,17 +166,34 @@ function DevicesContent() {
 
       /* Live Firebase & Test sessions — TrackSolid via /api/devices */
       try {
-        const token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : null);
-        if (!token) { setLoading(false); return; }
+        // Load locally cached devices immediately for fast render
+        try {
+          const cached = localStorage.getItem('safelink_user_devices');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setDevices(parsed);
+              setIsLive(true);
+            }
+          }
+        } catch {}
+
+        let token = null;
+        if (user && typeof user.getIdToken === 'function') {
+          try { token = await user.getIdToken(); } catch {}
+        }
+        if (!token) {
+          token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : (user?.uid ? `test_${user.uid}` : 'demo-test-token'));
+        }
 
         const res = await fetch('/api/devices', {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
-          const data = await res.json();
-          const devs = (data.devices || []).filter((d) => !d.isPhoneDevice);
+          const data = await res.json().catch(() => null);
+          const devs = (data?.devices || []).filter((d) => !d.isPhoneDevice);
           if (devs.length > 0) {
-            setDevices(devs.map((d) => ({
+            const mapped = devs.map((d) => ({
               id: d.id || d.imei || d.imei_plain,
               imei: d.imei || d.imei_plain,
               name: d.nickname || d.deviceName || `Device ${(d.imei || d.imei_plain || '').slice(-4)}`,
@@ -187,10 +204,12 @@ function DevicesContent() {
               battery: d.batteryLevel || null,
               lastPing: d.updatedAt || 'Unknown',
               location: d.lastAddress || 'Locating...',
-            })));
+            }));
+            setDevices(mapped);
             setIsLive(true);
-          } else {
-            setDevices([]);
+            try {
+              localStorage.setItem('safelink_user_devices', JSON.stringify(mapped));
+            } catch {}
           }
         }
       } catch (e) {
@@ -209,17 +228,29 @@ function DevicesContent() {
     setDeleting(true);
 
     try {
-      const token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : null);
+      let token = null;
+      if (user && typeof user.getIdToken === 'function') {
+        try { token = await user.getIdToken(); } catch {}
+      }
+      if (!token) {
+        token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : (user?.uid ? `test_${user.uid}` : 'demo-test-token'));
+      }
       const imeiToDelete = device.imei || device.id;
 
       if (token && imeiToDelete) {
         await fetch(`/api/devices/${imeiToDelete}`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
-        });
+        }).catch(() => null);
       }
 
-      setDevices((prev) => prev.filter((d) => d.id !== device.id && d.imei !== device.imei));
+      setDevices((prev) => {
+        const filtered = prev.filter((d) => d.id !== device.id && d.imei !== device.imei);
+        try {
+          localStorage.setItem('safelink_user_devices', JSON.stringify(filtered));
+        } catch {}
+        return filtered;
+      });
       setShowDeleteModal(null);
     } catch (e) {
       console.warn('[devices] Failed to delete device:', e);
@@ -245,23 +276,33 @@ function DevicesContent() {
 
     setAdding(true);
     try {
-      const token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : null);
-      if (token) {
-        const res = await fetch('/api/devices', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ imei: cleanImei, nickname: newDeviceName.trim() }),
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          setAddError(err.error || 'Failed to bind device. Please check the IMEI and try again.');
-          setAdding(false);
-          return;
-        }
+      let token = null;
+      if (user && typeof user.getIdToken === 'function') {
+        try { token = await user.getIdToken(); } catch {}
+      }
+      if (!token) {
+        token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : (user?.uid ? `test_${user.uid}` : 'demo-test-token'));
       }
 
-      // Add to local UI state
-      setDevices((prev) => [{
+      const res = await fetch('/api/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ imei: cleanImei, nickname: newDeviceName.trim() }),
+      });
+
+      let resData = null;
+      try {
+        resData = await res.json();
+      } catch {}
+
+      if (!res.ok) {
+        setAddError(resData?.error || `Could not link device (HTTP ${res.status}). Please check the IMEI and try again.`);
+        setAdding(false);
+        return;
+      }
+
+      // Add to local UI state & cache
+      const newDeviceRecord = {
         id: cleanImei,
         imei: cleanImei,
         name: newDeviceName.trim(),
@@ -272,15 +313,25 @@ function DevicesContent() {
         battery: null,
         lastPing: 'Just paired',
         location: 'Awaiting first GPS fix...',
-      }, ...prev]);
+      };
+
+      setDevices((prev) => {
+        const updated = [newDeviceRecord, ...prev.filter((d) => d.id !== cleanImei && d.imei !== cleanImei)];
+        try {
+          localStorage.setItem('safelink_user_devices', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
 
       setNewDeviceName('');
       setNewDeviceImei('');
       setShowAddModal(false);
-    } catch {
-      setAddError('Network error. Please check your connection and try again.');
+    } catch (err) {
+      console.warn('[devices] handleAddDevice error:', err);
+      setAddError('Unable to connect to SafeLink server. Please verify your connection.');
+    } finally {
+      setAdding(false);
     }
-    setAdding(false);
   };
 
   /* ── Rename device label (partner sessions) ── */

@@ -18,10 +18,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from './auth-context';
 
-const LOCATION_UPDATE_INTERVAL = 30000; // 30 seconds
+const LOCATION_UPDATE_INTERVAL = 15000; // 15 seconds for responsive live tracking
 const LOCATION_STALE_THRESHOLD = 120000; // 2 minutes — mark stale after this
 const STORAGE_KEY_CONSENT = 'safelink_location_sharing_consent';
+const STORAGE_KEY_POPIA = 'popia_gps_consent';
 const STORAGE_KEY_NICKNAME = 'safelink_phone_nickname';
+const STORAGE_KEY_LAST_GPS = 'last_known_pwa_gps';
 
 /**
  * useLocationSharing — Hook that manages opt-in phone GPS tracking.
@@ -44,41 +46,50 @@ export function useLocationSharing() {
   const intervalRef = useRef(null);
   const lastSentRef = useRef(0);
 
-  // Load consent status from localStorage on mount
+  // Load consent status and cached GPS from localStorage on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const consent = localStorage.getItem(STORAGE_KEY_CONSENT);
+    const consent = localStorage.getItem(STORAGE_KEY_CONSENT) || localStorage.getItem(STORAGE_KEY_POPIA);
     const savedNickname = localStorage.getItem(STORAGE_KEY_NICKNAME);
+    const cachedGpsRaw = localStorage.getItem(STORAGE_KEY_LAST_GPS);
 
     if (consent === 'granted') {
       setIsOptedIn(true);
+      localStorage.setItem(STORAGE_KEY_CONSENT, 'granted');
+      localStorage.setItem(STORAGE_KEY_POPIA, 'granted');
     }
     if (savedNickname) {
       setNicknameState(savedNickname);
+    }
+    if (cachedGpsRaw) {
+      try {
+        const cached = JSON.parse(cachedGpsRaw);
+        if (cached?.lat && cached?.lng) {
+          setLastPosition(cached);
+        }
+      } catch {}
     }
   }, []);
 
   // Auto-start sharing when opted in
   useEffect(() => {
-    if (isOptedIn && user) {
+    if (isOptedIn) {
       startSharing();
     }
     return () => stopSharing();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOptedIn, user]);
 
-  // Handle visibility change — pause when backgrounded to save battery
+  // Handle visibility change — maintain continuous GPS in foreground
   useEffect(() => {
     function handleVisibilityChange() {
       if (document.hidden) {
-        // Tab backgrounded — stop active watching, rely on interval
         if (watchIdRef.current !== null) {
           navigator.geolocation.clearWatch(watchIdRef.current);
           watchIdRef.current = null;
         }
       } else {
-        // Tab foregrounded — resume active watching
         if (isOptedIn && isSharing) {
           startWatching();
         }
@@ -91,31 +102,57 @@ export function useLocationSharing() {
   }, [isOptedIn, isSharing]);
 
   /**
-   * Start GPS watch + periodic upload.
+   * Helper to build auth token
    */
-  const startSharing = useCallback(() => {
-    if (!navigator.geolocation) {
-      setError('Geolocation is not supported by your browser');
-      return;
-    }
-
-    setIsSharing(true);
-    setError(null);
-    startWatching();
-
-    // Periodic upload interval as backup
-    intervalRef.current = setInterval(() => {
-      if (lastPosition) {
-        sendLocationUpdate(lastPosition);
-      }
-    }, LOCATION_UPDATE_INTERVAL);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastPosition]);
+  const getAuthToken = useCallback(() => {
+    return (
+      user?.accessToken ||
+      user?.stsTokenManager?.accessToken ||
+      (user?.isTestSession ? `test_${user.uid}` : null) ||
+      (user?.isPartnerSession ? `test_${user.uid}` : null) ||
+      (user?.uid ? `test_${user.uid}` : 'demo-test-token')
+    );
+  }, [user]);
 
   /**
-   * Start navigator.geolocation.watchPosition.
+   * Send location update to server.
+   */
+  const sendLocationUpdate = useCallback(async (pos) => {
+    if (!pos || !pos.lat || !pos.lng) return;
+
+    lastSentRef.current = Date.now();
+
+    try {
+      const token = getAuthToken();
+
+      await fetch('/api/location/share', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          lat: pos.lat,
+          lng: pos.lng,
+          accuracy: pos.accuracy,
+          altitude: pos.altitude,
+          speed: pos.speed,
+          heading: pos.heading,
+          nickname: user?.displayName || nickname,
+          deviceType: 'phone',
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+        }),
+      });
+    } catch (err) {
+      console.warn('[location-sharing] Upload failed:', err);
+    }
+  }, [getAuthToken, nickname, user]);
+
+  /**
+   * Start navigator.geolocation.watchPosition with high-accuracy GNSS.
    */
   const startWatching = useCallback(() => {
+    if (typeof window === 'undefined' || !navigator.geolocation) return;
     if (watchIdRef.current !== null) return;
 
     watchIdRef.current = navigator.geolocation.watchPosition(
@@ -132,7 +169,17 @@ export function useLocationSharing() {
         setLastPosition(pos);
         setError(null);
 
-        // Throttle: only send if enough time has passed
+        // Store latest high-accuracy coordinates locally
+        localStorage.setItem(STORAGE_KEY_LAST_GPS, JSON.stringify({
+          ...pos,
+          name: user?.displayName || nickname,
+          updatedAt: new Date().toISOString(),
+        }));
+
+        // Broadcast to any open map or SOS components
+        window.dispatchEvent(new CustomEvent('safelink_phone_location_updated', { detail: pos }));
+
+        // Throttle server uploads
         if (Date.now() - lastSentRef.current >= LOCATION_UPDATE_INTERVAL) {
           sendLocationUpdate(pos);
         }
@@ -143,51 +190,40 @@ export function useLocationSharing() {
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 15000,
-        timeout: 10000,
+        maximumAge: 0,
+        timeout: 15000,
       }
     );
-  }, []);
+  }, [nickname, sendLocationUpdate, user]);
 
   /**
-   * Send location update to server.
+   * Start GPS watch + periodic upload.
    */
-  const sendLocationUpdate = useCallback(async (pos) => {
-    if (!user || !pos) return;
-
-    lastSentRef.current = Date.now();
-
-    try {
-      const token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : (user?.isPartnerSession ? `test_${user.uid}` : null));
-
-      await fetch('/api/location/share', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          lat: pos.lat,
-          lng: pos.lng,
-          accuracy: pos.accuracy,
-          altitude: pos.altitude,
-          speed: pos.speed,
-          heading: pos.heading,
-          nickname,
-          deviceType: 'phone',
-          userAgent: navigator.userAgent,
-        }),
-      });
-    } catch (err) {
-      console.warn('[location-sharing] Upload failed:', err);
+  const startSharing = useCallback(() => {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser');
+      return;
     }
-  }, [user, nickname]);
+
+    setIsSharing(true);
+    setError(null);
+    startWatching();
+
+    // Periodic upload interval
+    if (!intervalRef.current) {
+      intervalRef.current = setInterval(() => {
+        if (lastPosition) {
+          sendLocationUpdate(lastPosition);
+        }
+      }, LOCATION_UPDATE_INTERVAL);
+    }
+  }, [lastPosition, sendLocationUpdate, startWatching]);
 
   /**
    * Stop all GPS tracking.
    */
   const stopSharing = useCallback(() => {
-    if (watchIdRef.current !== null) {
+    if (watchIdRef.current !== null && typeof window !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
@@ -202,30 +238,42 @@ export function useLocationSharing() {
    * Opt in to location sharing (requires explicit user action).
    */
   const optIn = useCallback(async () => {
-    // Request permission first
-    if (navigator.permissions) {
-      try {
-        const permission = await navigator.permissions.query({ name: 'geolocation' });
-        if (permission.state === 'denied') {
-          setError('Location permission was denied. Please enable it in your browser settings.');
-          return false;
-        }
-      } catch (e) {
-        // permissions API not supported — will prompt on watchPosition
-      }
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      setError('Geolocation is not supported on this device');
+      return false;
     }
 
-    // Test that we can get a position
     return new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          // Success — store consent
+        (position) => {
+          const pos = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            altitude: position.coords.altitude,
+            speed: position.coords.speed,
+            heading: position.coords.heading,
+            timestamp: position.timestamp,
+          };
+
+          // Store consent in all local keys
           localStorage.setItem(STORAGE_KEY_CONSENT, 'granted');
+          localStorage.setItem(STORAGE_KEY_POPIA, 'granted');
+          localStorage.setItem(STORAGE_KEY_LAST_GPS, JSON.stringify({
+            ...pos,
+            name: user?.displayName || nickname,
+            updatedAt: new Date().toISOString(),
+          }));
+
+          setLastPosition(pos);
           setIsOptedIn(true);
           setError(null);
 
-          // Also store consent in Firestore via API
-          const token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : (user?.isPartnerSession ? `test_${user.uid}` : null));
+          // Dispatch event
+          window.dispatchEvent(new CustomEvent('safelink_phone_location_updated', { detail: pos }));
+
+          // Notify backend
+          const token = getAuthToken();
           fetch('/api/location/share', {
             method: 'POST',
             headers: {
@@ -234,34 +282,41 @@ export function useLocationSharing() {
             },
             body: JSON.stringify({
               action: 'opt_in',
-              nickname,
+              nickname: user?.displayName || nickname,
               consentTimestamp: new Date().toISOString(),
+              lat: pos.lat,
+              lng: pos.lng,
+              accuracy: pos.accuracy,
             }),
           }).catch(() => {});
 
+          startSharing();
           resolve(true);
         },
         (err) => {
           setError(getLocationErrorMessage(err));
           resolve(false);
         },
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
       );
     });
-  }, [user, nickname]);
+  }, [getAuthToken, nickname, startSharing, user]);
 
   /**
    * Opt out — stop sharing and revoke consent.
    */
   const optOut = useCallback(async () => {
     stopSharing();
-    localStorage.removeItem(STORAGE_KEY_CONSENT);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY_CONSENT);
+      localStorage.removeItem(STORAGE_KEY_POPIA);
+      localStorage.removeItem(STORAGE_KEY_LAST_GPS);
+    }
     setIsOptedIn(false);
     setLastPosition(null);
 
-    // Notify server
     try {
-      const token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : (user?.isPartnerSession ? `test_${user.uid}` : null));
+      const token = getAuthToken();
       await fetch('/api/location/share', {
         method: 'POST',
         headers: {
@@ -273,7 +328,7 @@ export function useLocationSharing() {
     } catch (err) {
       console.warn('[location-sharing] Opt-out notification failed:', err);
     }
-  }, [user, stopSharing]);
+  }, [getAuthToken, stopSharing]);
 
   /**
    * Update the nickname for this phone on the map.

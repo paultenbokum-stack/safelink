@@ -147,6 +147,41 @@ function loadGoogleMapsScript(apiKey) {
   });
 }
 
+/* ─── Geolocation & Map Centering Helpers ──────────────────────── */
+// Default coordinates: Sheffield Beach / Ballito, KwaZulu-Natal (-29.4925, 31.2312)
+export const SHEFFIELD_BALLITO_COORDS = { lat: -29.4925, lng: 31.2312 };
+
+function getInitialMapCenter() {
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('last_known_pwa_gps');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.lat && parsed?.lng && !isNaN(parsed.lat) && !isNaN(parsed.lng)) {
+          return { lat: parseFloat(parsed.lat), lng: parseFloat(parsed.lng) };
+        }
+      }
+    } catch {}
+  }
+  return SHEFFIELD_BALLITO_COORDS;
+}
+
+function panMapTo(map, lat, lng, zoom = 15) {
+  if (!map || lat == null || lng == null) return;
+  try {
+    if (map._isGoogle) {
+      map.panTo({ lat, lng });
+      if (zoom) map.setZoom(zoom);
+    } else if (map._isLeaflet) {
+      map.setView([lat, lng], zoom, { animate: true, duration: 1 });
+    } else if (map.flyTo) {
+      map.flyTo({ center: [lng, lat], zoom, duration: 1000 });
+    }
+  } catch (e) {
+    console.warn('[map] panMapTo note:', e);
+  }
+}
+
 /* ─── Page wrapper ───────────────────────────────────────────────── */
 export default function MapPage() {
   return (
@@ -207,12 +242,12 @@ function LiveFamilyMapContent() {
               zone: 'Active Area',
               battery: d.battery != null ? d.battery : 100,
               speed: d.status === 'in_motion' ? 45 : 0,
-              address: d.address || (d.lat && d.lng ? `${d.lat.toFixed(4)}°S, ${d.lng.toFixed(4)}°E` : 'Sandton, JHB'),
+              address: d.address || (d.lat && d.lng ? `${d.lat.toFixed(4)}°S, ${d.lng.toFixed(4)}°E` : 'Ballito, KZN'),
               lastSeen: d.lastSeen || 'Live',
               avatar: null,
               color: getDeviceColor(i),
-              lat: parseFloat(d.lat) || -26.1076 + (i * 0.006),
-              lng: parseFloat(d.lng) || 28.0567 + (i * 0.006),
+              lat: parseFloat(d.lat) || SHEFFIELD_BALLITO_COORDS.lat + (i * 0.006),
+              lng: parseFloat(d.lng) || SHEFFIELD_BALLITO_COORDS.lng + (i * 0.006),
               device: `${formatDeviceType(d.type)} • ${d.nickname}`,
               icon: getDeviceIcon(d.type),
               isTag: d.type === 'BLE_TAG',
@@ -246,12 +281,10 @@ function LiveFamilyMapContent() {
 
     /* 2. Live Firebase & Test Session Path */
     try {
-      const token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : null);
-      if (!token) {
-        setMembers([]);
-        setConnectionStatus('live');
-        return;
-      }
+      const token =
+        user?.accessToken ||
+        user?.stsTokenManager?.accessToken ||
+        (user?.isTestSession ? `test_${user.uid}` : (user?.uid ? `test_${user.uid}` : 'demo-test-token'));
 
       const [devicesRes, phonesRes] = await Promise.all([
         fetch('/api/devices', { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
@@ -307,34 +340,84 @@ function LiveFamilyMapContent() {
         }
       }
 
-      // Process phone GPS sharing
+      // Process phone GPS sharing from backend
       if (phonesRes?.ok) {
-        const phoneData = await phonesRes.json();
-        const phoneLocations = phoneData.locations || [];
+        try {
+          const phoneData = await phonesRes.json();
+          const phoneLocations = phoneData.locations || [];
 
-        phoneLocations.forEach((phone) => {
-          if (phone.lat && phone.lng) {
-            allMembers.push({
-              id: phone.id || `phone_${phone.uid}`,
-              name: phone.nickname || 'Phone',
-              role: 'Phone GPS',
-              status: 'Live',
-              zone: '',
-              battery: null,
-              speed: phone.speed || 0,
-              address: `${phone.lat.toFixed(4)}, ${phone.lng.toFixed(4)}`,
-              lastSeen: phone.gpsTime || phone.updatedAt || 'Just now',
-              avatar: null,
-              color: getDeviceColor(allMembers.length),
-              lat: phone.lat,
-              lng: phone.lng,
-              device: `📱 ${phone.nickname || 'Phone'} • GPS`,
-              isTag: false,
-              isPhone: true,
-              isDemo: false,
-            });
-          }
-        });
+          phoneLocations.forEach((phone) => {
+            if (phone.lat && phone.lng) {
+              allMembers.push({
+                id: phone.id || `phone_${phone.uid}`,
+                name: phone.nickname || 'My Phone',
+                role: 'Phone GPS (Live)',
+                status: 'Live',
+                zone: 'Active Device',
+                battery: null,
+                speed: phone.speed || 0,
+                address: `${parseFloat(phone.lat).toFixed(4)}°S, ${parseFloat(phone.lng).toFixed(4)}°E`,
+                lastSeen: phone.gpsTime || phone.updatedAt || 'Just now',
+                avatar: user?.photoURL || null,
+                color: '#10b981',
+                lat: parseFloat(phone.lat),
+                lng: parseFloat(phone.lng),
+                accuracy: phone.accuracy || null,
+                device: `📱 ${phone.nickname || 'Phone'} • GPS Beacon`,
+                isTag: false,
+                isPhone: true,
+                isDemo: false,
+              });
+            }
+          });
+        } catch (e) {
+          console.warn('[map] phonesRes parse error:', e);
+        }
+      }
+
+      // ── Always inject local phone GPS if sharing is enabled (Zero-latency) ──
+      let localPhoneGps = lastPosition;
+      if (!localPhoneGps && typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem('last_known_pwa_gps');
+          if (raw) localPhoneGps = JSON.parse(raw);
+        } catch {}
+      }
+
+      const hasConsent =
+        isPhoneSharing ||
+        (typeof window !== 'undefined' &&
+          (localStorage.getItem('popia_gps_consent') === 'granted' ||
+            localStorage.getItem('safelink_location_sharing_consent') === 'granted'));
+
+      if (hasConsent && localPhoneGps?.lat && localPhoneGps?.lng) {
+        const phoneIdx = allMembers.findIndex((m) => m.isPhone || m.id.startsWith('phone_'));
+        const phoneEntry = {
+          id: `phone_${user?.uid || 'me'}`,
+          name: user?.displayName || phoneNickname || localPhoneGps.nickname || 'My Phone',
+          role: 'Phone GPS (Live)',
+          status: 'Live',
+          zone: 'Active Device',
+          battery: null,
+          speed: localPhoneGps.speed ? Math.round(localPhoneGps.speed) : 0,
+          address: `${parseFloat(localPhoneGps.lat).toFixed(4)}°S, ${parseFloat(localPhoneGps.lng).toFixed(4)}°E`,
+          lastSeen: 'Just now',
+          avatar: user?.photoURL || null,
+          color: '#10b981',
+          lat: parseFloat(localPhoneGps.lat),
+          lng: parseFloat(localPhoneGps.lng),
+          accuracy: localPhoneGps.accuracy || null,
+          device: `📱 ${user?.displayName || phoneNickname || 'Phone'} • High-Precision GPS`,
+          isTag: false,
+          isPhone: true,
+          isDemo: false,
+        };
+
+        if (phoneIdx >= 0) {
+          allMembers[phoneIdx] = phoneEntry;
+        } else {
+          allMembers.unshift(phoneEntry);
+        }
       }
 
       if (allMembers.length > 0) {
@@ -355,7 +438,7 @@ function LiveFamilyMapContent() {
       setMembers([]);
       setConnectionStatus('live');
     }
-  }, [user, isPartner, partnerSession]);
+  }, [user, isPartner, partnerSession, isPhoneSharing, lastPosition, phoneNickname]);
 
   /* ─── Fetch Geofences ───────────────────────────────────────── */
   const fetchGeofences = useCallback(async () => {
@@ -393,6 +476,39 @@ function LiveFamilyMapContent() {
     let cancelled = false;
 
     async function initMap() {
+      const initCenter = getInitialMapCenter();
+
+      // Helper to trigger instant live GPS acquisition on map load
+      const requestInstantGps = () => {
+        if (typeof window !== 'undefined' && navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              if (cancelled) return;
+              const liveLat = pos.coords.latitude;
+              const liveLng = pos.coords.longitude;
+              localStorage.setItem(
+                'last_known_pwa_gps',
+                JSON.stringify({
+                  lat: liveLat,
+                  lng: liveLng,
+                  accuracy: pos.coords.accuracy,
+                  speed: pos.coords.speed,
+                  heading: pos.coords.heading,
+                  altitude: pos.coords.altitude,
+                  updatedAt: new Date().toISOString(),
+                })
+              );
+              if (mapInstanceRef.current) {
+                panMapTo(mapInstanceRef.current, liveLat, liveLng, 15);
+              }
+              fetchDeviceLocations();
+            },
+            (err) => console.warn('[map] Initial live GPS query note:', err.message),
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+          );
+        }
+      };
+
       // ── 1. Try Google Maps if API key configured ──
       if (GOOGLE_MAPS_KEY) {
         try {
@@ -400,8 +516,8 @@ function LiveFamilyMapContent() {
           if (cancelled || !mapContainerRef.current) return;
 
           const map = new googleMaps.Map(mapContainerRef.current, {
-            center: { lat: -26.1076, lng: 28.0567 },
-            zoom: 13,
+            center: initCenter,
+            zoom: 15,
             styles: GOOGLE_MAPS_DARK_STYLE,
             disableDefaultUI: true,
             zoomControl: true,
@@ -413,6 +529,7 @@ function LiveFamilyMapContent() {
           mapInstanceRef.current._google = window.google;
           setMapProvider('google');
           setMapReady(true);
+          requestInstantGps();
           return;
         } catch (e) {
           console.warn('[map] Google Maps initialization failed, falling back:', e);
@@ -432,8 +549,8 @@ function LiveFamilyMapContent() {
           const map = new mapboxgl.Map({
             container: mapContainerRef.current,
             style: 'mapbox://styles/mapbox/dark-v11',
-            center: [28.0567, -26.1076],
-            zoom: 13,
+            center: [initCenter.lng, initCenter.lat],
+            zoom: 15,
             attributionControl: false,
           });
 
@@ -445,6 +562,7 @@ function LiveFamilyMapContent() {
               mapInstanceRef.current._isMapbox = true;
               setMapProvider('mapbox');
               setMapReady(true);
+              requestInstantGps();
             }
           });
           return;
@@ -453,7 +571,7 @@ function LiveFamilyMapContent() {
         }
       }
 
-      // ── 3. Leaflet Fallback (Free CartoDB Dark Tiles) ──
+      // ── 3. Leaflet Fallback (Free Tactical Dark Radar Tiles) ──
       try {
         const L = (await import('leaflet')).default;
 
@@ -471,8 +589,8 @@ function LiveFamilyMapContent() {
         await new Promise((r) => setTimeout(r, 150));
 
         const map = L.map(mapContainerRef.current, {
-          center: [-26.1076, 28.0567],
-          zoom: 13,
+          center: [initCenter.lat, initCenter.lng],
+          zoom: 15,
           zoomControl: false,
           attributionControl: false,
         });
@@ -499,6 +617,7 @@ function LiveFamilyMapContent() {
         mapInstanceRef.current._L = L;
         setMapProvider('leaflet');
         setMapReady(true);
+        requestInstantGps();
       } catch (e) {
         console.error('[map] Leaflet init failed:', e);
         setMapReady(false);
@@ -641,6 +760,21 @@ function LiveFamilyMapContent() {
         const overlay = new HTMLMarkerOverlay(latLng, markerHtml, () => setSelectedMember(member));
         overlay.setMap(map);
         markersRef.current[member.id] = overlay;
+
+        // Draw accuracy circle for phone GPS
+        if (member.isPhone && member.accuracy && member.accuracy > 0) {
+          const accCircle = new google.maps.Circle({
+            strokeColor: '#10b981',
+            strokeOpacity: 0.6,
+            strokeWeight: 1.5,
+            fillColor: '#10b981',
+            fillOpacity: 0.12,
+            map: map,
+            center: { lat: member.lat, lng: member.lng },
+            radius: Math.min(Math.max(member.accuracy, 10), 200),
+          });
+          markersRef.current[`acc-${member.id}`] = accCircle;
+        }
       } else if (isLeaflet) {
         const L = map._L;
         const icon = L.divIcon({
@@ -652,6 +786,19 @@ function LiveFamilyMapContent() {
         const marker = L.marker([member.lat, member.lng], { icon }).addTo(map);
         marker.on('click', () => setSelectedMember(member));
         markersRef.current[member.id] = marker;
+
+        // Draw accuracy circle for phone GPS
+        if (member.isPhone && member.accuracy && member.accuracy > 0) {
+          const accCircle = L.circle([member.lat, member.lng], {
+            radius: Math.min(Math.max(member.accuracy, 10), 200),
+            color: '#10b981',
+            fillColor: '#10b981',
+            fillOpacity: 0.12,
+            weight: 1.5,
+            opacity: 0.6,
+          }).addTo(map);
+          markersRef.current[`acc-${member.id}`] = accCircle;
+        }
       } else {
         // Mapbox GL
         const el = document.createElement('div');
@@ -753,28 +900,71 @@ function LiveFamilyMapContent() {
     return () => clearInterval(pollTimerRef.current);
   }, [fetchDeviceLocations, fetchGeofences]);
 
+  /* ─── Listen for Real-Time Phone GPS Broadcasts ─────────────── */
+  useEffect(() => {
+    const handlePhoneLocationBroadcast = (e) => {
+      const coords = e.detail;
+      if (coords?.lat && coords?.lng) {
+        fetchDeviceLocations();
+      }
+    };
+    window.addEventListener('safelink_phone_location_updated', handlePhoneLocationBroadcast);
+    return () => window.removeEventListener('safelink_phone_location_updated', handlePhoneLocationBroadcast);
+  }, [fetchDeviceLocations]);
+
   /* ─── Pan to selected member ────────────────────────────────── */
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current || !selectedMember?.lat || !selectedMember?.lng) return;
 
-    const map = mapInstanceRef.current;
-    if (map._isGoogle) {
-      map.panTo({ lat: selectedMember.lat, lng: selectedMember.lng });
-      map.setZoom(14);
-    } else if (map._isLeaflet) {
-      map.setView([selectedMember.lat, selectedMember.lng], 14, { animate: true, duration: 1 });
-    } else if (map.flyTo) {
-      map.flyTo({
-        center: [selectedMember.lng, selectedMember.lat],
-        zoom: 14,
-        duration: 1000,
-      });
-    }
+    panMapTo(mapInstanceRef.current, selectedMember.lat, selectedMember.lng, 15);
   }, [selectedMember, mapReady]);
 
-  /* ─── Fit bounds to all devices ──────────────────────────────── */
+  /* ─── Locate Phone Position Directly with High Precision ─── */
+  const handleLocatePhone = useCallback(() => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      alert('Geolocation is not supported on this device');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const accuracy = pos.coords.accuracy;
+
+        localStorage.setItem(
+          'last_known_pwa_gps',
+          JSON.stringify({
+            lat,
+            lng,
+            accuracy,
+            speed: pos.coords.speed,
+            updatedAt: new Date().toISOString(),
+          })
+        );
+
+        panMapTo(mapInstanceRef.current, lat, lng, 16);
+        window.dispatchEvent(
+          new CustomEvent('safelink_phone_location_updated', {
+            detail: { lat, lng, accuracy },
+          })
+        );
+        fetchDeviceLocations();
+      },
+      (err) => {
+        console.warn('[map] Locate Phone error:', err);
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+    );
+  }, [fetchDeviceLocations]);
+
+  /* ─── Fit bounds to all devices or center on phone GPS ────────── */
   const handleRecenter = () => {
-    if (!mapInstanceRef.current || members.length === 0) return;
+    if (!mapInstanceRef.current) return;
+    if (members.length === 0) {
+      handleLocatePhone();
+      return;
+    }
     const map = mapInstanceRef.current;
 
     if (map._isGoogle) {
@@ -799,19 +989,34 @@ function LiveFamilyMapContent() {
   /* ─── Toggle Phone GPS Sharing on Radar ─── */
   const handleTogglePhoneSharing = async () => {
     setPhoneToggling(true);
-    if (isPhoneSharing) {
+    if (isBroadcasting) {
       await optOutPhoneSharing();
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('popia_gps_consent');
+        localStorage.removeItem('safelink_location_sharing_consent');
+        localStorage.removeItem('last_known_pwa_gps');
+      }
     } else {
       await optInPhoneSharing();
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('popia_gps_consent', 'granted');
+        localStorage.setItem('safelink_location_sharing_consent', 'granted');
+      }
     }
     // Immediate refresh
     setTimeout(() => {
       fetchDeviceLocations();
-    }, 800);
+    }, 600);
     setPhoneToggling(false);
   };
 
   /* ─── Status badge styling ──────────────────────────────────── */
+  const isConsentGranted =
+    typeof window !== 'undefined' &&
+    (localStorage.getItem('popia_gps_consent') === 'granted' ||
+      localStorage.getItem('safelink_location_sharing_consent') === 'granted');
+  const isBroadcasting = isPhoneSharing || isConsentGranted;
+
   const statusColor = '#38a169';
   const statusText =
     connectionStatus === 'partner_live'
@@ -837,12 +1042,21 @@ function LiveFamilyMapContent() {
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Recenter Button */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Locate My Phone GPS Button */}
+          <button
+            onClick={handleLocatePhone}
+            className="glass-panel p-2 rounded-full hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center text-secondary border border-secondary/40 shadow-lg cursor-pointer"
+            title="Locate my exact phone GPS position"
+          >
+            <span className="material-symbols-outlined text-[18px]">my_location</span>
+          </button>
+
+          {/* Recenter All Button */}
           <button
             onClick={handleRecenter}
-            className="glass-panel p-2 rounded-full hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center text-on-surface border border-white/10"
-            title="Recenter all devices"
+            className="glass-panel p-2 rounded-full hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center text-on-surface border border-white/10 shadow-lg cursor-pointer"
+            title="Recenter devices and phone"
           >
             <span className="material-symbols-outlined text-[18px]">center_focus_strong</span>
           </button>
@@ -864,17 +1078,17 @@ function LiveFamilyMapContent() {
             onClick={handleTogglePhoneSharing}
             disabled={phoneToggling}
             className={`glass-panel px-3 py-1.5 rounded-full hover:bg-white/10 active:scale-95 transition-all text-xs font-bold flex items-center gap-1.5 border shadow-lg cursor-pointer ${
-              isPhoneSharing
+              isBroadcasting
                 ? 'text-emerald-400 border-emerald-500/50 bg-emerald-500/15 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
                 : 'text-on-surface border-white/10'
             } ${phoneToggling ? 'opacity-50 cursor-wait' : ''}`}
-            title={isPhoneSharing ? 'Phone GPS is broadcasting live to radar' : 'Broadcast this phone GPS to radar'}
+            title={isBroadcasting ? 'Phone GPS is broadcasting live to radar' : 'Broadcast this phone GPS to radar'}
           >
-            <span className={`w-2 h-2 rounded-full ${isPhoneSharing ? 'bg-emerald-400 animate-ping' : 'bg-on-surface-variant'}`} />
+            <span className={`w-2 h-2 rounded-full ${isBroadcasting ? 'bg-emerald-400 animate-ping' : 'bg-on-surface-variant'}`} />
             <span className="material-symbols-outlined text-[16px]">
-              {isPhoneSharing ? 'satellite_alt' : 'smartphone'}
+              {isBroadcasting ? 'satellite_alt' : 'smartphone'}
             </span>
-            <span className="hidden xs:inline">{isPhoneSharing ? 'Phone Live' : 'Share Phone'}</span>
+            <span className="hidden xs:inline">{isBroadcasting ? 'Phone Live' : 'Share Phone'}</span>
           </button>
 
           {/* Add Device / Device List */}

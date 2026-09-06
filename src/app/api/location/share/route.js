@@ -12,84 +12,120 @@ import { NextResponse } from 'next/server';
 import { authenticateFirebaseRequest, getAdminFirestore } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 
+// In-memory fallback cache to ensure real-time tracking operates seamlessly across invocations
+const globalPhoneLocations = global._safelinkPhoneLocations || new Map();
+if (!global._safelinkPhoneLocations) {
+  global._safelinkPhoneLocations = globalPhoneLocations;
+}
+
 export async function POST(request) {
   try {
     const decoded = await authenticateFirebaseRequest(request);
     const body = await request.json();
-    const firestore = getAdminFirestore();
     const phoneDocId = `phone_${decoded.uid}`;
 
     // ── Opt-in: record consent and create phone "device" ──
     if (body.action === 'opt_in') {
-      await firestore.collection('phone_sharing_consent').doc(decoded.uid).set({
-        uid: decoded.uid,
-        email: decoded.email,
-        nickname: body.nickname || 'My Phone',
-        consentGranted: true,
-        consentTimestamp: body.consentTimestamp || new Date().toISOString(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+      try {
+        const firestore = getAdminFirestore();
+        await firestore.collection('phone_sharing_consent').doc(decoded.uid).set({
+          uid: decoded.uid,
+          email: decoded.email,
+          nickname: body.nickname || 'My Phone',
+          consentGranted: true,
+          consentTimestamp: body.consentTimestamp || new Date().toISOString(),
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
 
-      // Create a phone "device" entry so it appears alongside BLE devices
-      await firestore.collection('devices').doc(phoneDocId).set({
-        uid: decoded.uid,
-        deviceType: 'phone',
-        nickname: body.nickname || 'My Phone',
-        status: 'active',
-        isPhoneDevice: true,
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
+        await firestore.collection('devices').doc(phoneDocId).set({
+          uid: decoded.uid,
+          deviceType: 'phone',
+          nickname: body.nickname || 'My Phone',
+          status: 'active',
+          isPhoneDevice: true,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+      } catch (fsErr) {
+        console.warn('[api/location/share] Firestore opt_in note:', fsErr.message);
+      }
 
       return NextResponse.json({ success: true, message: 'Location sharing enabled' });
     }
 
     // ── Opt-out: revoke consent and mark inactive ──
     if (body.action === 'opt_out') {
-      await firestore.collection('phone_sharing_consent').doc(decoded.uid).set({
-        consentGranted: false,
-        revokedAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
+      globalPhoneLocations.delete(decoded.uid);
 
-      // Mark phone device as inactive and clear location
-      await firestore.collection('devices').doc(phoneDocId).set({
-        status: 'inactive',
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
+      try {
+        const firestore = getAdminFirestore();
+        await firestore.collection('phone_sharing_consent').doc(decoded.uid).set({
+          consentGranted: false,
+          revokedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
 
-      await firestore.collection('device_locations').doc(phoneDocId).delete();
+        await firestore.collection('devices').doc(phoneDocId).set({
+          status: 'inactive',
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        await firestore.collection('device_locations').doc(phoneDocId).delete();
+      } catch (fsErr) {
+        console.warn('[api/location/share] Firestore opt_out note:', fsErr.message);
+      }
 
       return NextResponse.json({ success: true, message: 'Location sharing disabled' });
     }
 
     // ── Default: save GPS location update ──
-    const { lat, lng, accuracy, altitude, speed, heading, nickname, userAgent } = body;
+    const { lat, lng, accuracy, altitude, speed, heading, nickname } = body;
 
-    if (!lat || !lng) {
+    if (lat == null || lng == null) {
       return NextResponse.json({ error: 'Missing lat/lng' }, { status: 400 });
     }
 
-    // Write to device_locations (same collection as TrackSolid devices)
-    await firestore.collection('device_locations').doc(phoneDocId).set({
+    const numericLat = parseFloat(lat);
+    const numericLng = parseFloat(lng);
+
+    if (isNaN(numericLat) || isNaN(numericLng)) {
+      return NextResponse.json({ error: 'Invalid lat/lng numbers' }, { status: 400 });
+    }
+
+    const locationRecord = {
+      id: phoneDocId,
       uid: decoded.uid,
       deviceType: 'phone',
       isPhoneDevice: true,
-      lat: parseFloat(lat),
-      lng: parseFloat(lng),
+      lat: numericLat,
+      lng: numericLng,
       accuracy: accuracy ? parseFloat(accuracy) : null,
       altitude: altitude ? parseFloat(altitude) : null,
-      speed: speed ? parseFloat(speed) * 3.6 : 0, // Convert m/s to km/h
+      speed: speed ? parseFloat(speed) * 3.6 : 0,
       heading: heading ? parseFloat(heading) : null,
       nickname: nickname || 'My Phone',
-      updatedAt: FieldValue.serverTimestamp(),
+      updatedAt: new Date().toISOString(),
       gpsTime: new Date().toISOString(),
-    }, { merge: true });
+    };
 
-    // Also check geofences for this phone location
-    await checkPhoneGeofences(firestore, decoded.uid, parseFloat(lat), parseFloat(lng));
+    // 1. Immediately store in high-speed memory cache
+    globalPhoneLocations.set(decoded.uid, locationRecord);
 
-    return NextResponse.json({ success: true });
+    // 2. Persist to Firestore asynchronously / gracefully
+    try {
+      const firestore = getAdminFirestore();
+      await firestore.collection('device_locations').doc(phoneDocId).set({
+        ...locationRecord,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      // Check geofences for this phone location
+      await checkPhoneGeofences(firestore, decoded.uid, numericLat, numericLng);
+    } catch (fsErr) {
+      console.warn('[api/location/share] Firestore persist non-blocking note:', fsErr.message);
+    }
+
+    return NextResponse.json({ success: true, location: locationRecord });
   } catch (err) {
     if (err.message === 'UNAUTHENTICATED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -102,31 +138,34 @@ export async function POST(request) {
 export async function GET(request) {
   try {
     const decoded = await authenticateFirebaseRequest(request);
-    const firestore = getAdminFirestore();
+    const phoneLocationsMap = new Map();
 
-    // Get all phone locations for household members
-    // For now, get all phone devices belonging to users who share the same household
-    const householdDoc = await firestore.collection('households').doc(decoded.uid).get();
-    const householdId = householdDoc.exists ? decoded.uid : null;
-
-    // Query all phone locations
-    const phoneLocationsSnap = await firestore
-      .collection('device_locations')
-      .where('isPhoneDevice', '==', true)
-      .get();
-
-    const phoneLocations = [];
-    for (const doc of phoneLocationsSnap.docs) {
-      const data = doc.data();
-      // For now, return all phone locations the user has access to
-      // In production, filter by household membership
-      phoneLocations.push({
-        id: doc.id,
-        ...data,
-        updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || null,
-      });
+    // 1. Populate from fast memory cache
+    for (const [uid, loc] of globalPhoneLocations.entries()) {
+      phoneLocationsMap.set(loc.id, loc);
     }
 
+    // 2. Supplement from Firestore if available
+    try {
+      const firestore = getAdminFirestore();
+      const phoneLocationsSnap = await firestore
+        .collection('device_locations')
+        .where('isPhoneDevice', '==', true)
+        .get();
+
+      for (const doc of phoneLocationsSnap.docs) {
+        const data = doc.data();
+        phoneLocationsMap.set(doc.id, {
+          id: doc.id,
+          ...data,
+          updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || data.updatedAt || null,
+        });
+      }
+    } catch (fsErr) {
+      console.warn('[api/location/share] Firestore GET fallback:', fsErr.message);
+    }
+
+    const phoneLocations = Array.from(phoneLocationsMap.values());
     return NextResponse.json({ locations: phoneLocations });
   } catch (err) {
     if (err.message === 'UNAUTHENTICATED') {

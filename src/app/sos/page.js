@@ -103,7 +103,23 @@ function SOSFlowContent() {
 
   // Get user's GPS location
   useEffect(() => {
-    if (!userLocation.lat && navigator.geolocation) {
+    if (!userLocation.lat && typeof window !== 'undefined') {
+      try {
+        const cachedRaw = localStorage.getItem('last_known_pwa_gps');
+        if (cachedRaw) {
+          const cached = JSON.parse(cachedRaw);
+          if (cached?.lat && cached?.lng) {
+            setUserLocation({
+              lat: parseFloat(cached.lat),
+              lng: parseFloat(cached.lng),
+              address: 'Sheffield Beach, Ballito (GPS fix)',
+            });
+          }
+        }
+      } catch {}
+    }
+
+    if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           setUserLocation({
@@ -114,11 +130,15 @@ function SOSFlowContent() {
         },
         (err) => {
           console.warn('[sos] Geolocation error:', err);
-          setLocationError('Could not determine your location. Please enable GPS.');
-          // Fallback: Sandton, JHB
-          setUserLocation({ lat: -26.1076, lng: 28.0567, address: 'Sandton, Johannesburg (approx)' });
+          setLocationError('Could not determine your live location. Please enable GPS.');
+          // Fallback: Sheffield Beach, Ballito, KZN
+          setUserLocation((prev) =>
+            prev.lat
+              ? prev
+              : { lat: -29.4925, lng: 31.2312, address: 'Sheffield Beach, Ballito (approx)' }
+          );
         },
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
       );
     }
   }, [userLocation.lat]);

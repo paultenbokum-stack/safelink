@@ -169,8 +169,8 @@ export default function GpsConsentModal() {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="bg-[#0b1724] border border-white/15 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-on-surface">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
+      <div className="bg-surface border border-white/15 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-on-surface">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-xl bg-secondary/10 border border-secondary/30 flex items-center justify-center text-secondary">
             <span className="material-symbols-outlined text-2xl">my_location</span>

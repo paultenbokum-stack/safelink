@@ -3,28 +3,56 @@
 @tailwind utilities;
 
 /* ─── SafeLink Design System — Aligned to Google Stitch ─── */
-:root {
-  /* Core palette */
+:root,
+html.dark,
+[data-theme="dark"] {
+  /* Core palette — Dark Mode */
   --background:                #041522;
+  --background-rgb:            4, 21, 34;
+
   --surface:                   #041522;
+  --surface-rgb:               4, 21, 34;
+
   --surface-container-lowest:  #00101c;
+  --surface-container-lowest-rgb: 0, 16, 28;
+
   --surface-container-low:     #0c1d2a;
+  --surface-container-low-rgb: 12, 29, 42;
+
   --surface-container:         #10212f;
+  --surface-container-rgb:     16, 33, 47;
+
   --surface-container-high:    #1b2c39;
+  --surface-container-high-rgb: 27, 44, 57;
+
   --surface-container-highest: #263645;
+  --surface-container-highest-rgb: 38, 54, 69;
+
   --surface-bright:            #2b3b49;
+  --surface-bright-rgb:        43, 59, 73;
+
+  --surface-dim:               #041522;
+  --surface-dim-rgb:           4, 21, 34;
+
+  --surface-variant:           #263645;
+  --surface-variant-rgb:       38, 54, 69;
 
   /* Brand colours */
   --primary:                   #9fcafb;
+  --primary-rgb:               159, 202, 251;
   --primary-container:         #2c5a85;
+  --primary-container-rgb:     44, 90, 133;
   --on-primary:                #003256;
+  --on-primary-rgb:            0, 50, 86;
   --on-primary-container:      #a9d1ff;
 
   --secondary:                 #ffc32f;
+  --secondary-rgb:             255, 195, 47;
   --secondary-fixed:           #ffdea0;
   --secondary-fixed-dim:       #f9bd25;
   --secondary-container:       #e0a700;
   --on-secondary:              #402d00;
+  --on-secondary-rgb:          64, 45, 0;
   --on-secondary-container:    #583f00;
 
   /* Semantic */
@@ -39,10 +67,100 @@
 
   /* Text & outline */
   --on-surface:                #d3e4f7;
+  --on-surface-rgb:            211, 228, 247;
   --on-surface-variant:        #c2c7d0;
+  --on-surface-variant-rgb:    194, 199, 208;
   --on-background:             #d3e4f7;
+  --on-background-rgb:         211, 228, 247;
   --outline:                   #8c9199;
+  --outline-rgb:               140, 145, 153;
   --outline-variant:           #42474e;
+  --outline-variant-rgb:       66, 71, 78;
+
+  /* Shadows & glass */
+  --glass-bg:                  rgba(22, 34, 49, 0.85);
+  --glass-border:              rgba(255, 255, 255, 0.1);
+  --card-shadow:               0 4px 20px -2px rgba(0, 0, 0, 0.35);
+}
+
+html.light,
+:root.light,
+[data-theme="light"] {
+  /* Core palette — Light Mode */
+  --background:                #f8fafc;
+  --background-rgb:            248, 250, 252;
+
+  --surface:                   #ffffff;
+  --surface-rgb:               255, 255, 255;
+
+  --surface-container-lowest:  #ffffff;
+  --surface-container-lowest-rgb: 255, 255, 255;
+
+  --surface-container-low:     #f8fafc;
+  --surface-container-low-rgb: 248, 250, 252;
+
+  --surface-container:         #f1f5f9;
+  --surface-container-rgb:     241, 245, 249;
+
+  --surface-container-high:    #e2e8f0;
+  --surface-container-high-rgb: 226, 232, 240;
+
+  --surface-container-highest: #cbd5e1;
+  --surface-container-highest-rgb: 203, 213, 225;
+
+  --surface-bright:            #ffffff;
+  --surface-bright-rgb:        255, 255, 255;
+
+  --surface-dim:               #e2e8f0;
+  --surface-dim-rgb:           226, 232, 240;
+
+  --surface-variant:           #e2e8f0;
+  --surface-variant-rgb:       226, 232, 240;
+
+  /* Brand colours */
+  --primary:                   #1d4ed8;
+  --primary-rgb:               29, 78, 216;
+  --primary-container:         #dbeafe;
+  --primary-container-rgb:     219, 234, 254;
+  --on-primary:                #ffffff;
+  --on-primary-rgb:            255, 255, 255;
+  --on-primary-container:      #1e3a8a;
+
+  --secondary:                 #d97706;
+  --secondary-rgb:             217, 119, 6;
+  --secondary-fixed:           #fef3c7;
+  --secondary-fixed-dim:       #fde68a;
+  --secondary-container:       #fef3c7;
+  --on-secondary:              #ffffff;
+  --on-secondary-rgb:          255, 255, 255;
+  --on-secondary-container:    #78350f;
+
+  /* Semantic */
+  --error:                     #dc2626;
+  --error-container:           #fee2e2;
+  --on-error:                  #ffffff;
+  --on-error-container:        #991b1b;
+  --tertiary:                  #e11d48;
+  --tertiary-container:        #ffe4e6;
+  --on-tertiary:               #ffffff;
+  --on-tertiary-container:     #9f1239;
+
+  /* Text & outline */
+  --on-surface:                #0f172a;
+  --on-surface-rgb:            15, 23, 42;
+  --on-surface-variant:        #475569;
+  --on-surface-variant-rgb:    71, 85, 105;
+  --on-background:             #0f172a;
+  --on-background-rgb:         15, 23, 42;
+  --outline:                   #cbd5e1;
+  --outline-rgb:               203, 213, 225;
+  --outline-variant:           #e2e8f0;
+  --outline-variant-rgb:       226, 232, 240;
+
+  /* Shadows & glass */
+  --glass-bg:                  rgba(255, 255, 255, 0.9);
+  --glass-border:              rgba(0, 0, 0, 0.08);
+  --card-shadow:               0 4px 20px -2px rgba(0, 0, 0, 0.06);
 }
 
 /* Base Body Styles */
@@ -54,21 +172,58 @@ html, body {
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Glassmorphism Classes from Stitch */
 .glass-panel {
-  background-color: rgba(22, 34, 49, 0.8);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--card-shadow);
 }
 
 .glass-card {
-  background-color: rgba(22, 34, 49, 0.8);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--card-shadow);
+}
+
+/* Adaptive Light Theme Overrides for hardcoded border-white classes */
+html.light .border-white\/5 {
+  border-color: rgba(0, 0, 0, 0.04);
+}
+html.light .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+html.light .border-white\/15,
+html.light .border-white\/20 {
+  border-color: rgba(0, 0, 0, 0.12);
+}
+html.light .border-white\/30,
+html.light .border-white\/40 {
+  border-color: rgba(0, 0, 0, 0.18);
+}
+
+html.light .hover\:bg-white\/5:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+html.light .hover\:bg-white\/10:hover {
+  background-color: rgba(0, 0, 0, 0.08);
+}
+html.light .active\:bg-white\/5:active {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+html.light .shadow-2xl {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.12);
+}
+
+html.light nav {
+  box-shadow: 0 -4px 20px -2px rgba(0, 0, 0, 0.08);
 }
 
 /* Animations from Stitch */
@@ -120,6 +275,15 @@ html, body {
       radial-gradient(circle at 50% 50%, rgba(44, 90, 133, 0.15) 0%, transparent 60%),
       linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
       linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 100% 100%, 24px 24px, 24px 24px;
+}
+
+html.light .map-bg {
+  background-color: #f1f5f9;
+  background-image: 
+      radial-gradient(circle at 50% 50%, rgba(29, 78, 216, 0.08) 0%, transparent 60%),
+      linear-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
   background-size: 100% 100%, 24px 24px, 24px 24px;
 }
 

@@ -3,10 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
+import { useTheme } from '@/lib/theme-context';
 import { useRouter } from 'next/navigation';
 
 export default function Header({ title, showBack = false, showNotification = true, badgeCount = 0 }) {
   const { user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const router = useRouter();
 
   const [avatarSrc, setAvatarSrc] = React.useState(
@@ -122,8 +124,24 @@ export default function Header({ title, showBack = false, showNotification = tru
           </Link>
         </nav>
 
-        {showNotification && (
-          <div className="flex items-center gap-sm">
+        <div className="flex items-center gap-1.5 sm:gap-sm">
+          {/* Light / Dark Mode Toggle */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            className="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:text-secondary transition-all active:scale-90 rounded-full hover:bg-white/5 cursor-pointer relative group"
+          >
+            <span
+              className="material-symbols-outlined text-[22px] transition-transform duration-300 group-hover:rotate-45 text-secondary"
+              style={{ fontVariationSettings: "'FILL' 1" }}
+            >
+              {theme === 'dark' ? 'light_mode' : 'dark_mode'}
+            </span>
+          </button>
+
+          {showNotification && (
             <Link
               href="/dashboard"
               className="relative w-10 h-10 flex items-center justify-center text-on-surface-variant hover:text-secondary transition-colors active:scale-95 rounded-full hover:bg-white/5"
@@ -132,8 +150,8 @@ export default function Header({ title, showBack = false, showNotification = tru
               <span className="absolute top-2 right-2.5 w-2 h-2 bg-error rounded-full animate-ping"></span>
               <span className="absolute top-2 right-2.5 w-2 h-2 bg-error rounded-full"></span>
             </Link>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </header>
   );

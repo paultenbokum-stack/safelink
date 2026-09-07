@@ -143,13 +143,13 @@ export default function AvatarEditorModal({ isOpen, onClose, currentAvatar, onAv
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-      <div className="bg-[#091422] border border-white/15 rounded-3xl max-w-md w-full p-6 space-y-5 text-on-surface shadow-2xl relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
+      <div className="bg-surface border border-white/15 rounded-3xl max-w-md w-full p-6 space-y-5 text-on-surface shadow-2xl relative">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-secondary text-2xl">account_circle</span>
-            <h3 className="font-headline-md text-lg font-bold text-white">Edit Profile Picture</h3>
+            <h3 className="font-headline-md text-lg font-bold text-on-surface">Edit Profile Picture</h3>
           </div>
           <button
             onClick={onClose}

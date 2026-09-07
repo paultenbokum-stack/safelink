@@ -4,6 +4,7 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
+import { useTheme } from '@/lib/theme-context';
 import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
@@ -20,6 +21,7 @@ export default function ProfilePage() {
 
 function ProfileContent() {
   const { user, logout, partnerSession } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const router = useRouter();
   const [household, setHousehold] = React.useState(null);
   const [showAvatarModal, setShowAvatarModal] = React.useState(false);
@@ -277,6 +279,34 @@ function ProfileContent() {
               </Link>
             )
           ))}
+
+          {/* Appearance & Theme Toggle */}
+          <div className="glass-panel p-md rounded-2xl flex items-center justify-between border border-white/10">
+            <div className="flex items-center gap-md">
+              <div className="w-11 h-11 rounded-xl bg-surface-container flex items-center justify-center text-primary border border-white/5">
+                <span className="material-symbols-outlined text-2xl">
+                  {theme === 'dark' ? 'dark_mode' : 'light_mode'}
+                </span>
+              </div>
+              <div>
+                <div className="font-label-md text-sm font-bold text-on-surface">Appearance & Theme</div>
+                <div className="font-label-sm text-xs text-on-surface-variant mt-0.5">
+                  Active mode: <span className="capitalize font-semibold text-secondary">{theme}</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={toggleTheme}
+              type="button"
+              className="flex items-center gap-2 bg-surface-container hover:bg-surface-container-high px-3 py-1.5 rounded-full border border-white/10 transition-colors cursor-pointer text-xs font-semibold text-on-surface active:scale-95"
+            >
+              <span className="material-symbols-outlined text-sm text-secondary">
+                {theme === 'dark' ? 'light_mode' : 'dark_mode'}
+              </span>
+              <span>Switch to {theme === 'dark' ? 'Light' : 'Dark'}</span>
+            </button>
+          </div>
 
           {/* Location Sharing */}
           <div className="mt-2">

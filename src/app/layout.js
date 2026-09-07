@@ -1,5 +1,6 @@
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
+import { ThemeProvider } from '@/lib/theme-context';
 
 export const metadata = {
   title: 'SafeLink - Digital Bodyguard',
@@ -19,7 +20,7 @@ import GpsConsentModal from '@/app/components/GpsConsentModal';
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -28,13 +29,30 @@ export default function RootLayout({ children }) {
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var saved = localStorage.getItem('safelink_theme');
+                  var theme = saved || 'dark';
+                  document.documentElement.classList.remove('light', 'dark');
+                  document.documentElement.classList.add(theme);
+                  document.documentElement.setAttribute('data-theme', theme);
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
       </head>
       <body className="bg-background text-on-background min-h-screen selection:bg-secondary/30 selection:text-secondary">
-        <AuthProvider>
-          <PwaRegister />
-          <GpsConsentModal />
-          {children}
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <PwaRegister />
+            <GpsConsentModal />
+            {children}
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

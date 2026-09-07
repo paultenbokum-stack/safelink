@@ -148,8 +148,8 @@ function loadGoogleMapsScript(apiKey) {
 }
 
 /* ─── Geolocation & Map Centering Helpers ──────────────────────── */
-// Default coordinates: Sheffield Beach / Ballito, KwaZulu-Natal (-29.4925, 31.2312)
-export const SHEFFIELD_BALLITO_COORDS = { lat: -29.4925, lng: 31.2312 };
+// Default coordinates: Ballito / The Village, KwaZulu-Natal (-29.5282, 31.2111)
+export const SHEFFIELD_BALLITO_COORDS = { lat: -29.5282, lng: 31.2111 };
 
 function getInitialMapCenter() {
   if (typeof window !== 'undefined') {
@@ -351,34 +351,73 @@ function LiveFamilyMapContent() {
       try {
         const cached = localStorage.getItem('safelink_user_devices');
         if (cached) {
-          const localDevs = JSON.parse(cached);
+          let localDevs = JSON.parse(cached);
           if (Array.isArray(localDevs)) {
-            localDevs.forEach((ld, idx) => {
-              if (ld.imei && !allMembers.some((m) => m.id === ld.imei)) {
+            // Auto-migrate typo 980980820010378 -> 980980820010318
+            let mutated = false;
+            localDevs = localDevs.map((ld) => {
+              if (ld.imei === '980980820010378' || ld.id === '980980820010378' || ld.id === 'device_980980820010378') {
+                mutated = true;
+                return {
+                  ...ld,
+                  id: 'device_980980820010318',
+                  imei: '980980820010318',
+                  name: ld.name && !ld.name.includes('10378') ? ld.name : 'AARON - NODE -10318',
+                };
+              }
+              return ld;
+            });
+            if (mutated) {
+              try {
+                localStorage.setItem('safelink_user_devices', JSON.stringify(localDevs));
+              } catch {}
+            }
+
+            const unlisted = localDevs.filter((ld) => ld.imei && !allMembers.some((m) => m.id === ld.imei));
+            if (unlisted.length > 0) {
+              const unlistedLocs = await Promise.all(
+                unlisted.map(async (ld) => {
+                  try {
+                    const locRes = await fetch(`/api/devices/${ld.imei}/location`, {
+                      headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (locRes.ok) return await locRes.json();
+                  } catch (e) {
+                    console.warn(`Failed to fetch location for local device ${ld.imei}:`, e);
+                  }
+                  return null;
+                })
+              );
+
+              unlisted.forEach((ld, idx) => {
+                const loc = unlistedLocs[idx];
+                const hasGps = loc?.lat && loc?.lng;
                 allMembers.push({
                   id: ld.imei,
-                  name: ld.name || `Device ${ld.imei.slice(-4)}`,
-                  role: ld.category || 'Sentinel Tracker',
-                  status: 'Connecting...',
+                  name: ld.name || ld.nickname || `Device ${ld.imei.slice(-4)}`,
+                  role: ld.category || ld.model || 'Sentinel Tracker',
+                  status: loc?.isOnline ? 'Online' : (hasGps ? 'Offline' : 'Connecting...'),
                   zone: '',
-                  battery: null,
-                  speed: 0,
-                  address: 'Awaiting first GPS fix...',
-                  lastSeen: 'Just linked',
+                  battery: loc?.batteryLevel != null ? loc.batteryLevel : (ld.battery || null),
+                  speed: loc?.speed || 0,
+                  address: loc?.address || (hasGps ? `${loc.lat.toFixed(4)}°S, ${loc.lng.toFixed(4)}°E` : 'Awaiting first GPS fix...'),
+                  lastSeen: loc?.gpsTime || 'Just linked',
                   avatar: null,
                   color: getDeviceColor(allMembers.length),
-                  lat: SHEFFIELD_BALLITO_COORDS.lat + ((allMembers.length + 1) * 0.004),
-                  lng: SHEFFIELD_BALLITO_COORDS.lng + ((allMembers.length + 1) * 0.004),
-                  device: `Sentinel • ${ld.imei.slice(-6)}`,
-                  isTag: false,
+                  lat: hasGps ? loc.lat : (SHEFFIELD_BALLITO_COORDS.lat + ((allMembers.length + 1) * 0.003)),
+                  lng: hasGps ? loc.lng : (SHEFFIELD_BALLITO_COORDS.lng + ((allMembers.length + 1) * 0.003)),
+                  device: `${ld.category || ld.model || 'Sentinel'} • ${ld.imei.slice(-6)}`,
+                  isTag: loc?.isTag || false,
                   isPhone: false,
                   isDemo: false,
                 });
-              }
-            });
+              });
+            }
           }
         }
-      } catch {}
+      } catch (localErr) {
+        console.warn('[map] Local devices merge error:', localErr);
+      }
 
       // Process phone GPS sharing from backend
       if (phonesRes?.ok) {

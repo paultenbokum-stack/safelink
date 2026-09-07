@@ -19,11 +19,11 @@ import { getAdminFirestore } from './firebase-admin';
 /* ─── Configuration ───────────────────────────────────────────── */
 
 const CONFIG = {
-  apiUrl:    process.env.TRACKSOLID_API_URL    || 'https://hk-open.tracksolidpro.com/route/rest',
-  appKey:    process.env.TRACKSOLID_APP_KEY     || '',
-  appSecret: process.env.TRACKSOLID_APP_SECRET  || '',
-  userId:    process.env.TRACKSOLID_USER_ID     || '',
-  userPwdMd5: process.env.TRACKSOLID_USER_PWD_MD5 || '',
+  apiUrl:    process.env.TRACKSOLID_API_URL    || 'https://eu-open.tracksolidpro.com/route/rest',
+  appKey:    process.env.TRACKSOLID_APP_KEY     || '8FB345B8693CCD007115F562D039BA7F339A22A4105B6558',
+  appSecret: process.env.TRACKSOLID_APP_SECRET  || '878159657c974f7cbf695640563fae40',
+  userId:    process.env.TRACKSOLID_USER_ID     || 'GlobalSecurityConsulting',
+  userPwdMd5: process.env.TRACKSOLID_USER_PWD_MD5 || '3aadaa977aa699552dba1373e9c63994',
 };
 
 const TOKEN_CACHE_COLLECTION = '_tracksolid_tokens';

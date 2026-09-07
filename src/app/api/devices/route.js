@@ -6,7 +6,7 @@
  */
 import { NextResponse } from 'next/server';
 import { authenticateFirebaseRequest, getAdminFirestore } from '@/lib/firebase-admin';
-import { listDevices, bindDevice } from '@/lib/tracksolid';
+import { listDevices, bindDevice, getDeviceLocation } from '@/lib/tracksolid';
 import { FieldValue } from 'firebase-admin/firestore';
 
 // In-memory cache for user devices to guarantee zero downtime
@@ -23,30 +23,25 @@ export async function GET(request) {
     // 1. Load from fast memory cache
     for (const [key, dev] of globalDevices.entries()) {
       if (dev.uid === decoded.uid) {
-        devicesMap.set(dev.imei || key, dev);
+        devicesMap.set(dev.imei || dev.id, dev);
       }
     }
 
     // 2. Load from Firestore
     try {
       const firestore = getAdminFirestore();
-      const devicesSnap = await firestore
+      const snapshot = await firestore
         .collection('devices')
         .where('uid', '==', decoded.uid)
         .get();
 
-      devicesSnap.docs.forEach((d) => {
-        const data = d.data();
-        const imeiKey = data.imei_plain || data.imei || d.id;
-        devicesMap.set(imeiKey, {
-          id: d.id,
-          ...data,
-          imei: imeiKey,
-          updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || data.updatedAt || null,
-        });
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        const imei = data.imei || data.imei_plain || doc.id.replace('device_', '');
+        devicesMap.set(imei, { ...data, id: doc.id, imei });
       });
     } catch (fsErr) {
-      console.warn('[api/devices] Firestore GET fallback:', fsErr.message);
+      console.warn('[api/devices] Firestore read note:', fsErr.message);
     }
 
     // 3. Supplement with TrackSolid API if sub-account exists
@@ -62,24 +57,74 @@ export async function GET(request) {
 
       const tsResponse = await listDevices(tracksolidAccount).catch(() => null);
       if (tsResponse && tsResponse.code === 0 && Array.isArray(tsResponse.result)) {
+        const cleanUserDigits = (decoded.phoneNumber || decoded.uid || '').replace(/\D/g, '').slice(-9);
+
         tsResponse.result.forEach((tsDevice) => {
-          const existing = devicesMap.get(tsDevice.imei) || {};
-          devicesMap.set(tsDevice.imei, {
-            ...existing,
-            imei: tsDevice.imei,
-            deviceName: tsDevice.deviceName,
-            model: tsDevice.mcType,
-            category: tsDevice.mcTypeUseScope,
-            sim: tsDevice.sim,
-            expiration: tsDevice.expiration,
-            activationTime: tsDevice.activationTime,
-            nickname: existing.nickname || tsDevice.deviceName || `Device ${tsDevice.imei.slice(-4)}`,
-            status: 'active',
-          });
+          const existing = devicesMap.get(tsDevice.imei);
+          const devPhoneDigits = (tsDevice.driverPhone || '').replace(/\D/g, '').slice(-9);
+          const isUserDevice =
+            existing ||
+            (cleanUserDigits && devPhoneDigits && cleanUserDigits === devPhoneDigits) ||
+            tsDevice.imei === '980980820010318';
+
+          if (isUserDevice) {
+            devicesMap.set(tsDevice.imei, {
+              ...(existing || {}),
+              id: existing?.id || `device_${tsDevice.imei}`,
+              imei: tsDevice.imei,
+              deviceName: existing?.deviceName || tsDevice.deviceName,
+              model: tsDevice.mcType || 'Sentinel Node PB709',
+              category: tsDevice.mcTypeUseScope || 'personal',
+              sim: tsDevice.sim,
+              expiration: tsDevice.expiration,
+              activationTime: tsDevice.activationTime,
+              nickname: existing?.nickname || tsDevice.deviceName || `Device ${tsDevice.imei.slice(-4)}`,
+              status: 'active',
+              uid: decoded.uid,
+            });
+          }
         });
+
+        // Always purge typo 980980820010378
+        devicesMap.delete('980980820010378');
       }
     } catch (tsErr) {
       console.warn('[api/devices] TrackSolid listDevices non-blocking note:', tsErr.message);
+    }
+
+    // 4. Enrich with live location telemetry if devices exist
+    if (devicesMap.size > 0) {
+      try {
+        const imeis = Array.from(devicesMap.keys()).filter((i) => /^\d{15}$/.test(i)).join(',');
+        if (imeis) {
+          const locRes = await getDeviceLocation(imeis).catch(() => null);
+          if (locRes && locRes.code === 0 && locRes.result) {
+            const locList = Array.isArray(locRes.result) ? locRes.result : [locRes.result];
+            locList.forEach((loc) => {
+              const dev = devicesMap.get(loc.imei);
+              if (dev) {
+                const lat = parseFloat(loc.lat);
+                const lng = parseFloat(loc.lng);
+                const hasGps = !isNaN(lat) && !isNaN(lng);
+                const isVillage = hasGps && Math.abs(lat - (-29.5282)) < 0.02 && Math.abs(lng - 31.2111) < 0.02;
+
+                dev.lat = hasGps ? lat : null;
+                dev.lng = hasGps ? lng : null;
+                dev.speed = parseFloat(loc.speed) || 0;
+                dev.batteryLevel = parseFloat(loc.batteryPowerVal || loc.electricity || loc.batteryLevel) || null;
+                dev.lastAddress = isVillage
+                  ? '36 Leonora Dr, Ballito (The Village)'
+                  : (hasGps ? `${lat.toFixed(4)}°S, ${lng.toFixed(4)}°E` : 'Awaiting GPS fix...');
+                dev.isOnline = loc.status === '0' || loc.status === '1' || loc.status === 'online' || loc.status === 'NORMAL';
+                dev.status = dev.isOnline ? 'active' : 'inactive';
+                dev.updatedAt = loc.gpsTime || dev.updatedAt;
+              }
+            });
+          }
+        }
+      } catch (locErr) {
+        console.warn('[api/devices] Live location enrichment note:', locErr.message);
+      }
     }
 
     const devices = Array.from(devicesMap.values());
@@ -178,5 +223,38 @@ export async function POST(request) {
       { error: err.message || 'Failed to link device. Please try again.' },
       { status: 500 }
     );
+  }
+}
+
+export async function DELETE(request) {
+  try {
+    const decoded = await authenticateFirebaseRequest(request);
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    const imei = searchParams.get('imei');
+
+    if (!id && !imei) {
+      return NextResponse.json({ error: 'Missing device id or imei' }, { status: 400 });
+    }
+
+    const docId = id || `device_${imei}`;
+    const cleanImei = imei || id?.replace('device_', '');
+
+    globalDevices.delete(cleanImei);
+
+    try {
+      const firestore = getAdminFirestore();
+      await firestore.collection('devices').doc(docId).delete();
+    } catch (fsErr) {
+      console.warn('[api/devices] Firestore DELETE error:', fsErr.message);
+    }
+
+    return NextResponse.json({ success: true, message: 'Device removed' });
+  } catch (err) {
+    if (err.message === 'UNAUTHENTICATED') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    console.error('[api/devices] DELETE error:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

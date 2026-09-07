@@ -131,11 +131,11 @@ function SOSFlowContent() {
         (err) => {
           console.warn('[sos] Geolocation error:', err);
           setLocationError('Could not determine your live location. Please enable GPS.');
-          // Fallback: Sheffield Beach, Ballito, KZN
+          // Fallback: Ballito, KZN
           setUserLocation((prev) =>
             prev.lat
               ? prev
-              : { lat: -29.4925, lng: 31.2312, address: 'Sheffield Beach, Ballito (approx)' }
+              : { lat: -29.5282, lng: 31.2111, address: 'Ballito, KwaZulu-Natal' }
           );
         },
         { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }

@@ -170,8 +170,26 @@ function DevicesContent() {
         try {
           const cached = localStorage.getItem('safelink_user_devices');
           if (cached) {
-            const parsed = JSON.parse(cached);
+            let parsed = JSON.parse(cached);
             if (Array.isArray(parsed) && parsed.length > 0) {
+              let mutated = false;
+              parsed = parsed.map((d) => {
+                if (d.imei === '980980820010378' || d.id === '980980820010378' || d.id === 'device_980980820010378') {
+                  mutated = true;
+                  return {
+                    ...d,
+                    id: 'device_980980820010318',
+                    imei: '980980820010318',
+                    name: d.name && !d.name.includes('10378') ? d.name : 'AARON - NODE -10318',
+                  };
+                }
+                return d;
+              });
+              if (mutated) {
+                try {
+                  localStorage.setItem('safelink_user_devices', JSON.stringify(parsed));
+                } catch {}
+              }
               setDevices(parsed);
               setIsLive(true);
             }

@@ -25,17 +25,41 @@ export async function GET(request, { params }) {
       const device = locations.find((d) => d.imei === imei) || locations[0];
 
       if (device) {
+        let address = device.address;
+        const lat = parseFloat(device.lat);
+        const lng = parseFloat(device.lng);
+
+        if (!address && !isNaN(lat) && !isNaN(lng) && process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
+          try {
+            const geoRes = await fetch(
+              `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`
+            );
+            if (geoRes.ok) {
+              const geoData = await geoRes.json();
+              address = geoData.results?.[0]?.formatted_address || null;
+            }
+          } catch (geoErr) {
+            console.warn('[location] Geocode fallback warning:', geoErr.message);
+          }
+        }
+
+        const isVillage = !isNaN(lat) && !isNaN(lng) && Math.abs(lat - (-29.5282)) < 0.02 && Math.abs(lng - 31.2111) < 0.02;
+        if (isVillage) {
+          address = address ? `${address} (The Village)` : '36 Leonora Dr, Ballito (The Village)';
+        }
+
         return NextResponse.json({
           imei,
-          lat: parseFloat(device.lat),
-          lng: parseFloat(device.lng),
+          lat,
+          lng,
           speed: parseFloat(device.speed) || 0,
           direction: parseFloat(device.direction) || 0,
           gpsTime: device.gpsTime || device.positionTime,
-          address: device.address || null,
+          address: address || (lat && lng ? `${lat.toFixed(4)}°S, ${lng.toFixed(4)}°E` : null),
           status: device.status,
-          batteryLevel: device.electricity || device.batteryLevel || null,
-          isOnline: device.status === '1' || device.status === 'online',
+          batteryLevel: parseFloat(device.batteryPowerVal || device.electricity || device.batteryLevel) || null,
+          isOnline: device.status === '0' || device.status === '1' || device.status === 'online' || device.status === 'NORMAL',
+          deviceName: device.deviceName || 'Sentinel Tag',
         });
       }
     }

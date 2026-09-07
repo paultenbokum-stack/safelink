@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import AuthGuard from '@/app/components/AuthGuard';
 import BottomNav from '@/app/components/BottomNav';
@@ -37,17 +37,17 @@ function ProductVisual({ product, priority = false, compact = false }) {
 
   return (
     <>
-      <div className="absolute inset-0 product-stage-grid" />
-      <div className="absolute left-1/2 top-1/2 h-[78%] aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.06]" />
-      <div className="absolute left-1/2 top-1/2 h-[54%] aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full border border-secondary/15 shadow-[0_0_55px_rgba(247,187,35,0.12)]" />
-      <div className="absolute inset-x-8 bottom-3 h-8 rounded-[100%] bg-black/35 blur-xl" />
+      <div className="absolute inset-0 product-stage-grid pointer-events-none" />
+      <div className="absolute left-1/2 top-1/2 h-[78%] aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.06] pointer-events-none" />
+      <div className="absolute left-1/2 top-1/2 h-[54%] aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full border border-secondary/15 shadow-[0_0_55px_rgba(247,187,35,0.12)] pointer-events-none" />
+      <div className="absolute inset-x-8 bottom-3 h-8 rounded-[100%] bg-black/35 blur-xl pointer-events-none" />
       <Image
         src={product.image}
         alt={product.name}
         width={640}
         height={480}
         priority={priority}
-        className={`relative z-[1] h-full w-full object-contain drop-shadow-[0_22px_22px_rgba(0,0,0,0.42)] transition-transform duration-700 group-hover:scale-[1.06] ${compact ? 'p-2' : 'p-5 md:p-7'} ${studioTreatment}`}
+        className={`relative z-[1] h-full w-full object-contain drop-shadow-[0_22px_22px_rgba(0,0,0,0.42)] transition-transform duration-700 group-hover:scale-[1.06] pointer-events-none ${compact ? 'p-2' : 'p-5 md:p-7'} ${studioTreatment}`}
       />
       <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#071724]/80 to-transparent pointer-events-none" />
     </>
@@ -173,6 +173,14 @@ function ProductModal({ product, onClose, onAddToCart }) {
   const pricing = getLinePriceBreakdown(product, quantity);
   const nextTier = getNextPriceTier(product, quantity);
 
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-md flex items-end md:items-center justify-center p-0 md:p-6"
@@ -189,13 +197,16 @@ function ProductModal({ product, onClose, onAddToCart }) {
           <ProductVisual product={product} />
           <button
             type="button"
-            onClick={onClose}
-            className="absolute top-3 right-3 p-2 rounded-full bg-black/30 hover:bg-black/50 text-white/70 hover:text-white transition-colors"
+            onClick={(event) => {
+              event.stopPropagation();
+              onClose();
+            }}
+            className="absolute top-3 right-3 z-30 flex size-10 items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white/80 hover:text-white border border-white/15 transition-all shadow-lg cursor-pointer active:scale-90 pointer-events-auto"
             aria-label="Close product details"
           >
-            <span className="material-symbols-outlined text-[20px]">close</span>
+            <span className="material-symbols-outlined text-[22px]">close</span>
           </button>
-          <span className={`absolute top-3 left-3 text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeColour(product.badge)}`}>
+          <span className={`absolute top-3 left-3 z-20 text-[10px] font-bold px-2 py-0.5 rounded-full pointer-events-none ${badgeColour(product.badge)}`}>
             {product.badge}
           </span>
         </div>
@@ -317,7 +328,7 @@ function CartDrawer({ cart, onClose, onUpdateQty, subtotalExVat, vat, totalInclV
             <span className="material-symbols-outlined text-secondary">shopping_bag</span>
             <h2 className="text-lg font-bold text-on-surface">Your cart ({totalCount.toLocaleString('en-ZA')})</h2>
           </div>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10 text-on-surface-variant" aria-label="Close cart">
+          <button type="button" onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10 text-on-surface-variant hover:text-white transition-colors cursor-pointer" aria-label="Close cart">
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>

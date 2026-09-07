@@ -701,7 +701,7 @@ function DevicesContent() {
           <div className="glass-panel w-full max-w-md rounded-2xl p-lg bg-surface-container-high border border-white/15 shadow-2xl">
             <div className="flex justify-between items-center mb-md border-b border-white/10 pb-sm">
               <h3 className="font-headline-md text-lg font-bold text-secondary">Pair New Sentinel Device</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-on-surface-variant hover:text-on-surface">
+              <button type="button" onClick={() => setShowAddModal(false)} className="text-on-surface-variant hover:text-on-surface cursor-pointer p-1 rounded-full hover:bg-white/10 transition-colors" aria-label="Close modal">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
@@ -773,7 +773,7 @@ function DevicesContent() {
           <div className="glass-panel w-full max-w-sm rounded-2xl p-lg bg-surface-container-high border border-white/15 shadow-2xl">
             <div className="flex justify-between items-center mb-md border-b border-white/10 pb-sm">
               <h3 className="font-headline-md text-base font-bold text-secondary">Rename Device Label</h3>
-              <button onClick={() => setShowRenameModal(null)} className="text-on-surface-variant hover:text-on-surface">
+              <button type="button" onClick={() => setShowRenameModal(null)} className="text-on-surface-variant hover:text-on-surface cursor-pointer p-1 rounded-full hover:bg-white/10 transition-colors" aria-label="Close modal">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>

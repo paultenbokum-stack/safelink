@@ -6,6 +6,7 @@ import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
 import { useAuth } from '@/lib/auth-context';
+import { updateHousehold } from '@/lib/db';
 import AvatarEditorModal from '@/app/components/AvatarEditorModal';
 
 export default function EditProfilePage() {
@@ -17,7 +18,7 @@ export default function EditProfilePage() {
 }
 
 function EditProfileContent() {
-  const { user } = useAuth();
+  const { user, updateUserProfile } = useAuth();
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -107,14 +108,21 @@ function EditProfileContent() {
     };
 
     localStorage.setItem('active_household', JSON.stringify(updated));
+    if (user?.uid) {
+      localStorage.setItem(`household_${user.uid}`, JSON.stringify(updated));
+    }
 
-    // Also update the user in localStorage
-    const savedUser = localStorage.getItem('safelink_user');
-    if (savedUser) {
+    if (updateUserProfile) {
+      await updateUserProfile({
+        displayName: `${form.firstName} ${form.lastName}`.trim(),
+        firstName: form.firstName,
+        lastName: form.lastName,
+      });
+    }
+
+    if (user?.uid) {
       try {
-        const u = JSON.parse(savedUser);
-        u.displayName = `${form.firstName} ${form.lastName}`.trim() || u.displayName;
-        localStorage.setItem('safelink_user', JSON.stringify(u));
+        await updateHousehold(user.uid, updated);
       } catch (e) {}
     }
 

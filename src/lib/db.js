@@ -33,27 +33,67 @@ export async function createHousehold(uid, data) {
 
 export async function getHousehold(uid) {
   if (typeof window !== 'undefined') {
-    const cached = localStorage.getItem(`household_${uid}`) || localStorage.getItem('active_household');
-    if (cached) {
-      try { return JSON.parse(cached); } catch (e) {}
-    }
+    const cachedActive = localStorage.getItem('active_household');
+    const cachedUid = localStorage.getItem(`household_${uid}`);
+    let data = null;
+    try {
+      if (cachedActive) {
+        const parsed = JSON.parse(cachedActive);
+        if (parsed.adminFirstName && !parsed.adminFirstName.toLowerCase().includes('safelink')) {
+          data = parsed;
+        }
+      }
+      if (!data && cachedUid) {
+        const parsed = JSON.parse(cachedUid);
+        if (parsed.adminFirstName && !parsed.adminFirstName.toLowerCase().includes('safelink')) {
+          data = parsed;
+        }
+      }
+      if (data) return data;
+    } catch (e) {}
   }
   try {
     const snap = await getDoc(doc(db, 'households', uid));
     if (snap.exists()) {
-      return { id: snap.id, ...snap.data() };
+      const data = { id: snap.id, ...snap.data() };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`household_${uid}`, JSON.stringify(data));
+        const currentActive = localStorage.getItem('active_household');
+        if (!currentActive) {
+          localStorage.setItem('active_household', JSON.stringify(data));
+        }
+      }
+      return data;
     }
   } catch (err) {
     console.warn('Firestore getDoc notice (using local storage fallback):', err.message);
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('active_household') || localStorage.getItem(`household_${uid}`);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
   }
   return null;
 }
 
 export async function updateHousehold(uid, data) {
-  await updateDoc(doc(db, 'households', uid), {
-    ...data,
-    updatedAt: serverTimestamp(),
-  });
+  if (typeof window !== 'undefined') {
+    try {
+      const current = JSON.parse(localStorage.getItem(`household_${uid}`) || localStorage.getItem('active_household') || '{}');
+      const updated = { ...current, ...data, updatedAt: new Date().toISOString() };
+      localStorage.setItem(`household_${uid}`, JSON.stringify(updated));
+      localStorage.setItem('active_household', JSON.stringify(updated));
+    } catch (e) {}
+  }
+  try {
+    await updateDoc(doc(db, 'households', uid), {
+      ...data,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn('Firestore updateDoc notice:', err.message);
+  }
 }
 
 /* ─── Orders ─────────────────────────────────────────────────── */

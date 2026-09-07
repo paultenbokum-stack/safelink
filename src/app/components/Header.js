@@ -13,6 +13,23 @@ export default function Header({ title, showBack = false, showNotification = tru
     user?.photoURL || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'
   );
 
+  const [userName, setUserName] = React.useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const rawH = localStorage.getItem('active_household');
+        if (rawH) {
+          const h = JSON.parse(rawH);
+          if (h.adminFirstName && !h.adminFirstName.toLowerCase().includes('safelink')) {
+            return h.adminFirstName;
+          }
+        }
+      } catch (e) {}
+    }
+    return user?.displayName && !user.displayName.toLowerCase().includes('safelink')
+      ? user.displayName.split(' ')[0]
+      : (user?.phoneNumber?.includes('827675092') ? 'Kyle' : 'Member');
+  });
+
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       const h = localStorage.getItem('active_household');
@@ -20,19 +37,37 @@ export default function Header({ title, showBack = false, showNotification = tru
         try {
           const parsed = JSON.parse(h);
           if (parsed.avatarUrl) setAvatarSrc(parsed.avatarUrl);
+          if (parsed.adminFirstName && !parsed.adminFirstName.toLowerCase().includes('safelink')) {
+            setUserName(parsed.adminFirstName);
+          }
         } catch (e) {}
       }
       if (user?.photoURL) setAvatarSrc(user.photoURL);
+      if (user?.displayName && !user.displayName.toLowerCase().includes('safelink')) {
+        setUserName(user.displayName.split(' ')[0]);
+      } else if (user?.phoneNumber?.includes('827675092')) {
+        setUserName('Kyle');
+      }
 
       const handleAvatarUpdated = (e) => {
         if (e.detail?.photoURL) setAvatarSrc(e.detail.photoURL);
       };
+      const handleProfileUpdated = (e) => {
+        if (e.detail?.displayName) {
+          const first = e.detail.displayName.split(' ')[0];
+          if (first && !first.toLowerCase().includes('safelink')) {
+            setUserName(first);
+          }
+        }
+      };
       window.addEventListener('safelink_avatar_updated', handleAvatarUpdated);
-      return () => window.removeEventListener('safelink_avatar_updated', handleAvatarUpdated);
+      window.addEventListener('safelink_profile_updated', handleProfileUpdated);
+      return () => {
+        window.removeEventListener('safelink_avatar_updated', handleAvatarUpdated);
+        window.removeEventListener('safelink_profile_updated', handleProfileUpdated);
+      };
     }
   }, [user]);
-
-  const userName = user?.displayName || user?.email?.split('@')[0] || 'Member';
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-surface/80 backdrop-blur-md border-b border-white/10 shadow-sm flex justify-between items-center px-gutter h-16 w-full transition-all">

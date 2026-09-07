@@ -56,7 +56,7 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      await loginWithPhone(cleanPhone, { displayName: 'SafeLink Admin' }, password);
+      await loginWithPhone(cleanPhone, {}, password);
       setTimeout(() => router.push('/dashboard'), 400);
     } catch (err) {
       setQuickError(err.message || 'Failed to sign in. Please try again.');

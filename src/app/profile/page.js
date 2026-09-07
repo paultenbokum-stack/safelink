@@ -44,8 +44,18 @@ function ProfileContent() {
       const handleAvatarUpdated = (e) => {
         if (e.detail?.photoURL) setAvatarUrl(e.detail.photoURL);
       };
+      const handleProfileUpdated = () => {
+        const h = localStorage.getItem('active_household');
+        if (h) {
+          try { setHousehold(JSON.parse(h)); } catch(err) {}
+        }
+      };
       window.addEventListener('safelink_avatar_updated', handleAvatarUpdated);
-      return () => window.removeEventListener('safelink_avatar_updated', handleAvatarUpdated);
+      window.addEventListener('safelink_profile_updated', handleProfileUpdated);
+      return () => {
+        window.removeEventListener('safelink_avatar_updated', handleAvatarUpdated);
+        window.removeEventListener('safelink_profile_updated', handleProfileUpdated);
+      };
     }
   }, [isPartner, user]);
 
@@ -65,7 +75,9 @@ function ProfileContent() {
     ? (partnerSession?.displayName || user?.displayName || 'Partner Client')
     : (household?.adminFirstName && household?.adminLastName
         ? `${household.adminFirstName} ${household.adminLastName}`
-        : user?.displayName || 'SafeLink Member');
+        : user?.displayName && !user.displayName.toLowerCase().includes('safelink')
+          ? user.displayName
+          : (user?.phoneNumber?.includes('827675092') ? 'KYLE SAFFY' : 'SafeLink Member'));
 
   const displayPhone = isPartner
     ? (partnerSession?.partnerId || 'Security Partner')

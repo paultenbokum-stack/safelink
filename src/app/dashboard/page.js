@@ -21,11 +21,30 @@ function DashboardContent() {
   const { user } = useAuth();
   const router = useRouter();
 
-  const [household, setHousehold] = useState(null);
+  const [household, setHousehold] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('active_household');
+        if (raw) return JSON.parse(raw);
+      } catch (e) {}
+    }
+    return null;
+  });
   const [devices, setDevices] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [testAlarmActive, setTestAlarmActive] = useState(false);
+
+  useEffect(() => {
+    const handleProfileUpdate = () => {
+      try {
+        const raw = localStorage.getItem('active_household');
+        if (raw) setHousehold(JSON.parse(raw));
+      } catch (e) {}
+    };
+    window.addEventListener('safelink_profile_updated', handleProfileUpdate);
+    return () => window.removeEventListener('safelink_profile_updated', handleProfileUpdate);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -35,7 +54,7 @@ function DashboardContent() {
       getUserOrders(user.uid),
     ])
       .then(([h, d, o]) => {
-        setHousehold(h);
+        if (h) setHousehold(h);
         setDevices(d || []);
         setOrders(o || []);
       })
@@ -43,7 +62,26 @@ function DashboardContent() {
       .finally(() => setLoading(false));
   }, [user]);
 
-  const userName = household?.adminFirstName || user?.displayName?.split(' ')[0] || 'Member';
+  // Derive user's first name, prioritizing household admin name, displayName, or demo user default
+  const firstName = (() => {
+    if (household?.adminFirstName && !household.adminFirstName.toLowerCase().includes('safelink')) {
+      return household.adminFirstName;
+    }
+    if (user?.displayName && !user.displayName.toLowerCase().includes('safelink')) {
+      return user.displayName.split(' ')[0];
+    }
+    if (user?.phoneNumber?.includes('827675092')) {
+      return 'Kyle';
+    }
+    return user?.displayName?.split(' ')[0] || 'Member';
+  })();
+
+  const householdTitle = (() => {
+    if (household?.householdName && !household.householdName.toLowerCase().includes("safelink's safelink")) {
+      return household.householdName;
+    }
+    return `${firstName}'s SafeLink`;
+  })();
 
   const triggerTestAlarm = () => {
     setTestAlarmActive(true);
@@ -54,7 +92,7 @@ function DashboardContent() {
 
   return (
     <div className="bg-background text-on-background min-h-screen pb-[100px]">
-      <Header title={`Good morning, ${userName}`} />
+      <Header title={`Good morning, ${firstName}`} />
 
       <main className="pt-[88px] px-gutter max-w-3xl mx-auto space-y-lg pb-xl">
         {/* Test Alarm Alert Modal / Notification */}
@@ -96,7 +134,7 @@ function DashboardContent() {
             <div className="flex items-center gap-2">
               <span className={`w-2.5 h-2.5 rounded-full ${devices.length > 0 ? 'bg-secondary animate-pulse' : 'bg-[#38a169]'}`}></span>
               <h2 className="font-label-md text-label-md text-on-surface font-semibold">
-                {household?.householdName || `${userName}'s SafeLink`} — {devices.length} Active {devices.length === 1 ? 'Device' : 'Devices'}
+                {householdTitle} — {devices.length} Active {devices.length === 1 ? 'Device' : 'Devices'}
               </h2>
             </div>
             <Link

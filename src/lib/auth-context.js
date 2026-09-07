@@ -61,10 +61,37 @@ export function AuthProvider({ children }) {
     }
 
     const mockUid = 'user_' + cleanDigits;
+
+    // Resolve real user name (defaults to Kyle Saffy for beta credentials, or stored household name)
+    let defaultDisplayName = cleanDigits === '827675092' ? 'Kyle Saffy' : 'SafeLink Member';
+    if (typeof window !== 'undefined') {
+      try {
+        const rawH = localStorage.getItem('active_household') || localStorage.getItem(`household_${mockUid}`);
+        if (rawH) {
+          const h = JSON.parse(rawH);
+          if (h.adminFirstName && !h.adminFirstName.toLowerCase().includes('safelink')) {
+            defaultDisplayName = `${h.adminFirstName} ${h.adminLastName || ''}`.trim();
+          }
+        }
+        const rawU = localStorage.getItem('safelink_user');
+        if (rawU) {
+          const u = JSON.parse(rawU);
+          if (u.displayName && !u.displayName.toLowerCase().includes('safelink admin')) {
+            defaultDisplayName = u.displayName;
+          }
+        }
+      } catch {}
+    }
+
+    const resolvedDisplayName =
+      (profileData.displayName && !profileData.displayName.includes('SafeLink Admin'))
+        ? profileData.displayName
+        : (profileData.adminFirstName || defaultDisplayName);
+
     const customUser = {
       uid: mockUid,
       phoneNumber: `+27${cleanDigits}`,
-      displayName: profileData.displayName || profileData.adminFirstName || 'SafeLink Admin',
+      displayName: resolvedDisplayName,
       email: profileData.email || `${mockUid}@safelink.co.za`,
       photoURL: profileData.photoURL || null,
       isTestSession: true,
@@ -149,6 +176,21 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const updateUserProfile = async ({ displayName, firstName, lastName }) => {
+    const resolvedName = displayName || `${firstName || ''} ${lastName || ''}`.trim();
+    if (!resolvedName) return;
+    setUser((prev) => {
+      const updated = { ...(prev || {}), displayName: resolvedName };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('safelink_user', JSON.stringify(updated));
+      }
+      return updated;
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('safelink_profile_updated', { detail: { displayName: resolvedName } }));
+    }
+  };
+
   const logout = async () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('safelink_user');
@@ -178,6 +220,7 @@ export function AuthProvider({ children }) {
         loginWithPhone,
         loginWithPartnerId,
         updateProfileAvatar,
+        updateUserProfile,
         logout,
         resetPassword,
         verifyEmail,

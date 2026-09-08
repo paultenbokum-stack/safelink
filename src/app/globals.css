@@ -8,51 +8,51 @@ html.dark,
 [data-theme="dark"] {
   /* Core palette — Dark Mode */
   --background:                #041522;
-  --background-rgb:            4, 21, 34;
+  --background-rgb:            4 21 34;
 
   --surface:                   #041522;
-  --surface-rgb:               4, 21, 34;
+  --surface-rgb:               4 21 34;
 
   --surface-container-lowest:  #00101c;
-  --surface-container-lowest-rgb: 0, 16, 28;
+  --surface-container-lowest-rgb: 0 16 28;
 
   --surface-container-low:     #0c1d2a;
-  --surface-container-low-rgb: 12, 29, 42;
+  --surface-container-low-rgb: 12 29 42;
 
   --surface-container:         #10212f;
-  --surface-container-rgb:     16, 33, 47;
+  --surface-container-rgb:     16 33 47;
 
   --surface-container-high:    #1b2c39;
-  --surface-container-high-rgb: 27, 44, 57;
+  --surface-container-high-rgb: 27 44 57;
 
   --surface-container-highest: #263645;
-  --surface-container-highest-rgb: 38, 54, 69;
+  --surface-container-highest-rgb: 38 54 69;
 
   --surface-bright:            #2b3b49;
-  --surface-bright-rgb:        43, 59, 73;
+  --surface-bright-rgb:        43 59 73;
 
   --surface-dim:               #041522;
-  --surface-dim-rgb:           4, 21, 34;
+  --surface-dim-rgb:           4 21 34;
 
   --surface-variant:           #263645;
-  --surface-variant-rgb:       38, 54, 69;
+  --surface-variant-rgb:       38 54 69;
 
   /* Brand colours */
   --primary:                   #9fcafb;
-  --primary-rgb:               159, 202, 251;
+  --primary-rgb:               159 202 251;
   --primary-container:         #2c5a85;
-  --primary-container-rgb:     44, 90, 133;
+  --primary-container-rgb:     44 90 133;
   --on-primary:                #003256;
-  --on-primary-rgb:            0, 50, 86;
+  --on-primary-rgb:            0 50 86;
   --on-primary-container:      #a9d1ff;
 
   --secondary:                 #ffc32f;
-  --secondary-rgb:             255, 195, 47;
+  --secondary-rgb:             255 195 47;
   --secondary-fixed:           #ffdea0;
   --secondary-fixed-dim:       #f9bd25;
   --secondary-container:       #e0a700;
   --on-secondary:              #402d00;
-  --on-secondary-rgb:          64, 45, 0;
+  --on-secondary-rgb:          64 45 0;
   --on-secondary-container:    #583f00;
 
   /* Semantic */
@@ -67,15 +67,15 @@ html.dark,
 
   /* Text & outline */
   --on-surface:                #d3e4f7;
-  --on-surface-rgb:            211, 228, 247;
+  --on-surface-rgb:            211 228 247;
   --on-surface-variant:        #c2c7d0;
-  --on-surface-variant-rgb:    194, 199, 208;
+  --on-surface-variant-rgb:    194 199 208;
   --on-background:             #d3e4f7;
-  --on-background-rgb:         211, 228, 247;
+  --on-background-rgb:         211 228 247;
   --outline:                   #8c9199;
-  --outline-rgb:               140, 145, 153;
+  --outline-rgb:               140 145 153;
   --outline-variant:           #42474e;
-  --outline-variant-rgb:       66, 71, 78;
+  --outline-variant-rgb:       66 71 78;
 
   /* Shadows & glass */
   --glass-bg:                  rgba(22, 34, 49, 0.85);
@@ -88,51 +88,51 @@ html.light,
 [data-theme="light"] {
   /* Core palette — Light Mode */
   --background:                #f8fafc;
-  --background-rgb:            248, 250, 252;
+  --background-rgb:            248 250 252;
 
   --surface:                   #ffffff;
-  --surface-rgb:               255, 255, 255;
+  --surface-rgb:               255 255 255;
 
   --surface-container-lowest:  #ffffff;
-  --surface-container-lowest-rgb: 255, 255, 255;
+  --surface-container-lowest-rgb: 255 255 255;
 
   --surface-container-low:     #f8fafc;
-  --surface-container-low-rgb: 248, 250, 252;
+  --surface-container-low-rgb: 248 250 252;
 
   --surface-container:         #f1f5f9;
-  --surface-container-rgb:     241, 245, 249;
+  --surface-container-rgb:     241 245 249;
 
   --surface-container-high:    #e2e8f0;
-  --surface-container-high-rgb: 226, 232, 240;
+  --surface-container-high-rgb: 226 232 240;
 
   --surface-container-highest: #cbd5e1;
-  --surface-container-highest-rgb: 203, 213, 225;
+  --surface-container-highest-rgb: 203 213 225;
 
   --surface-bright:            #ffffff;
-  --surface-bright-rgb:        255, 255, 255;
+  --surface-bright-rgb:        255 255 255;
 
   --surface-dim:               #e2e8f0;
-  --surface-dim-rgb:           226, 232, 240;
+  --surface-dim-rgb:           226 232 240;
 
   --surface-variant:           #e2e8f0;
-  --surface-variant-rgb:       226, 232, 240;
+  --surface-variant-rgb:       226 232 240;
 
   /* Brand colours */
   --primary:                   #1d4ed8;
-  --primary-rgb:               29, 78, 216;
+  --primary-rgb:               29 78 216;
   --primary-container:         #dbeafe;
-  --primary-container-rgb:     219, 234, 254;
+  --primary-container-rgb:     219 234 254;
   --on-primary:                #ffffff;
-  --on-primary-rgb:            255, 255, 255;
+  --on-primary-rgb:            255 255 255;
   --on-primary-container:      #1e3a8a;
 
   --secondary:                 #d97706;
-  --secondary-rgb:             217, 119, 6;
+  --secondary-rgb:             217 119 6;
   --secondary-fixed:           #fef3c7;
   --secondary-fixed-dim:       #fde68a;
   --secondary-container:       #fef3c7;
   --on-secondary:              #ffffff;
-  --on-secondary-rgb:          255, 255, 255;
+  --on-secondary-rgb:          255 255 255;
   --on-secondary-container:    #78350f;
 
   /* Semantic */
@@ -147,20 +147,20 @@ html.light,
 
   /* Text & outline */
   --on-surface:                #0f172a;
-  --on-surface-rgb:            15, 23, 42;
-  --on-surface-variant:        #475569;
-  --on-surface-variant-rgb:    71, 85, 105;
+  --on-surface-rgb:            15 23 42;
+  --on-surface-variant:        #334155;
+  --on-surface-variant-rgb:    51 65 85;
   --on-background:             #0f172a;
-  --on-background-rgb:         15, 23, 42;
+  --on-background-rgb:         15 23 42;
   --outline:                   #cbd5e1;
-  --outline-rgb:               203, 213, 225;
+  --outline-rgb:               203 213 225;
   --outline-variant:           #e2e8f0;
-  --outline-variant-rgb:       226, 232, 240;
+  --outline-variant-rgb:       226 232 240;
 
   /* Shadows & glass */
-  --glass-bg:                  rgba(255, 255, 255, 0.9);
-  --glass-border:              rgba(0, 0, 0, 0.08);
-  --card-shadow:               0 4px 20px -2px rgba(0, 0, 0, 0.06);
+  --glass-bg:                  rgba(255, 255, 255, 0.96);
+  --glass-border:              #e2e8f0;
+  --card-shadow:               0 4px 20px -2px rgba(15, 23, 42, 0.08);
 }
 
 /* Base Body Styles */
@@ -175,7 +175,7 @@ html, body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* Glassmorphism Classes from Stitch */
+/* Glassmorphism Classes */
 .glass-panel {
   background-color: var(--glass-bg);
   backdrop-filter: blur(12px);
@@ -192,38 +192,81 @@ html, body {
   box-shadow: var(--card-shadow);
 }
 
-/* Adaptive Light Theme Overrides for hardcoded border-white classes */
+/* Adaptive Light Theme Overrides for crisp borders & cards */
 html.light .border-white\/5 {
-  border-color: rgba(0, 0, 0, 0.04);
+  border-color: #e2e8f0;
 }
 html.light .border-white\/10 {
-  border-color: rgba(0, 0, 0, 0.08);
+  border-color: #cbd5e1;
 }
 html.light .border-white\/15,
 html.light .border-white\/20 {
-  border-color: rgba(0, 0, 0, 0.12);
+  border-color: #94a3b8;
 }
 html.light .border-white\/30,
 html.light .border-white\/40 {
-  border-color: rgba(0, 0, 0, 0.18);
+  border-color: #64748b;
 }
 
 html.light .hover\:bg-white\/5:hover {
-  background-color: rgba(0, 0, 0, 0.04);
+  background-color: rgba(15, 23, 42, 0.05);
 }
 html.light .hover\:bg-white\/10:hover {
-  background-color: rgba(0, 0, 0, 0.08);
+  background-color: rgba(15, 23, 42, 0.08);
 }
 html.light .active\:bg-white\/5:active {
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: rgba(15, 23, 42, 0.08);
 }
 
 html.light .shadow-2xl {
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.05);
 }
 
 html.light nav {
-  box-shadow: 0 -4px 20px -2px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 -4px 20px -2px rgba(15, 23, 42, 0.06);
+}
+
+/* Form Controls & Inputs Contrast in Light Mode */
+html.light input[type="text"],
+html.light input[type="tel"],
+html.light input[type="email"],
+html.light input[type="password"],
+html.light input[type="number"],
+html.light input[type="search"],
+html.light select,
+html.light textarea {
+  background-color: #ffffff;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #64748b !important;
+  opacity: 0.9 !important;
+}
+
+html.light select {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+/* Custom dropdown chevron for select elements with appearance-none */
+html.light select.appearance-none {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23334155'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1.15em 1.15em;
+  padding-right: 2.25rem;
+}
+
+html.dark select.appearance-none,
+[data-theme="dark"] select.appearance-none {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239fcafb'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1.15em 1.15em;
+  padding-right: 2.25rem;
 }
 
 /* Animations from Stitch */

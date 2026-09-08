@@ -7,6 +7,7 @@ import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
 import { useAuth } from '@/lib/auth-context';
 import { useLocationSharing } from '@/lib/location-sharing';
+import { useTheme } from '@/lib/theme-context';
 
 const GOOGLE_MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
@@ -45,7 +46,7 @@ const GOOGLE_MAPS_DARK_STYLE = [
   {
     featureType: 'road',
     elementType: 'geometry.stroke',
-    stylers: [{ color: '#0f172a' }],
+    stylers: [{ color: '#0f1923' }],
   },
   {
     featureType: 'road',
@@ -81,6 +82,78 @@ const GOOGLE_MAPS_DARK_STYLE = [
     featureType: 'water',
     elementType: 'labels.text.fill',
     stylers: [{ color: '#3e5d7a' }],
+  },
+];
+
+/* ─── Google Maps Clean Light Style ──────────────────────────── */
+const GOOGLE_MAPS_LIGHT_STYLE = [
+  { elementType: 'geometry', stylers: [{ color: '#f8fafc' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#334155' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }] },
+  {
+    featureType: 'administrative.locality',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#0f172a' }],
+  },
+  {
+    featureType: 'poi',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#64748b' }],
+  },
+  {
+    featureType: 'poi.park',
+    elementType: 'geometry',
+    stylers: [{ color: '#dcfce7' }],
+  },
+  {
+    featureType: 'poi.park',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#15803d' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'geometry',
+    stylers: [{ color: '#ffffff' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'geometry.stroke',
+    stylers: [{ color: '#e2e8f0' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#475569' }],
+  },
+  {
+    featureType: 'road.highway',
+    elementType: 'geometry',
+    stylers: [{ color: '#fed7aa' }],
+  },
+  {
+    featureType: 'road.highway',
+    elementType: 'geometry.stroke',
+    stylers: [{ color: '#fdba74' }],
+  },
+  {
+    featureType: 'road.highway',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#9a3412' }],
+  },
+  {
+    featureType: 'transit',
+    elementType: 'geometry',
+    stylers: [{ color: '#e2e8f0' }],
+  },
+  {
+    featureType: 'water',
+    elementType: 'geometry',
+    stylers: [{ color: '#bfdbfe' }],
+  },
+  {
+    featureType: 'water',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#1d4ed8' }],
   },
 ];
 
@@ -194,10 +267,12 @@ export default function MapPage() {
 function LiveFamilyMapContent() {
   const router = useRouter();
   const { user, partnerSession } = useAuth();
+  const { theme } = useTheme();
   const isPartner = !!user?.isPartnerSession;
 
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
+  const tileLayersRef = useRef([]);
   const markersRef = useRef({});
   const pollTimerRef = useRef(null);
 
@@ -588,6 +663,8 @@ function LiveFamilyMapContent() {
         }
       };
 
+      const isLightMode = (typeof document !== 'undefined' && document.documentElement.classList.contains('light')) || theme === 'light';
+
       // ── 1. Try Google Maps if API key configured ──
       if (GOOGLE_MAPS_KEY) {
         try {
@@ -597,10 +674,10 @@ function LiveFamilyMapContent() {
           const map = new googleMaps.Map(mapContainerRef.current, {
             center: initCenter,
             zoom: 15,
-            styles: GOOGLE_MAPS_DARK_STYLE,
+            styles: isLightMode ? GOOGLE_MAPS_LIGHT_STYLE : GOOGLE_MAPS_DARK_STYLE,
             disableDefaultUI: true,
             zoomControl: true,
-            backgroundColor: '#0f1923',
+            backgroundColor: isLightMode ? '#f8fafc' : '#0f1923',
           });
 
           mapInstanceRef.current = map;
@@ -627,7 +704,7 @@ function LiveFamilyMapContent() {
 
           const map = new mapboxgl.Map({
             container: mapContainerRef.current,
-            style: 'mapbox://styles/mapbox/dark-v11',
+            style: isLightMode ? 'mapbox://styles/mapbox/light-v11' : 'mapbox://styles/mapbox/dark-v11',
             center: [initCenter.lng, initCenter.lat],
             zoom: 15,
             attributionControl: false,
@@ -650,7 +727,7 @@ function LiveFamilyMapContent() {
         }
       }
 
-      // ── 3. Leaflet Fallback (Free Tactical Dark Radar Tiles) ──
+      // ── 3. Leaflet Fallback (Free Tactical Radar Canvas Tiles) ──
       try {
         const L = (await import('leaflet')).default;
 
@@ -674,16 +751,24 @@ function LiveFamilyMapContent() {
           attributionControl: false,
         });
 
-        // ESRI World Dark Gray Canvas tiles (Zero watermarks, 100% free, dark tactical radar theme)
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        // ESRI Canvas tiles (World Light Gray vs World Dark Gray)
+        const baseTileUrl = isLightMode
+          ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+          : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+        const refTileUrl = isLightMode
+          ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}'
+          : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}';
+
+        const baseLayer = L.tileLayer(baseTileUrl, {
           maxZoom: 16,
           attribution: '&copy; Esri, DeLorme, NAVTEQ',
         }).addTo(map);
 
-        // Add reference labels (streets, city names)
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+        const refLayer = L.tileLayer(refTileUrl, {
           maxZoom: 16,
         }).addTo(map);
+
+        tileLayersRef.current = [baseLayer, refLayer];
 
         L.control.zoom({ position: 'bottomright' }).addTo(map);
 
@@ -717,6 +802,57 @@ function LiveFamilyMapContent() {
       }
     };
   }, []);
+
+  /* ─── Dynamically Switch Map Styles & Tiles when Theme changes ─── */
+  useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    const isLightMode = theme === 'light';
+
+    if (map._isLeaflet && map._L) {
+      const L = map._L;
+      // Remove existing tile layers
+      if (tileLayersRef.current && tileLayersRef.current.length > 0) {
+        tileLayersRef.current.forEach((layer) => {
+          try { map.removeLayer(layer); } catch {}
+        });
+      }
+
+      const baseTileUrl = isLightMode
+        ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+        : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+      const refTileUrl = isLightMode
+        ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}'
+        : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}';
+
+      const baseLayer = L.tileLayer(baseTileUrl, {
+        maxZoom: 16,
+        attribution: '&copy; Esri, DeLorme, NAVTEQ',
+      }).addTo(map);
+
+      const refLayer = L.tileLayer(refTileUrl, {
+        maxZoom: 16,
+      }).addTo(map);
+
+      try { baseLayer.bringToBack(); } catch {}
+      tileLayersRef.current = [baseLayer, refLayer];
+    } else if (map._isMapbox) {
+      try {
+        map.setStyle(isLightMode ? 'mapbox://styles/mapbox/light-v11' : 'mapbox://styles/mapbox/dark-v11');
+      } catch (e) {
+        console.warn('Failed to switch Mapbox theme style:', e);
+      }
+    } else if (map._isGoogle) {
+      try {
+        map.setOptions({
+          styles: isLightMode ? GOOGLE_MAPS_LIGHT_STYLE : GOOGLE_MAPS_DARK_STYLE,
+          backgroundColor: isLightMode ? '#f8fafc' : '#0f1923',
+        });
+      } catch (e) {
+        console.warn('Failed to switch Google Maps theme style:', e);
+      }
+    }
+  }, [theme, mapReady]);
 
   /* ─── Render Markers and Geofences across Google / Mapbox / Leaflet ── */
   useEffect(() => {
@@ -759,9 +895,9 @@ function LiveFamilyMapContent() {
           <div style="
             width:42px;height:42px;border-radius:50%;
             border:${isSelected ? '3px solid #ffc32f' : `2.5px solid ${member.color}`};
-            overflow:hidden;background:#0f1923;
+            overflow:hidden;background:${theme === 'light' ? '#ffffff' : '#0f1923'};
             display:flex;align-items:center;justify-content:center;
-            box-shadow:0 4px 12px rgba(0,0,0,0.6);
+            box-shadow:${theme === 'light' ? '0 4px 12px rgba(15,23,42,0.18)' : '0 4px 12px rgba(0,0,0,0.6)'};
             z-index:2;position:relative;
           ">
             ${member.avatar
@@ -782,18 +918,18 @@ function LiveFamilyMapContent() {
           <div style="
             margin-top:4px;
             white-space:nowrap;
-            background:rgba(15,25,35,0.92);
-            border:1px solid rgba(255,255,255,0.18);
+            background:${theme === 'light' ? 'rgba(255,255,255,0.96)' : 'rgba(15,25,35,0.92)'};
+            border:1px solid ${theme === 'light' ? '#cbd5e1' : 'rgba(255,255,255,0.18)'};
             padding:2px 8px;border-radius:6px;
-            font-size:11px;font-weight:700;color:#f0f0f0;
-            box-shadow:0 2px 6px rgba(0,0,0,0.5);
+            font-size:11px;font-weight:700;color:${theme === 'light' ? '#0f172a' : '#f0f0f0'};
+            box-shadow:${theme === 'light' ? '0 2px 8px rgba(15,23,42,0.12)' : '0 2px 6px rgba(0,0,0,0.5)'};
             display:flex;align-items:center;gap:4px;
             backdrop-filter:blur(4px);
             z-index:3;
           ">
             <span style="width:6px;height:6px;border-radius:50%;background:${member.color};display:inline-block;"></span>
             <span>${member.name.split(' ')[0]}</span>
-            ${member.battery != null ? `<span style="font-size:9px;color:#ffc32f;margin-left:2px;">${member.battery}%</span>` : ''}
+            ${member.battery != null ? `<span style="font-size:9px;color:${theme === 'light' ? '#d97706' : '#ffc32f'};margin-left:2px;">${member.battery}%</span>` : ''}
           </div>
         </div>
       `;
@@ -968,7 +1104,7 @@ function LiveFamilyMapContent() {
         }
       });
     }
-  }, [mapReady, members, geofences, showGeofences, selectedMember]);
+  }, [mapReady, members, geofences, showGeofences, selectedMember, theme]);
 
   /* ─── Polling effect ────────────────────────────────────────── */
   useEffect(() => {
@@ -1108,7 +1244,7 @@ function LiveFamilyMapContent() {
 
       {/* Map Container — ALWAYS in DOM */}
       <div className="absolute inset-0 z-0 pt-16 pb-20">
-        <div ref={mapContainerRef} className="w-full h-full bg-[#0a0f14]" />
+        <div ref={mapContainerRef} className={`w-full h-full transition-colors duration-300 ${theme === 'light' ? 'bg-[#f1f5f9]' : 'bg-[#0a0f14]'}`} />
       </div>
 
       {/* Map Control Floating Top Bar */}

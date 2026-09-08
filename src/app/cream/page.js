@@ -14,6 +14,9 @@ export default function CreamMasterPage() {
     registrationNumber: '',
     dispatchPhone: '',
     contactEmail: '',
+    accountingProvider: 'sage',
+    accountingCompanyId: '',
+    cameraBrand: 'Hikvision',
   });
 
   // Diagnostics State
@@ -71,7 +74,16 @@ export default function CreamMasterPage() {
         }),
       });
       setShowAddCompanyModal(false);
-      setNewCompany({ name: '', slug: '', registrationNumber: '', dispatchPhone: '', contactEmail: '' });
+      setNewCompany({
+        name: '',
+        slug: '',
+        registrationNumber: '',
+        dispatchPhone: '',
+        contactEmail: '',
+        accountingProvider: 'sage',
+        accountingCompanyId: '',
+        cameraBrand: 'Hikvision',
+      });
       fetchCompanies();
     } catch (e) {
       console.error('Failed to create company:', e);
@@ -190,8 +202,9 @@ export default function CreamMasterPage() {
                 <thead className="bg-[#0d1527] border-b border-white/10 text-on-surface-variant uppercase tracking-wider text-[10px]">
                   <tr>
                     <th className="p-4">Security Company</th>
-                    <th className="p-4">PSIRA Registration</th>
-                    <th className="p-4">Dispatch Phone</th>
+                    <th className="p-4">PSIRA Reg</th>
+                    <th className="p-4">Accounting ERP</th>
+                    <th className="p-4">Camera Engine</th>
                     <th className="p-4">Aura Status</th>
                     <th className="p-4">Account Status</th>
                     <th className="p-4 text-right">Actions</th>
@@ -221,8 +234,28 @@ export default function CreamMasterPage() {
                         {comp.registrationNumber || 'Pending'}
                       </td>
 
-                      <td className="p-4 text-secondary font-mono">
-                        {comp.dispatchPhone || 'Not set'}
+                      <td className="p-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-sm text-secondary">receipt_long</span>
+                          <span className="font-semibold text-white capitalize">
+                            {comp.accounting?.provider || 'Sage'}
+                          </span>
+                          <span className="text-[10px] text-on-surface-variant font-mono">
+                            ({comp.accounting?.companyId || 'Active'})
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="p-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-sm text-purple-300">videocam</span>
+                          <span className="font-semibold text-white">
+                            {comp.cameraSystem?.defaultBrand || 'Hikvision'}
+                          </span>
+                          <span className="text-[10px] text-[#38a169] font-bold">
+                            ({comp.cameras?.length || 0} feeds)
+                          </span>
+                        </div>
                       </td>
 
                       <td className="p-4">
@@ -404,6 +437,54 @@ export default function CreamMasterPage() {
                   onChange={(e) => setNewCompany({ ...newCompany, contactEmail: e.target.value })}
                   placeholder="control@company.co.za"
                   className="w-full bg-[#050b17] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-400"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-1 border-t border-white/10">
+                <div>
+                  <label className="font-bold text-on-surface-variant block mb-1">Accounting Package</label>
+                  <select
+                    value={newCompany.accountingProvider}
+                    onChange={(e) => setNewCompany({ ...newCompany, accountingProvider: e.target.value })}
+                    className="w-full bg-[#050b17] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400"
+                  >
+                    <option value="sage">Sage Pastel / Business Cloud</option>
+                    <option value="zoho">Zoho Books</option>
+                    <option value="xero">Xero Cloud Accounting</option>
+                    <option value="quickbooks">QuickBooks Online</option>
+                    <option value="listener">Listener Suite ERP (SA Control Rooms)</option>
+                    <option value="patriot">Patriot Security ERP</option>
+                    <option value="custom">Custom In-House REST API</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-on-surface-variant block mb-1">Primary Camera System</label>
+                  <select
+                    value={newCompany.cameraBrand}
+                    onChange={(e) => setNewCompany({ ...newCompany, cameraBrand: e.target.value })}
+                    className="w-full bg-[#050b17] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400"
+                  >
+                    <option value="Hikvision">Hikvision (ISAPI / RTSP)</option>
+                    <option value="Dahua">Dahua Technology (DSS / DMSS)</option>
+                    <option value="EZVIZ">EZVIZ Smart Security</option>
+                    <option value="Uniview">Uniview (UNV / EZCloud)</option>
+                    <option value="Axis">Axis Communications</option>
+                    <option value="Provision-ISR">Provision-ISR (Cam2)</option>
+                    <option value="Milesight">Milesight IoT & AI</option>
+                    <option value="Generic ONVIF/RTSP">Generic ONVIF / RTSP</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-on-surface-variant block mb-1">Accounting Company ID / Tenant ID (Optional)</label>
+                <input
+                  type="text"
+                  value={newCompany.accountingCompanyId}
+                  onChange={(e) => setNewCompany({ ...newCompany, accountingCompanyId: e.target.value })}
+                  placeholder="e.g. 700192841 or Company GUID"
+                  className="w-full bg-[#050b17] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400 font-mono"
                 />
               </div>
 

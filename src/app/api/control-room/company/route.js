@@ -30,6 +30,23 @@ export async function GET(request) {
           clientSecret: process.env.AURA_CLIENT_SECRET ? '••••••••••••' : '',
           defaultCustomerId: '1',
         },
+        accounting: {
+          provider: 'sage', // sage | zoho | xero | quickbooks | listener | patriot | custom_api
+          environment: 'production',
+          apiKey: '',
+          clientId: '',
+          companyId: 'ZA-SEC-001',
+          autoSyncClients: true,
+          status: 'configured',
+          lastSync: new Date().toISOString(),
+        },
+        cameraSystem: {
+          defaultBrand: 'Hikvision', // Hikvision | Dahua | EZVIZ | Uniview | Axis | Provision-ISR | Milesight | ONVIF
+          cloudApiKey: '',
+          cloudAccount: 'sec-command-cloud',
+          gatewayUrl: 'rtsp-gateway.safelink.co.za:8554',
+          status: 'connected',
+        },
         cameras: [
           {
             id: 'cam_01',
@@ -71,10 +88,18 @@ export async function GET(request) {
     }
 
     const data = doc.data();
-    // Mask sensitive client secret for safety
+    // Mask sensitive secrets for safety
     if (data.aura?.clientSecret) {
       data.aura.hasSecret = true;
       data.aura.clientSecret = '••••••••••••';
+    }
+    if (data.accounting?.apiKey) {
+      data.accounting.hasApiKey = true;
+      data.accounting.apiKey = '••••••••••••';
+    }
+    if (data.cameraSystem?.cloudApiKey) {
+      data.cameraSystem.hasKey = true;
+      data.cameraSystem.cloudApiKey = '••••••••••••';
     }
 
     return NextResponse.json({ company: { id: doc.id, ...data } });
@@ -86,7 +111,7 @@ export async function GET(request) {
 
 /**
  * POST /api/control-room/company
- * Create or update security company settings, camera list, and Aura integration.
+ * Create or update security company settings, camera list, accounting, and Aura integration.
  */
 export async function POST(request) {
   try {
@@ -123,6 +148,40 @@ export async function POST(request) {
         clientId: body.aura.clientId || existingData.aura?.clientId || '',
         clientSecret: secretToSave,
         defaultCustomerId: body.aura.defaultCustomerId || existingData.aura?.defaultCustomerId || '1',
+      };
+    }
+
+    if (body.accounting) {
+      const accountingKeyToSave = body.accounting.apiKey && !body.accounting.apiKey.includes('••••')
+        ? body.accounting.apiKey
+        : (existingData.accounting?.apiKey || '');
+
+      updatePayload.accounting = {
+        provider: body.accounting.provider || existingData.accounting?.provider || 'sage',
+        environment: body.accounting.environment || existingData.accounting?.environment || 'production',
+        apiKey: accountingKeyToSave,
+        clientId: body.accounting.clientId ?? (existingData.accounting?.clientId || ''),
+        companyId: body.accounting.companyId ?? (existingData.accounting?.companyId || ''),
+        endpoint: body.accounting.endpoint ?? (existingData.accounting?.endpoint || ''),
+        autoSyncClients: typeof body.accounting.autoSyncClients === 'boolean'
+          ? body.accounting.autoSyncClients
+          : (existingData.accounting?.autoSyncClients ?? true),
+        status: body.accounting.status || existingData.accounting?.status || 'configured',
+        lastSync: body.accounting.lastSync || existingData.accounting?.lastSync || new Date().toISOString(),
+      };
+    }
+
+    if (body.cameraSystem) {
+      const cameraKeyToSave = body.cameraSystem.cloudApiKey && !body.cameraSystem.cloudApiKey.includes('••••')
+        ? body.cameraSystem.cloudApiKey
+        : (existingData.cameraSystem?.cloudApiKey || '');
+
+      updatePayload.cameraSystem = {
+        defaultBrand: body.cameraSystem.defaultBrand || existingData.cameraSystem?.defaultBrand || 'Hikvision',
+        cloudApiKey: cameraKeyToSave,
+        cloudAccount: body.cameraSystem.cloudAccount ?? (existingData.cameraSystem?.cloudAccount || ''),
+        gatewayUrl: body.cameraSystem.gatewayUrl ?? (existingData.cameraSystem?.gatewayUrl || ''),
+        status: body.cameraSystem.status || existingData.cameraSystem?.status || 'connected',
       };
     }
 

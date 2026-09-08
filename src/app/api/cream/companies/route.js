@@ -25,6 +25,19 @@ export async function GET() {
           memberCount: 142,
           deviceCount: 38,
           aura: { enabled: true, environment: 'staging' },
+          accounting: {
+            provider: 'sage',
+            environment: 'production',
+            apiKey: '',
+            companyId: 'ZA-H24-001',
+            status: 'connected',
+            lastSync: new Date().toISOString(),
+          },
+          cameraSystem: {
+            defaultBrand: 'Hikvision',
+            cloudApiKey: '',
+            status: 'connected',
+          },
         },
         {
           id: 'global_security',
@@ -36,6 +49,19 @@ export async function GET() {
           memberCount: 89,
           deviceCount: 19,
           aura: { enabled: true, environment: 'staging' },
+          accounting: {
+            provider: 'listener',
+            environment: 'production',
+            apiKey: '',
+            companyId: 'LST-GSC-01',
+            status: 'connected',
+            lastSync: new Date().toISOString(),
+          },
+          cameraSystem: {
+            defaultBrand: 'Dahua',
+            cloudApiKey: '',
+            status: 'connected',
+          },
         },
         {
           id: 'fidelity_adt',
@@ -47,6 +73,19 @@ export async function GET() {
           memberCount: 512,
           deviceCount: 120,
           aura: { enabled: false, environment: 'staging' },
+          accounting: {
+            provider: 'zoho',
+            environment: 'production',
+            apiKey: '',
+            companyId: '700192841',
+            status: 'connected',
+            lastSync: new Date().toISOString(),
+          },
+          cameraSystem: {
+            defaultBrand: 'EZVIZ',
+            cloudApiKey: '',
+            status: 'connected',
+          },
         },
       ];
 
@@ -110,6 +149,22 @@ export async function POST(request) {
           environment: 'staging',
           clientId: '',
           clientSecret: '',
+        },
+        accounting: {
+          provider: newCompany.accountingProvider || 'sage',
+          environment: 'production',
+          apiKey: newCompany.accountingApiKey || '',
+          companyId: newCompany.accountingCompanyId || '',
+          autoSyncClients: true,
+          status: newCompany.accountingApiKey ? 'connected' : 'configured',
+          lastSync: new Date().toISOString(),
+        },
+        cameraSystem: {
+          defaultBrand: newCompany.cameraBrand || 'Hikvision',
+          cloudApiKey: newCompany.cameraApiKey || '',
+          cloudAccount: '',
+          gatewayUrl: 'rtsp-gateway.safelink.co.za:8554',
+          status: 'connected',
         },
         cameras: [],
         createdAt: FieldValue.serverTimestamp(),

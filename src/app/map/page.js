@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useRefresh, refreshScope } from '@/lib/refresh';
+import TelemetryStatus from '@/app/components/TelemetryStatus';
 import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
@@ -271,10 +273,15 @@ function LiveFamilyMapContent() {
   const isPartner = !!user?.isPartnerSession;
 
   const mapContainerRef = useRef(null);
+  const controlsRef = useRef(null);
+  const [isFullScreen, setIsFullScreen] = useState(false);
   const mapInstanceRef = useRef(null);
   const tileLayersRef = useRef([]);
   const markersRef = useRef({});
   const pollTimerRef = useRef(null);
+  const initialMapFocusRef = useRef(false);
+  const appliedFocusRequest = useRef(0);
+  const requestedDevice = useRef(null);
 
   const [members, setMembers] = useState([]);
   const [geofences, setGeofences] = useState([]);
@@ -283,8 +290,74 @@ function LiveFamilyMapContent() {
   const [mapReady, setMapReady] = useState(false);
   const [mapProvider, setMapProvider] = useState('leaflet'); // 'google' | 'mapbox' | 'leaflet'
   const [connectionStatus, setConnectionStatus] = useState('connecting');
-  const [isDrawerCollapsed, setIsDrawerCollapsed] = useState(false);
+  const [isDrawerCollapsed, setIsDrawerCollapsed] = useState(true);
+  const [mapFocusRequest, setMapFocusRequest] = useState(0);
   const [phoneToggling, setPhoneToggling] = useState(false);
+
+  useEffect(() => {
+    const onKeyDown = event => {
+      if (event.key === 'Escape') {
+        if (controlsRef.current?.open) {
+          controlsRef.current.open = false;
+          controlsRef.current.querySelector('summary')?.focus();
+        } else setIsFullScreen(false);
+      }
+    };
+    const onPointerDown = event => {
+      if (controlsRef.current && !controlsRef.current.contains(event.target)) controlsRef.current.open = false;
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!mapReady || !mapContainerRef.current) return;
+    const observer = new ResizeObserver(() => {
+      const map = mapInstanceRef.current;
+      if (map?._isLeaflet) map.invalidateSize({ pan: false });
+      else if (map?._isGoogle) map._google.maps.event.trigger(map, 'resize');
+      else map?.resize?.();
+    });
+    observer.observe(mapContainerRef.current);
+    return () => observer.disconnect();
+  }, [mapReady]);
+
+  useEffect(() => {
+    const save = () => {
+      const map = mapInstanceRef.current;
+      if (!map) return;
+      const center = map.getCenter();
+      const lat = typeof center.lat === 'function' ? center.lat() : center.lat;
+      const lng = typeof center.lng === 'function' ? center.lng() : center.lng;
+      try { sessionStorage.setItem('safelink_map_restore', JSON.stringify({ uid: user?.uid, lat, lng, zoom: map.getZoom(), device: selectedMember?.id })); } catch {}
+    };
+    window.addEventListener('safelink_before_update', save);
+    return () => window.removeEventListener('safelink_before_update', save);
+  }, [user?.uid, selectedMember?.id]);
+  useEffect(() => {
+    if (!mapReady) return;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('safelink_map_restore') || 'null');
+      if (!saved || saved.uid !== user?.uid) return;
+      const map = mapInstanceRef.current;
+      initialMapFocusRef.current = true;
+      if (map?._isLeaflet) map.setView([saved.lat, saved.lng], saved.zoom);
+      else if (map?._isGoogle) { map.setCenter({ lat: saved.lat, lng: saved.lng }); map.setZoom(saved.zoom); }
+      else map?.jumpTo({ center: [saved.lng, saved.lat], zoom: saved.zoom });
+      const member = members.find(item => item.id === saved.device);
+      if (member) { setSelectedMember(member); sessionStorage.removeItem('safelink_map_restore'); }
+    } catch {}
+  }, [mapReady, user?.uid, members]);
+
+  const changeZoom = delta => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    map.setZoom(map.getZoom() + delta);
+  };
 
   /* ─── Phone GPS Location Sharing Hook ─── */
   const {
@@ -295,17 +368,27 @@ function LiveFamilyMapContent() {
     nickname: phoneNickname,
     optIn: optInPhoneSharing,
     optOut: optOutPhoneSharing,
+    refreshLocation, checkedAt: phoneCheckedAt, battery: phoneBattery,
   } = useLocationSharing();
+
+  const selectMember = useCallback((member) => {
+    setSelectedMember(member);
+    setIsDrawerCollapsed(false);
+    setMapFocusRequest((request) => request + 1);
+  }, []);
 
   /* ─── Fetch device locations (Partner vs Standard Firebase) ─── */
   const fetchDeviceLocations = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setConnectionStatus('offline');
+      return;
+    }
 
     /* 1. Partner Session Path (Security Brokers / Partner CRM) */
     if (isPartner && partnerSession?.sessionToken) {
       try {
         const res = await fetch('/api/partner/devices', {
-          headers: { Authorization: `Bearer ${partnerSession.sessionToken}` },
+          cache: 'no-store', headers: { Authorization: `Bearer ${partnerSession.sessionToken}` },
         });
 
         if (res.ok) {
@@ -317,14 +400,14 @@ function LiveFamilyMapContent() {
               role: formatDeviceType(d.type),
               status: formatStatus(d.status),
               zone: 'Active Area',
-              battery: d.battery != null ? d.battery : 100,
-              speed: d.status === 'in_motion' ? 45 : 0,
-              address: d.address || (d.lat && d.lng ? `${d.lat.toFixed(4)}°S, ${d.lng.toFixed(4)}°E` : 'Ballito, KZN'),
-              lastSeen: d.lastSeen || 'Live',
+              battery: d.battery ?? null,
+              speed: d.speed ?? 0,
+              address: d.address || (d.lat && d.lng ? `${d.lat.toFixed(4)}, ${d.lng.toFixed(4)}` : 'Awaiting GPS fix'),
+              lastSeen: d.lastSeen || null, checkedAt: d.checkedAt || null,
               avatar: null,
               color: getDeviceColor(i),
-              lat: parseFloat(d.lat) || SHEFFIELD_BALLITO_COORDS.lat + (i * 0.006),
-              lng: parseFloat(d.lng) || SHEFFIELD_BALLITO_COORDS.lng + (i * 0.006),
+              lat: d.lat == null ? null : parseFloat(d.lat),
+              lng: d.lng == null ? null : parseFloat(d.lng),
               device: `${formatDeviceType(d.type)} • ${d.nickname}`,
               icon: getDeviceIcon(d.type),
               isTag: d.type === 'BLE_TAG',
@@ -335,7 +418,7 @@ function LiveFamilyMapContent() {
 
             setMembers(partnerMembers);
             setSelectedMember((prev) => {
-              if (!prev) return partnerMembers[0];
+              if (!prev) return partnerMembers.find(m => m.id === new URLSearchParams(window.location.search).get('device')) || partnerMembers[0];
               const match = partnerMembers.find((m) => m.id === prev.id);
               return match || partnerMembers[0];
             });
@@ -351,9 +434,8 @@ function LiveFamilyMapContent() {
       } catch (err) {
         console.warn('[map] Partner device fetch error:', err);
       }
-      setMembers([]);
-      setConnectionStatus('live');
-      return;
+      setConnectionStatus('offline');
+      throw new Error('Device connection failed');
     }
 
     /* 2. Live Firebase & Test Session Path */
@@ -370,22 +452,25 @@ function LiveFamilyMapContent() {
       }
 
       const [devicesRes, phonesRes] = await Promise.all([
-        fetch('/api/devices', { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
-        fetch('/api/location/share', { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
+        fetch('/api/devices', { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
+        fetch('/api/location/share', { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
       ]);
 
+      if (!devicesRes?.ok) throw new Error('Device connection failed');
+      let telemetryResolved = false;
       const allMembers = [];
 
       // Process hardware devices
       if (devicesRes?.ok) {
         const data = await devicesRes.json();
+        telemetryResolved = data.tracksolidResolved === true;
         const devices = (data.devices || []).filter((d) => !d.isPhoneDevice);
 
         if (devices.length > 0) {
           const locationsPromises = devices.map(async (device) => {
             try {
               const locRes = await fetch(`/api/devices/${device.imei}/location`, {
-                headers: { Authorization: `Bearer ${token}` },
+                cache: 'no-store', headers: { Authorization: `Bearer ${token}` },
               });
               if (locRes.ok) return locRes.json();
             } catch (e) {
@@ -397,22 +482,22 @@ function LiveFamilyMapContent() {
           const locations = await Promise.all(locationsPromises);
 
           devices.forEach((device, i) => {
-            const loc = locations[i];
-            const hasGps = loc?.lat && loc?.lng;
+            const loc = locations[i] || { ...device, gpsTime: device.updatedAt, address: device.lastAddress };
+            const hasGps = Number.isFinite(loc?.lat) && Number.isFinite(loc?.lng);
             allMembers.push({
               id: device.imei,
               name: device.nickname || device.deviceName || `Device ${device.imei.slice(-4)}`,
               role: device.model || 'Sentinel Device',
               status: loc?.isOnline ? 'Online' : (hasGps ? 'Offline' : 'Awaiting GPS Fix'),
               zone: '',
-              battery: loc?.batteryLevel || null,
+              battery: loc?.batteryLevel ?? loc?.tagBattery ?? null,
               speed: loc?.speed || 0,
-              address: loc?.address || (hasGps ? `${loc.lat.toFixed(4)}°S, ${loc.lng.toFixed(4)}°E` : 'Awaiting GPS fix...'),
-              lastSeen: loc?.gpsTime || 'Connected',
+              address: loc?.address || (hasGps ? `${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}` : 'Awaiting GPS fix...'),
+              lastSeen: loc?.gpsTime || null, checkedAt: locations[i] ? Date.now() : device.checkedAt || null,
               avatar: null,
               color: getDeviceColor(allMembers.length),
-              lat: hasGps ? loc.lat : (SHEFFIELD_BALLITO_COORDS.lat + (i * 0.004)),
-              lng: hasGps ? loc.lng : (SHEFFIELD_BALLITO_COORDS.lng + (i * 0.004)),
+              lat: hasGps ? loc.lat : null,
+              lng: hasGps ? loc.lng : null,
               device: `${device.model || 'Sentinel'} • ${device.imei.slice(-6)}`,
               isTag: loc?.isTag || false,
               isPhone: false,
@@ -422,77 +507,7 @@ function LiveFamilyMapContent() {
         }
       }
 
-      // Merge locally linked Sentinel devices if not yet in backend response
-      try {
-        const cached = localStorage.getItem('safelink_user_devices');
-        if (cached) {
-          let localDevs = JSON.parse(cached);
-          if (Array.isArray(localDevs)) {
-            // Auto-migrate typo 980980820010378 -> 980980820010318
-            let mutated = false;
-            localDevs = localDevs.map((ld) => {
-              if (ld.imei === '980980820010378' || ld.id === '980980820010378' || ld.id === 'device_980980820010378') {
-                mutated = true;
-                return {
-                  ...ld,
-                  id: 'device_980980820010318',
-                  imei: '980980820010318',
-                  name: ld.name && !ld.name.includes('10378') ? ld.name : 'AARON - NODE -10318',
-                };
-              }
-              return ld;
-            });
-            if (mutated) {
-              try {
-                localStorage.setItem('safelink_user_devices', JSON.stringify(localDevs));
-              } catch {}
-            }
 
-            const unlisted = localDevs.filter((ld) => ld.imei && !allMembers.some((m) => m.id === ld.imei));
-            if (unlisted.length > 0) {
-              const unlistedLocs = await Promise.all(
-                unlisted.map(async (ld) => {
-                  try {
-                    const locRes = await fetch(`/api/devices/${ld.imei}/location`, {
-                      headers: { Authorization: `Bearer ${token}` },
-                    });
-                    if (locRes.ok) return await locRes.json();
-                  } catch (e) {
-                    console.warn(`Failed to fetch location for local device ${ld.imei}:`, e);
-                  }
-                  return null;
-                })
-              );
-
-              unlisted.forEach((ld, idx) => {
-                const loc = unlistedLocs[idx];
-                const hasGps = loc?.lat && loc?.lng;
-                allMembers.push({
-                  id: ld.imei,
-                  name: ld.name || ld.nickname || `Device ${ld.imei.slice(-4)}`,
-                  role: ld.category || ld.model || 'Sentinel Tracker',
-                  status: loc?.isOnline ? 'Online' : (hasGps ? 'Offline' : 'Connecting...'),
-                  zone: '',
-                  battery: loc?.batteryLevel != null ? loc.batteryLevel : (ld.battery || null),
-                  speed: loc?.speed || 0,
-                  address: loc?.address || (hasGps ? `${loc.lat.toFixed(4)}°S, ${loc.lng.toFixed(4)}°E` : 'Awaiting first GPS fix...'),
-                  lastSeen: loc?.gpsTime || 'Just linked',
-                  avatar: null,
-                  color: getDeviceColor(allMembers.length),
-                  lat: hasGps ? loc.lat : (SHEFFIELD_BALLITO_COORDS.lat + ((allMembers.length + 1) * 0.003)),
-                  lng: hasGps ? loc.lng : (SHEFFIELD_BALLITO_COORDS.lng + ((allMembers.length + 1) * 0.003)),
-                  device: `${ld.category || ld.model || 'Sentinel'} • ${ld.imei.slice(-6)}`,
-                  isTag: loc?.isTag || false,
-                  isPhone: false,
-                  isDemo: false,
-                });
-              });
-            }
-          }
-        }
-      } catch (localErr) {
-        console.warn('[map] Local devices merge error:', localErr);
-      }
 
       // Process phone GPS sharing from backend
       if (phonesRes?.ok) {
@@ -508,10 +523,10 @@ function LiveFamilyMapContent() {
                 role: 'Phone GPS (Live)',
                 status: 'Live',
                 zone: 'Active Device',
-                battery: null,
+                battery: phone.battery ?? null,
                 speed: phone.speed || 0,
-                address: `${parseFloat(phone.lat).toFixed(4)}°S, ${parseFloat(phone.lng).toFixed(4)}°E`,
-                lastSeen: phone.gpsTime || phone.updatedAt || 'Just now',
+                address: `${parseFloat(phone.lat).toFixed(4)}, ${parseFloat(phone.lng).toFixed(4)}`,
+                lastSeen: phone.gpsTime || null, checkedAt: Date.now(),
                 avatar: user?.photoURL || null,
                 color: '#10b981',
                 lat: parseFloat(phone.lat),
@@ -552,10 +567,10 @@ function LiveFamilyMapContent() {
           role: 'Phone GPS (Live)',
           status: 'Live',
           zone: 'Active Device',
-          battery: null,
+          battery: phoneBattery,
           speed: localPhoneGps.speed ? Math.round(localPhoneGps.speed) : 0,
-          address: `${parseFloat(localPhoneGps.lat).toFixed(4)}°S, ${parseFloat(localPhoneGps.lng).toFixed(4)}°E`,
-          lastSeen: 'Just now',
+          address: `${parseFloat(localPhoneGps.lat).toFixed(4)}, ${parseFloat(localPhoneGps.lng).toFixed(4)}`,
+          lastSeen: localPhoneGps.timestamp || null, checkedAt: phoneCheckedAt,
           avatar: user?.photoURL || null,
           color: '#10b981',
           lat: parseFloat(localPhoneGps.lat),
@@ -577,24 +592,37 @@ function LiveFamilyMapContent() {
       if (allMembers.length > 0) {
         setMembers(allMembers);
         setSelectedMember((prev) => {
-          if (!prev) return allMembers[0];
+          if (!prev) return allMembers.find(m => m.id === new URLSearchParams(window.location.search).get('device')) || allMembers[0];
           const match = allMembers.find((m) => m.id === prev.id);
           return match || allMembers[0];
         });
-        setConnectionStatus('live');
+        setConnectionStatus(telemetryResolved ? 'live' : 'offline');
       } else {
         setMembers([]);
         setSelectedMember(null);
-        setConnectionStatus('live');
+        setConnectionStatus(telemetryResolved ? 'live' : 'offline');
       }
     } catch (err) {
       console.warn('[map] Failed to fetch device locations:', err);
-      setMembers([]);
-      setConnectionStatus('live');
+      setConnectionStatus('offline');
+      throw err;
     }
-  }, [user, isPartner, partnerSession, isPhoneSharing, lastPosition, phoneNickname]);
+  }, [user, isPartner, partnerSession, isPhoneSharing, lastPosition, phoneNickname, phoneCheckedAt, phoneBattery]);
 
   /* ─── Fetch Geofences ───────────────────────────────────────── */
+  useRefresh('map', fetchDeviceLocations);
+  async function refreshSelected() {
+    if (selectedMember?.isPhone && selectedMember.id === `phone_${user.uid}` && isPhoneSharing) return refreshLocation();
+    if (!selectedMember || selectedMember.isPartner || selectedMember.isPhone) return refreshScope('map');
+    const token = await user.getIdToken();
+    const response = await fetch(`/api/devices/${selectedMember.id}/location`, { cache: 'no-store', headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000) });
+    if (!response.ok) throw new Error('Telemetry unavailable');
+    const data = await response.json();
+    const update = member => member.id === selectedMember.id ? { ...member, checkedAt: Date.now(), lastSeen: data.gpsTime, battery: data.batteryLevel ?? data.tagBattery, lat: data.lat ?? member.lat, lng: data.lng ?? member.lng, address: data.address || member.address, status: data.isOnline ? 'Online' : 'Offline' } : member;
+    setMembers(current => current.map(update));
+    setSelectedMember(current => current ? update(current) : current);
+  }
+
   const fetchGeofences = useCallback(async () => {
     if (!user || user.isTestSession || isPartner) return;
     try {
@@ -602,7 +630,7 @@ function LiveFamilyMapContent() {
       if (!token) return;
 
       const res = await fetch('/api/geofences', {
-        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store', headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();
@@ -652,10 +680,8 @@ function LiveFamilyMapContent() {
                   updatedAt: new Date().toISOString(),
                 })
               );
-              if (mapInstanceRef.current) {
-                panMapTo(mapInstanceRef.current, liveLat, liveLng, 15);
-              }
-              fetchDeviceLocations();
+              // GPS refresh must never move the map after the user begins panning.
+              refreshScope('map').catch(() => {});
             },
             (err) => console.warn('[map] Initial live GPS query note:', err.message),
             { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
@@ -674,9 +700,11 @@ function LiveFamilyMapContent() {
           const map = new googleMaps.Map(mapContainerRef.current, {
             center: initCenter,
             zoom: 15,
+            gestureHandling: 'greedy',
+            draggable: true,
             styles: isLightMode ? GOOGLE_MAPS_LIGHT_STYLE : GOOGLE_MAPS_DARK_STYLE,
             disableDefaultUI: true,
-            zoomControl: true,
+            zoomControl: false,
             backgroundColor: isLightMode ? '#f8fafc' : '#0f1923',
           });
 
@@ -710,7 +738,7 @@ function LiveFamilyMapContent() {
             attributionControl: false,
           });
 
-          map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
+
 
           map.on('load', () => {
             if (!cancelled) {
@@ -770,7 +798,7 @@ function LiveFamilyMapContent() {
 
         tileLayersRef.current = [baseLayer, refLayer];
 
-        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
 
         setTimeout(() => {
           try { map.invalidateSize(); } catch {}
@@ -873,7 +901,8 @@ function LiveFamilyMapContent() {
 
     // ── 1. Add Device & Member Markers ──
     members.forEach((member) => {
-      if (!member.lat || !member.lng) return;
+      if (!Number.isFinite(member.lat) || !Number.isFinite(member.lng)) return;
+
 
       const isSelected = selectedMember?.id === member.id;
       const initial = member.name.charAt(0).toUpperCase();
@@ -972,7 +1001,7 @@ function LiveFamilyMapContent() {
         }
 
         const latLng = new google.maps.LatLng(member.lat, member.lng);
-        const overlay = new HTMLMarkerOverlay(latLng, markerHtml, () => setSelectedMember(member));
+        const overlay = new HTMLMarkerOverlay(latLng, markerHtml, () => selectMember(member));
         overlay.setMap(map);
         markersRef.current[member.id] = overlay;
 
@@ -999,7 +1028,7 @@ function LiveFamilyMapContent() {
           iconAnchor: [30, 26],
         });
         const marker = L.marker([member.lat, member.lng], { icon }).addTo(map);
-        marker.on('click', () => setSelectedMember(member));
+        marker.on('click', () => selectMember(member));
         markersRef.current[member.id] = marker;
 
         // Draw accuracy circle for phone GPS
@@ -1019,7 +1048,7 @@ function LiveFamilyMapContent() {
         const el = document.createElement('div');
         el.className = 'safelink-radar-marker';
         el.innerHTML = markerHtml;
-        el.addEventListener('click', () => setSelectedMember(member));
+        el.addEventListener('click', () => selectMember(member));
 
         try {
           import('mapbox-gl').then(({ default: mgl }) => {
@@ -1104,14 +1133,14 @@ function LiveFamilyMapContent() {
         }
       });
     }
-  }, [mapReady, members, geofences, showGeofences, selectedMember, theme]);
+  }, [mapReady, members, geofences, showGeofences, selectedMember, selectMember, theme]);
 
   /* ─── Polling effect ────────────────────────────────────────── */
   useEffect(() => {
-    fetchDeviceLocations();
+    refreshScope('map').catch(() => {});
     fetchGeofences();
 
-    pollTimerRef.current = setInterval(fetchDeviceLocations, REFRESH_INTERVAL_MS);
+    pollTimerRef.current = setInterval(() => { if (!document.hidden) refreshScope('map').catch(() => {}); }, REFRESH_INTERVAL_MS);
     return () => clearInterval(pollTimerRef.current);
   }, [fetchDeviceLocations, fetchGeofences]);
 
@@ -1120,19 +1149,21 @@ function LiveFamilyMapContent() {
     const handlePhoneLocationBroadcast = (e) => {
       const coords = e.detail;
       if (coords?.lat && coords?.lng) {
-        fetchDeviceLocations();
+        refreshScope('map').catch(() => {});
       }
     };
     window.addEventListener('safelink_phone_location_updated', handlePhoneLocationBroadcast);
     return () => window.removeEventListener('safelink_phone_location_updated', handlePhoneLocationBroadcast);
   }, [fetchDeviceLocations]);
 
-  /* ─── Pan to selected member ────────────────────────────────── */
+  /* ─── Pan only for the first load or an intentional device selection. ─── */
   useEffect(() => {
-    if (!mapReady || !mapInstanceRef.current || !selectedMember?.lat || !selectedMember?.lng) return;
-
+    if (!mapReady || !mapInstanceRef.current || !Number.isFinite(selectedMember?.lat) || !Number.isFinite(selectedMember?.lng)) return;
+    if (initialMapFocusRef.current && appliedFocusRequest.current === mapFocusRequest) return;
     panMapTo(mapInstanceRef.current, selectedMember.lat, selectedMember.lng, 15);
-  }, [selectedMember, mapReady]);
+    initialMapFocusRef.current = true;
+    appliedFocusRequest.current = mapFocusRequest;
+  }, [mapReady, mapFocusRequest, selectedMember?.id, selectedMember?.lat, selectedMember?.lng]);
 
   /* ─── Locate Phone Position Directly with High Precision ─── */
   const handleLocatePhone = useCallback(() => {
@@ -1164,7 +1195,7 @@ function LiveFamilyMapContent() {
             detail: { lat, lng, accuracy },
           })
         );
-        fetchDeviceLocations();
+        refreshScope('map').catch(() => {});
       },
       (err) => {
         console.warn('[map] Locate Phone error:', err);
@@ -1181,19 +1212,21 @@ function LiveFamilyMapContent() {
       return;
     }
     const map = mapInstanceRef.current;
+    const locatedMembers = members.filter(m => Number.isFinite(m.lat) && Number.isFinite(m.lng));
+    if (!locatedMembers.length) return;
 
     if (map._isGoogle) {
       const google = map._google;
       const bounds = new google.maps.LatLngBounds();
-      members.forEach((m) => bounds.extend({ lat: m.lat, lng: m.lng }));
+      locatedMembers.forEach((m) => bounds.extend({ lat: m.lat, lng: m.lng }));
       map.fitBounds(bounds, 60);
     } else if (map._isLeaflet) {
       const L = map._L;
-      const bounds = L.latLngBounds(members.map((m) => [m.lat, m.lng]));
+      const bounds = L.latLngBounds(locatedMembers.map((m) => [m.lat, m.lng]));
       map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
     } else if (map.fitBounds) {
-      const lngs = members.map((m) => m.lng);
-      const lats = members.map((m) => m.lat);
+      const lngs = locatedMembers.map((m) => m.lng);
+      const lats = locatedMembers.map((m) => m.lat);
       map.fitBounds(
         [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
         { padding: 60, maxZoom: 15 }
@@ -1220,7 +1253,7 @@ function LiveFamilyMapContent() {
     }
     // Immediate refresh
     setTimeout(() => {
-      fetchDeviceLocations();
+      refreshScope('map').catch(() => {});
     }, 600);
     setPhoneToggling(false);
   };
@@ -1232,109 +1265,81 @@ function LiveFamilyMapContent() {
       localStorage.getItem('safelink_location_sharing_consent') === 'granted');
   const isBroadcasting = isPhoneSharing || isConsentGranted;
 
-  const statusColor = '#38a169';
-  const statusText =
-    connectionStatus === 'partner_live'
-      ? `${members.length} Partner Device${members.length !== 1 ? 's' : ''} Live`
-      : `${members.length} Active Device${members.length !== 1 ? 's' : ''} & Beacon${members.length !== 1 ? 's' : ''}`;
+  const statusColor = connectionStatus === 'offline' ? '#ef4444' : connectionStatus === 'connecting' ? '#FFC32F' : '#38a169';
+  const statusText = connectionStatus === 'connecting' ? 'Connecting…' : connectionStatus === 'offline' ? 'Connection issue' : `Live · ${members.length} device${members.length === 1 ? '' : 's'}`;
 
   return (
-    <div className="bg-background text-on-background font-body-md h-screen w-screen overflow-hidden flex flex-col relative">
-      <Header title="Live Radar & GPS" showNotification={true} />
+    <div className={`bg-background text-on-background font-body-md w-full overflow-hidden flex flex-col ${isFullScreen ? 'fixed inset-0 z-[70] h-dvh' : 'relative h-dvh'}`}>
+      {!isFullScreen && <Header title="Live tracking" showNotification={true} />}
 
       {/* Map Container — ALWAYS in DOM */}
-      <div className="absolute inset-0 z-0 pt-16 pb-20">
+      <div className={`absolute inset-0 z-0 ${isFullScreen ? '' : 'pt-16 pb-20'}`}>
         <div ref={mapContainerRef} className={`w-full h-full transition-colors duration-300 ${theme === 'light' ? 'bg-[#f1f5f9]' : 'bg-[#0a0f14]'}`} />
       </div>
 
-      {/* Map Control Floating Top Bar */}
-      <div className="absolute top-20 left-4 right-4 z-30 max-w-2xl mx-auto flex items-center justify-between pointer-events-auto">
-        <div className="glass-panel px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg border border-white/10">
-          <span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ backgroundColor: statusColor }} />
-          <span className="font-label-sm text-xs font-bold text-on-surface">{statusText}</span>
-          <span className="text-[10px] text-primary font-semibold uppercase tracking-wider">
-            [{mapProvider === 'google' ? 'Google Maps' : mapProvider === 'mapbox' ? 'Mapbox' : 'Radar'}]
-          </span>
+      {(connectionStatus === 'connecting' || connectionStatus === 'offline') && (
+        <div className={`absolute ${isFullScreen ? 'top-0' : 'top-16'} left-0 right-0 z-40 px-4 py-2 text-center text-xs font-bold shadow-lg ${connectionStatus === 'offline' ? 'bg-red-900 text-red-100' : 'bg-amber-950 text-amber-100'}`}>
+          {connectionStatus === 'offline' ? 'Connection issue — retrying' : 'Connecting to Safelink...'}
         </div>
+      )}
 
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Locate My Phone GPS Button */}
-          <button
-            onClick={handleLocatePhone}
-            className="glass-panel p-2 rounded-full hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center text-secondary border border-secondary/40 shadow-lg cursor-pointer"
-            title="Locate my exact phone GPS position"
-          >
-            <span className="material-symbols-outlined text-[18px]">my_location</span>
-          </button>
+      {/* Compact toolbar: full labels live in a keyboard-accessible disclosure. */}
+      <div className={`absolute left-4 right-4 z-40 flex items-start justify-between gap-3 ${isFullScreen ? 'top-12' : 'top-28'}`}>
+        <details ref={controlsRef} className="relative min-w-0">
+          <summary className="glass-panel min-h-11 px-3 rounded-xl flex items-center gap-2 cursor-pointer list-none border border-white/15 shadow-lg text-sm font-bold text-on-surface [&::-webkit-details-marker]:hidden">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: statusColor }} />
+            Map tools
+            <span className="material-symbols-outlined text-xl" aria-hidden="true">expand_more</span>
+          </summary>
+          <div className="absolute left-0 top-full mt-2 w-[min(17rem,calc(100vw-2rem))] max-h-[calc(100dvh-15rem)] overflow-y-auto rounded-2xl bg-surface-container border border-white/15 p-2 shadow-xl text-on-surface">
+            <button onClick={() => { setIsDrawerCollapsed(false); controlsRef.current.open = false; }} className="w-full min-h-11 flex items-center gap-3 px-3 rounded-xl hover:bg-white/10 text-left text-sm">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: statusColor }} />{statusText}
+            </button>
+            <button onClick={handleLocatePhone} disabled={!mapReady} className="w-full min-h-11 flex items-center gap-3 px-3 rounded-xl hover:bg-white/10 text-left text-sm disabled:opacity-50">
+              <span className="material-symbols-outlined text-xl" aria-hidden="true">my_location</span>Locate my phone
+            </button>
+            <button onClick={handleRecenter} disabled={!mapReady} className="w-full min-h-11 flex items-center gap-3 px-3 rounded-xl hover:bg-white/10 text-left text-sm disabled:opacity-50">
+              <span className="material-symbols-outlined text-xl" aria-hidden="true">center_focus_strong</span>Fit all devices
+            </button>
+            <button onClick={() => setShowGeofences(value => !value)} aria-pressed={showGeofences} disabled={!mapReady} className="w-full min-h-11 flex items-center gap-3 px-3 rounded-xl hover:bg-white/10 text-left text-sm disabled:opacity-50">
+              <span className="material-symbols-outlined text-xl" aria-hidden="true">share_location</span>Safe zones: {showGeofences ? 'On' : 'Off'}
+            </button>
+            <button onClick={handleTogglePhoneSharing} disabled={phoneToggling || connectionStatus === 'connecting'} aria-pressed={isBroadcasting} className="w-full min-h-11 flex items-center gap-3 px-3 rounded-xl hover:bg-white/10 text-left text-sm disabled:opacity-50">
+              <span className="material-symbols-outlined text-xl" aria-hidden="true">satellite_alt</span>{phoneToggling ? 'Updating…' : isBroadcasting ? 'Stop sharing phone' : 'Share Phone'}
+            </button>
+            <button onClick={() => router.push('/devices')} className="w-full min-h-11 flex items-center gap-3 px-3 rounded-xl hover:bg-white/10 text-left text-sm">
+              <span className="material-symbols-outlined text-xl" aria-hidden="true">devices</span>Manage devices
+            </button>
+          </div>
+        </details>
+        <button type="button" onClick={() => setIsFullScreen(value => !value)} aria-label={isFullScreen ? 'Exit full-screen map' : 'View full-screen map'} aria-pressed={isFullScreen} title={isFullScreen ? 'Exit full-screen map (Esc)' : 'View full-screen map'} className="glass-panel w-11 h-11 shrink-0 rounded-xl border border-white/15 shadow-lg flex items-center justify-center text-on-surface">
+          <span className="material-symbols-outlined text-2xl" aria-hidden="true">{isFullScreen ? 'fullscreen_exit' : 'fullscreen'}</span>
+        </button>
+      </div>
 
-          {/* Recenter All Button */}
-          <button
-            onClick={handleRecenter}
-            className="glass-panel p-2 rounded-full hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center text-on-surface border border-white/10 shadow-lg cursor-pointer"
-            title="Recenter devices and phone"
-          >
-            <span className="material-symbols-outlined text-[18px]">center_focus_strong</span>
-          </button>
-
-          {/* Toggle Geofence Safe Zones */}
-          <button
-            onClick={() => setShowGeofences(!showGeofences)}
-            className={`glass-panel p-2 rounded-full hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center gap-1.5 border border-white/10 ${
-              showGeofences ? 'text-secondary border-secondary/40' : 'text-on-surface-variant'
-            }`}
-            title="Toggle Safe Zones"
-          >
-            <span className="material-symbols-outlined text-[18px]">share_location</span>
-            <span className="text-xs font-semibold pr-1 hidden sm:inline">Zones</span>
-          </button>
-
-          {/* Share Phone GPS Switch */}
-          <button
-            onClick={handleTogglePhoneSharing}
-            disabled={phoneToggling}
-            className={`glass-panel px-3 py-1.5 rounded-full hover:bg-white/10 active:scale-95 transition-all text-xs font-bold flex items-center gap-1.5 border shadow-lg cursor-pointer ${
-              isBroadcasting
-                ? 'text-emerald-400 border-emerald-500/50 bg-emerald-500/15 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
-                : 'text-on-surface border-white/10'
-            } ${phoneToggling ? 'opacity-50 cursor-wait' : ''}`}
-            title={isBroadcasting ? 'Phone GPS is broadcasting live to radar' : 'Broadcast this phone GPS to radar'}
-          >
-            <span className={`w-2 h-2 rounded-full ${isBroadcasting ? 'bg-emerald-400 animate-ping' : 'bg-on-surface-variant'}`} />
-            <span className="material-symbols-outlined text-[16px]">
-              {isBroadcasting ? 'satellite_alt' : 'smartphone'}
-            </span>
-            <span className="hidden xs:inline">{isBroadcasting ? 'Phone Live' : 'Share Phone'}</span>
-          </button>
-
-          {/* Add Device / Device List */}
-          <button
-            onClick={() => router.push('/devices')}
-            className="glass-panel px-3 py-1.5 rounded-full hover:bg-white/10 active:scale-95 transition-all text-xs font-bold text-primary flex items-center gap-1 border border-white/10"
-          >
-            <span className="material-symbols-outlined text-[16px]">devices</span>
-            <span className="hidden sm:inline">Devices</span>
-          </button>
-        </div>
+      <div role="group" aria-label="Map zoom" className="absolute right-4 z-30 rounded-xl overflow-hidden bg-surface-container text-on-surface border border-white/20 shadow-lg" style={{ bottom: `calc(${isFullScreen ? '24px' : '104px'} + env(safe-area-inset-bottom))` }}>
+        <button type="button" aria-label="Zoom in" disabled={!mapReady} onClick={() => changeZoom(1)} className="w-11 h-11 flex items-center justify-center hover:bg-white/10 disabled:opacity-50 border-b border-white/15"><span className="material-symbols-outlined text-2xl" aria-hidden="true">add</span></button>
+        <button type="button" aria-label="Zoom out" disabled={!mapReady} onClick={() => changeZoom(-1)} className="w-11 h-11 flex items-center justify-center hover:bg-white/10 disabled:opacity-50"><span className="material-symbols-outlined text-2xl" aria-hidden="true">remove</span></button>
       </div>
 
       {/* GPS Permission Error Notice */}
       {phoneSharingError && (
-        <div className="absolute top-32 left-4 right-4 z-30 max-w-md mx-auto pointer-events-auto bg-red-500/20 border border-red-500/50 backdrop-blur-md rounded-xl p-2.5 text-xs text-red-200 flex items-center gap-2 shadow-xl">
+        <div className="absolute top-44 left-4 right-4 z-30 max-w-md mx-auto pointer-events-auto bg-red-500/20 border border-red-500/50 backdrop-blur-md rounded-xl p-2.5 text-xs text-red-200 flex items-center gap-2 shadow-xl">
           <span className="material-symbols-outlined text-sm shrink-0">warning</span>
           <span className="flex-1">{phoneSharingError}</span>
         </div>
       )}
 
       {/* Radar Scanning Empty State Banner when no members/devices are active */}
-      {members.length === 0 && (
-        <div className="absolute bottom-24 left-4 right-4 z-20 max-w-md mx-auto pointer-events-auto animate-fadeIn">
+      {members.length === 0 && connectionStatus !== 'connecting' && (
+        <div className={`absolute ${isFullScreen ? 'bottom-6' : 'bottom-24'} left-4 right-20 z-20 max-w-md mx-auto pointer-events-auto animate-fadeIn`}>
           <div className="glass-panel p-4 rounded-2xl border border-secondary/40 bg-surface-container-high/95 backdrop-blur-xl shadow-2xl text-center space-y-2">
             <div className="flex items-center justify-center gap-2 text-secondary">
               <span className="material-symbols-outlined text-2xl animate-pulse">radar</span>
-              <span className="font-headline-md text-xs font-bold uppercase tracking-wider">Radar Online • Clean Slate</span>
+              <span className="font-headline-md text-xs font-bold uppercase tracking-wider">No linked devices</span>
             </div>
             <p className="font-body-md text-xs text-on-surface-variant leading-relaxed">
-              No active GPS beacons or Sentinel devices detected. Tap <strong className="text-secondary">&quot;Share Phone&quot;</strong> in the top controls or pair your Sentinel hardware to track on the radar.
+              No active GPS beacons or Sentinel devices detected. Tap <strong className="text-secondary">&quot;Share Phone&quot;</strong> under Map tools or pair your Sentinel hardware to track on the radar.
             </p>
           </div>
         </div>
@@ -1342,12 +1347,12 @@ function LiveFamilyMapContent() {
 
       {/* Selected Device Drawer with Pull Tab */}
       {selectedMember && (
-        <div className="absolute bottom-20 left-0 right-0 z-30 p-gutter max-w-2xl mx-auto pointer-events-auto">
-          <div className="glass-panel rounded-2xl p-sm sm:p-md shadow-2xl border border-white/15 backdrop-blur-xl bg-surface-container-high/90 transition-all duration-300">
+        <div className={`absolute ${isFullScreen ? 'bottom-0' : 'bottom-20'} left-0 right-0 z-30 max-w-2xl mx-auto pointer-events-auto ${isDrawerCollapsed ? 'px-0' : 'p-gutter'}`}>
+          <div className={`glass-panel shadow-2xl border border-white/15 backdrop-blur-xl bg-surface-container-high/90 transition-all duration-300 ${isDrawerCollapsed ? 'w-fit mx-auto rounded-t-xl px-2 py-0' : 'rounded-2xl p-sm sm:p-md max-h-[55dvh] overflow-y-auto'}`}>
             {/* Pull Tab / Collapse Handle at Top */}
             <div
               onClick={() => setIsDrawerCollapsed(!isDrawerCollapsed)}
-              className="w-full flex justify-center items-center py-1 -mt-1 mb-1 cursor-pointer group select-none"
+              role="button" tabIndex={0} aria-label={isDrawerCollapsed ? "Expand device list" : "Collapse device list"} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setIsDrawerCollapsed(v => !v); } }} className="w-full flex justify-center items-center py-1 cursor-pointer group select-none"
               title={isDrawerCollapsed ? 'Expand tracker details' : 'Collapse tracker details'}
             >
               <div className="flex items-center gap-1 px-3 py-0.5 rounded-full bg-white/10 group-hover:bg-secondary/30 transition-all border border-white/10 shadow-sm">
@@ -1355,12 +1360,13 @@ function LiveFamilyMapContent() {
                   {isDrawerCollapsed ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}
                 </span>
                 <span className="text-[10px] font-bold text-on-surface-variant group-hover:text-on-surface uppercase tracking-wider">
-                  {isDrawerCollapsed ? 'Expand Details' : 'Minimize'}
+                  {isDrawerCollapsed ? '' : 'Minimize'}
                 </span>
               </div>
             </div>
 
-            {/* Header info (Always Visible) */}
+            {!isDrawerCollapsed && <>
+            {/* Header info */}
             <div className="flex items-start justify-between">
               <div
                 className="flex items-center gap-sm cursor-pointer"
@@ -1380,7 +1386,7 @@ function LiveFamilyMapContent() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-headline-md text-base md:text-lg font-bold text-on-surface leading-tight">
+                    <h3 className="break-words min-w-0 font-headline-md text-base md:text-lg font-bold text-on-surface leading-tight">
                       {selectedMember.name}
                     </h3>
                     <span className="bg-[#38a169]/20 text-[#38a169] border border-[#38a169]/30 text-[10px] font-bold px-2 py-0.5 rounded-full">
@@ -1399,22 +1405,10 @@ function LiveFamilyMapContent() {
                 </div>
               </div>
 
-              <div className="flex flex-col items-end shrink-0 pl-2">
-                {selectedMember.battery !== null && (
-                  <div className="flex items-center gap-1 text-secondary text-xs font-bold">
-                    <span className="material-symbols-outlined text-[14px]">battery_5_bar</span>
-                    {selectedMember.battery}%
-                  </div>
-                )}
-                {selectedMember.speed > 0 && (
-                  <span className="text-[10px] text-on-surface-variant font-mono">{selectedMember.speed} km/h</span>
-                )}
-                <span className="text-[10px] text-on-surface-variant/80">{selectedMember.lastSeen}</span>
-              </div>
             </div>
+            <TelemetryStatus name={selectedMember.name} checkedAt={selectedMember.checkedAt} reportedAt={selectedMember.lastSeen} battery={selectedMember.battery} onRefresh={refreshSelected} />
 
-            {/* Expandable Section: Quick Member Carousel & Actions */}
-            {!isDrawerCollapsed && (
+            {/* Quick member carousel and actions */}
               <div className="animate-fadeIn">
                 {/* Quick Member / Device Switcher Carousel */}
                 <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 pt-2.5 mt-2 border-t border-white/10">
@@ -1423,7 +1417,7 @@ function LiveFamilyMapContent() {
                     return (
                       <button
                         key={m.id}
-                        onClick={() => setSelectedMember(m)}
+                        onClick={() => selectMember(m)}
                         className={`p-1.5 rounded-xl flex flex-col items-center gap-1 transition-all cursor-pointer ${
                           active
                             ? 'bg-secondary/20 border border-secondary/40 text-secondary'
@@ -1460,12 +1454,12 @@ function LiveFamilyMapContent() {
                   </button>
                 </div>
               </div>
-            )}
+            </>}
           </div>
         </div>
       )}
 
-      <BottomNav />
+      {!isFullScreen && <BottomNav />}
     </div>
   );
 }

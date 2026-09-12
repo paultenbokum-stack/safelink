@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { getAllOrders, updateOrderStatus } from '@/lib/db';
 import { sentinelProducts } from '@/lib/mock-data';
 
-const ADMIN_PASS = process.env.NEXT_PUBLIC_ADMIN_PASS || 'sbsecurity2024';
+// The former browser-visible passphrase has been retired. This dashboard stays
+// closed until Firebase role-based administration replaces it.
+const ADMIN_PASS = null;
 
 // Build a quick cost-price lookup by product id
 const COST_MAP = Object.fromEntries(sentinelProducts.map(p => [p.id, p.costPrice ?? 0]));
@@ -26,7 +28,7 @@ export default function AdminPage() {
   const [passErr, setPassErr] = useState(false);
 
   const tryLogin = () => {
-    if (pass === ADMIN_PASS) {
+    if (ADMIN_PASS && pass === ADMIN_PASS) {
       setAuthed(true);
       sessionStorage.setItem('sl_admin', '1');
     } else {
@@ -36,7 +38,7 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    if (sessionStorage.getItem('sl_admin') === '1') setAuthed(true);
+    sessionStorage.removeItem('sl_admin');
   }, []);
 
   if (!authed) {
@@ -203,7 +205,7 @@ function AdminDashboard({ onLogout }) {
       {/* Top bar */}
       <div className="admin-topbar">
         <div>
-          <div className="admin-logo">🛡️ <span>SafeLink</span></div>
+          <div className="admin-logo" style={{ display: 'flex', alignItems: 'center' }}><img src="/safelink-shield.png" alt="" width="32" height="32" style={{ objectFit: 'contain' }} /><span>SafeLink</span></div>
           <div className="admin-role">Admin Dashboard</div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>

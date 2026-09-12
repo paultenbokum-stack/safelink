@@ -4,6 +4,7 @@
  *
  * Proxies to TrackSolid Pro API with resilient Firestore and in-memory cache.
  */
+import { batteryPercent } from '@/lib/telemetry';
 import { NextResponse } from 'next/server';
 import { authenticateFirebaseRequest, getAdminFirestore } from '@/lib/firebase-admin';
 import { listDevices, bindDevice, getDeviceLocation } from '@/lib/tracksolid';
@@ -19,6 +20,7 @@ export async function GET(request) {
   try {
     const decoded = await authenticateFirebaseRequest(request);
     const devicesMap = new Map();
+    let tracksolidResolved = false;
 
     // 1. Load from fast memory cache
     for (const [key, dev] of globalDevices.entries()) {
@@ -46,7 +48,7 @@ export async function GET(request) {
 
     // 3. Supplement with TrackSolid API if sub-account exists
     try {
-      let tracksolidAccount = process.env.TRACKSOLID_USER_ID || 'GlobalSecurityConsulting';
+      let tracksolidAccount = process.env.TRACKSOLID_USER_ID;
       try {
         const firestore = getAdminFirestore();
         const householdDoc = await firestore.collection('households').doc(decoded.uid).get();
@@ -55,17 +57,17 @@ export async function GET(request) {
         }
       } catch {}
 
-      const tsResponse = await listDevices(tracksolidAccount).catch(() => null);
+      const tsResponse = tracksolidAccount ? await listDevices(tracksolidAccount).catch(() => null) : null;
       if (tsResponse && tsResponse.code === 0 && Array.isArray(tsResponse.result)) {
-        const cleanUserDigits = (decoded.phoneNumber || decoded.uid || '').replace(/\D/g, '').slice(-9);
+        tracksolidResolved = true;
+        const cleanUserDigits = (decoded.phone_number || '').replace(/\D/g, '').slice(-9);
 
         tsResponse.result.forEach((tsDevice) => {
           const existing = devicesMap.get(tsDevice.imei);
           const devPhoneDigits = (tsDevice.driverPhone || '').replace(/\D/g, '').slice(-9);
           const isUserDevice =
             existing ||
-            (cleanUserDigits && devPhoneDigits && cleanUserDigits === devPhoneDigits) ||
-            tsDevice.imei === '980980820010318';
+            (cleanUserDigits && devPhoneDigits && cleanUserDigits === devPhoneDigits);
 
           if (isUserDevice) {
             devicesMap.set(tsDevice.imei, {
@@ -111,13 +113,13 @@ export async function GET(request) {
                 dev.lat = hasGps ? lat : null;
                 dev.lng = hasGps ? lng : null;
                 dev.speed = parseFloat(loc.speed) || 0;
-                dev.batteryLevel = parseFloat(loc.batteryPowerVal || loc.electricity || loc.batteryLevel) || null;
-                dev.lastAddress = isVillage
-                  ? '36 Leonora Dr, Ballito (The Village)'
-                  : (hasGps ? `${lat.toFixed(4)}°S, ${lng.toFixed(4)}°E` : 'Awaiting GPS fix...');
+                dev.batteryLevel = batteryPercent(loc.batteryPowerVal ?? loc.electricity ?? loc.batteryLevel);
+                dev.signalStrength = loc.gsmSignal ?? loc.signalStrength ?? loc.rssi ?? null;
+                dev.lastAddress = loc.address || (hasGps ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : 'Awaiting GPS fix...');
                 dev.isOnline = loc.status === '0' || loc.status === '1' || loc.status === 'online' || loc.status === 'NORMAL';
                 dev.status = dev.isOnline ? 'active' : 'inactive';
-                dev.updatedAt = loc.gpsTime || dev.updatedAt;
+                dev.updatedAt = loc.gpsTime || null;
+                dev.checkedAt = Date.now();
               }
             });
           }
@@ -128,7 +130,7 @@ export async function GET(request) {
     }
 
     const devices = Array.from(devicesMap.values());
-    return NextResponse.json({ devices, source: 'unified' });
+    return NextResponse.json({ devices, source: 'unified', tracksolidResolved });
   } catch (err) {
     if (err.message === 'UNAUTHENTICATED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -153,10 +155,12 @@ export async function POST(request) {
     }
 
     const deviceDocId = `device_${cleanImei}`;
+    const existingDevice = await getAdminFirestore().collection('devices').doc(deviceDocId).get();
+    if (existingDevice.exists && existingDevice.data()?.uid !== decoded.uid) return NextResponse.json({ error: 'This device is already linked to another account.' }, { status: 409 });
     const cleanNickname = (nickname || '').trim() || `Sentinel ${cleanImei.slice(-4)}`;
 
     // Resolve TrackSolid account
-    let tracksolidAccount = process.env.TRACKSOLID_USER_ID || 'GlobalSecurityConsulting';
+    let tracksolidAccount = process.env.TRACKSOLID_USER_ID;
     try {
       const firestore = getAdminFirestore();
       const householdDoc = await firestore.collection('households').doc(decoded.uid).get();
@@ -168,6 +172,7 @@ export async function POST(request) {
     // Bind device via TrackSolid API
     let bindResult = { code: 0, message: 'Device registered' };
     try {
+      if (!tracksolidAccount) throw new Error('TrackSolid is not configured.');
       bindResult = await bindDevice(cleanImei, tracksolidAccount);
     } catch (tsErr) {
       console.warn('[api/devices] TrackSolid bind notice:', tsErr.message);

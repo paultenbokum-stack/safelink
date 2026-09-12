@@ -1,5 +1,9 @@
 'use client';
 
+import { InstallAppPrompt } from '@/app/components/PwaRegister';
+
+import { registerRefresh, refreshScope } from '@/lib/refresh';
+import ActivityTimeline from '@/app/components/ActivityTimeline';
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -18,7 +22,7 @@ export default function Dashboard() {
 }
 
 function DashboardContent() {
-  const { user } = useAuth();
+  const { user, partnerSession } = useAuth();
   const router = useRouter();
 
   const [household, setHousehold] = useState(() => {
@@ -48,19 +52,29 @@ function DashboardContent() {
 
   useEffect(() => {
     if (!user) return;
-    Promise.all([
+    const load = () => Promise.allSettled([
       getHousehold(user.uid),
-      getUserDevices(user.uid),
-      getUserOrders(user.uid),
+      (async () => { const token = await user.getIdToken?.(); const partner = user.isPartnerSession; const res = await fetch(partner ? '/api/partner/devices' : '/api/devices', { cache: 'no-store', headers: { Authorization: 'Bearer ' + (partner ? partnerSession?.sessionToken : token) } }); if (!res.ok) throw new Error('Devices unavailable'); const data = await res.json(); return partner ? data : data.devices; })(),
+      Promise.resolve([]),
     ])
-      .then(([h, d, o]) => {
+      .then(([hr, dr, or]) => {
+        const h = hr.status === "fulfilled" ? hr.value : null;
+        const d = dr.status === "fulfilled" ? dr.value : [];
+        const o = or.status === "fulfilled" ? or.value : [];
         if (h) setHousehold(h);
-        setDevices(d || []);
-        setOrders(o || []);
+        if (dr.status === "fulfilled") setDevices(d || []);
+        if (or.status === "fulfilled") setOrders(o || []);
+        if (dr.status === "rejected") throw new Error("Devices could not refresh");
       })
-      .catch(console.error)
       .finally(() => setLoading(false));
-  }, [user]);
+    const unregister = registerRefresh('dashboard', load);
+    const run = () => { if (!document.hidden) refreshScope('dashboard').catch(() => {}); };
+    run();
+    const timer = setInterval(run, 30000);
+    window.addEventListener('online', run);
+    document.addEventListener('visibilitychange', run);
+    return () => { unregister(); clearInterval(timer); window.removeEventListener('online', run); document.removeEventListener('visibilitychange', run); };
+  }, [user, partnerSession]);
 
   // Derive user's first name, prioritizing household admin name, displayName, or demo user default
   const firstName = (() => {
@@ -92,20 +106,21 @@ function DashboardContent() {
 
   return (
     <div className="bg-background text-on-background min-h-screen pb-[100px]">
-      <Header title={`Good morning, ${firstName}`} />
+      <Header title={`Hi ${firstName}`} />
 
       <main className="pt-[88px] px-gutter max-w-3xl mx-auto space-y-lg pb-xl">
+        <InstallAppPrompt />
         {/* Test Alarm Alert Modal / Notification */}
         {testAlarmActive && (
           <div className="glass-panel p-md rounded-xl border border-secondary bg-secondary/10 flex items-center justify-between animate-bounce">
             <div className="flex items-center gap-sm">
               <span className="material-symbols-outlined text-secondary text-2xl">notifications_active</span>
               <div>
-                <p className="font-label-md text-secondary font-bold">Alarm Siren Test Active</p>
-                <p className="font-label-sm text-on-surface-variant">Silent telemetry signal verified with Control Room Command.</p>
+                <p className="font-label-md text-secondary font-bold">[Demo] Alarm Test Active</p>
+                <p className="font-label-sm text-on-surface-variant">[Demo] Simulated alarm test. No control room contacted.</p>
               </div>
             </div>
-            <span className="text-secondary font-label-sm uppercase font-bold">OK 100%</span>
+            <span className="text-secondary font-label-sm uppercase font-bold">[Demo]</span>
           </div>
         )}
 
@@ -124,7 +139,7 @@ function DashboardContent() {
             <span className="font-headline-md text-2xl font-bold tracking-wider">SOS</span>
           </button>
           <p className="mt-md text-on-surface-variant font-label-sm text-label-sm uppercase tracking-widest font-semibold">
-            Hold to Activate Armed Response
+            Tap to explore the SOS response demo
           </p>
         </section>
 
@@ -134,7 +149,7 @@ function DashboardContent() {
             <div className="flex items-center gap-2">
               <span className={`w-2.5 h-2.5 rounded-full ${devices.length > 0 ? 'bg-secondary animate-pulse' : 'bg-[#38a169]'}`}></span>
               <h2 className="font-label-md text-label-md text-on-surface font-semibold">
-                {householdTitle} — {devices.length} Active {devices.length === 1 ? 'Device' : 'Devices'}
+                {householdTitle} — {devices.length} Linked {devices.length === 1 ? 'Device' : 'Devices'}
               </h2>
             </div>
             <Link
@@ -152,6 +167,7 @@ function DashboardContent() {
           >
             <div className="absolute inset-0 map-bg opacity-90"></div>
             
+            <span className="absolute top-2 left-2 text-[10px] text-on-surface-variant">Device overview · open map for locations</span>
             {/* Live Beacons or Clean Empty Scanner */}
             {devices.length === 0 ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-4 text-center">
@@ -190,11 +206,12 @@ function DashboardContent() {
             {/* Bottom tap banner */}
             <div className="absolute bottom-2 right-2 bg-surface-container-highest/90 px-2.5 py-1 rounded-lg text-[11px] text-on-surface flex items-center gap-1 backdrop-blur-md">
               <span className="material-symbols-outlined text-[14px] text-secondary">explore</span>
-              Tap to open live radar
+              Tap to open live tracking
             </div>
           </div>
         </section>
 
+        <Link href="/about" className="block text-right text-sm text-secondary">ⓘ Why Safelink →</Link>
         {/* Quick Services Grid */}
         <section>
           <div className="flex justify-between items-center mb-md">
@@ -287,48 +304,13 @@ function DashboardContent() {
           </div>
         </section>
 
-        {/* Recent Alerts */}
-        <section className="glass-panel rounded-xl p-md">
-          <div className="flex justify-between items-center mb-sm">
-            <h2 className="font-label-md text-label-md text-on-surface font-semibold">Recent Alerts & Activity</h2>
-            <span className="text-[11px] text-secondary bg-secondary/10 px-2 py-0.5 rounded-full border border-secondary/20 font-semibold">Live Feed</span>
-          </div>
-
-          <div className="space-y-sm">
-            {devices.length > 0 ? (
-              devices.map((device, idx) => (
-                <div key={device.id || device.imei || idx} className="flex items-start gap-sm pb-sm border-b border-white/5 last:border-b-0 last:pb-0">
-                  <div className="w-8 h-8 rounded-full bg-[#38a169]/20 flex items-center justify-center mt-1 shrink-0">
-                    <span className="material-symbols-outlined text-[#38a169] text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
-                      satellite_alt
-                    </span>
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-body-md text-body-md text-on-surface font-medium">
-                      {device.nickname || device.deviceName || 'Sentinel GPS'} • Telemetry Linked
-                    </p>
-                    <p className="font-label-sm text-label-sm text-on-surface-variant">
-                      TrackSolid EMEA Active • Status: Online
-                    </p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="flex items-start gap-sm">
-                <div className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center mt-1 shrink-0">
-                  <span className="material-symbols-outlined text-secondary text-sm">info</span>
-                </div>
-                <div className="flex-1">
-                  <p className="font-body-md text-body-md text-on-surface font-medium">Telemetry Standby</p>
-                  <p className="font-label-sm text-label-sm text-on-surface-variant">
-                    No alerts registered. Register a Sentinel device or share Phone GPS to record geofence events.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-
+        <section className="glass-panel rounded-xl p-4"><h2 className="font-bold text-lg mb-2">Your Security Network</h2>{[
+          ['🛡', 'Armed Response', household?.securityCompanyName || 'Not yet linked — tap to connect', '/cream'],
+          ['🚀', 'Dispatch Network', 'Aura · Nationwide coverage [Demo]', '/sos'],
+          ['📡', 'Sentinel Devices', devices.filter(d => !d.isPhoneDevice && (d.status === 'active' || d.status === 'online')).length + ' Active', '/devices'],
+          ['📷', 'Camera Systems', (household?.cameras?.filter(c => c.status === 'connected').length || 0) + ' Connected', '/community'],
+        ].map(([icon, title, detail, href]) => <Link key={title} href={href} className="flex gap-3 items-center py-3 border-b border-white/10 last:border-0"><span>{icon}</span><div className="flex-1"><p className="font-bold text-sm">{title}</p><p className="text-xs text-on-surface-variant">{detail}</p></div><span className="text-secondary">→</span></Link>)}</section>
+        <ActivityTimeline />
         {/* Device Store Teaser */}
         <section className="glass-panel rounded-xl p-md flex items-center justify-between hover:bg-white/5 cursor-pointer transition-colors border border-secondary/20" onClick={() => router.push('/store')}>
           <div className="flex items-center gap-md">

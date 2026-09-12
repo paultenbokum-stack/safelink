@@ -102,7 +102,7 @@ export async function resolveAdapter(partnerId) {
 
 /* ─── Session Token Utilities ────────────────────────────────────── */
 
-const SESSION_SECRET = process.env.PARTNER_SESSION_SECRET || 'safelink-partner-session-dev';
+const SESSION_SECRET = process.env.PARTNER_SESSION_SECRET;
 
 /**
  * Issue a signed partner session token.
@@ -110,6 +110,9 @@ const SESSION_SECRET = process.env.PARTNER_SESSION_SECRET || 'safelink-partner-s
  * This is stored in-memory on the client (not localStorage) via auth-context.
  */
 export function issuePartnerSession(payload) {
+  if (!SESSION_SECRET) {
+    throw new Error('Partner sessions are not configured.');
+  }
   const data = {
     ...payload,
     iat: Math.floor(Date.now() / 1000),
@@ -131,7 +134,7 @@ export function issuePartnerSession(payload) {
  * Returns null if invalid or expired.
  */
 export function verifyPartnerSession(token) {
-  if (!token || typeof token !== 'string') return null;
+  if (!SESSION_SECRET || !token || typeof token !== 'string') return null;
 
   try {
     const [header, body, sig] = token.split('.');

@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
 import { useAuth } from '@/lib/auth-context';
+import FamilyInviteButton from '@/app/components/FamilyInviteButton';
+import { useFamilyMembers } from '@/lib/family-members';
 
 export default function FamilyPage() {
   return (
@@ -16,62 +18,12 @@ export default function FamilyPage() {
 
 function FamilyContent() {
   const { user } = useAuth();
-  const [members, setMembers] = useState([]);
+  const { members, loading, error, saving, loadFailed, saveMembers, reload } = useFamilyMembers(user?.uid);
   const [showAdd, setShowAdd] = useState(false);
   const [newMember, setNewMember] = useState({ name: '', phone: '', role: 'Member' });
-  const [saving, setSaving] = useState(false);
-  const [household, setHousehold] = useState(null);
-
-  // Load members from localStorage
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const h = localStorage.getItem('active_household');
-    if (h) {
-      try {
-        const hh = JSON.parse(h);
-        setHousehold(hh);
-        const mockNames = ['Thabo', 'Lesedi', 'Naledi', 'Sipho'];
-        const cleanMembers = (hh.members || []).filter(
-          (m) => !mockNames.includes(m.name) && !m.id?.includes('demo')
-        );
-        setMembers(cleanMembers);
-        if (cleanMembers.length !== (hh.members || []).length) {
-          saveToStorage(cleanMembers);
-        }
-      } catch (e) {}
-    }
-
-    const handleAvatarUpdated = (e) => {
-      if (e.detail?.photoURL) {
-        setHousehold((prev) => (prev ? { ...prev, avatarUrl: e.detail.photoURL } : null));
-      }
-    };
-    window.addEventListener('safelink_avatar_updated', handleAvatarUpdated);
-    return () => window.removeEventListener('safelink_avatar_updated', handleAvatarUpdated);
-    // Add self as admin if no members yet
-    if (members.length === 0) {
-      const savedUser = localStorage.getItem('safelink_user');
-      if (savedUser) {
-        try {
-          const u = JSON.parse(savedUser);
-          setMembers([{
-            id: u.uid,
-            name: u.displayName || 'You',
-            phone: u.phoneNumber || '',
-            role: 'Admin',
-            isSelf: true,
-            locationSharing: true,
-          }]);
-        } catch (e) {}
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleAddMember = () => {
+  const handleAddMember = async () => {
     if (!newMember.name.trim()) return;
 
-    setSaving(true);
     const member = {
       id: `member_${Date.now()}`,
       name: newMember.name.trim(),
@@ -83,11 +35,9 @@ function FamilyContent() {
     };
 
     const updated = [...members, member];
-    setMembers(updated);
-    saveToStorage(updated);
+    if (!await saveMembers(updated)) return;
     setNewMember({ name: '', phone: '', role: 'Member' });
     setShowAdd(false);
-    setSaving(false);
   };
 
   const toggleLocationSharing = (id) => {
@@ -97,21 +47,12 @@ function FamilyContent() {
       }
       return m;
     });
-    setMembers(updated);
-    saveToStorage(updated);
+    saveMembers(updated);
   };
 
   const handleRemoveMember = (id) => {
     const updated = members.filter((m) => m.id !== id);
-    setMembers(updated);
-    saveToStorage(updated);
-  };
-
-  const saveToStorage = (membersList) => {
-    const existing = JSON.parse(localStorage.getItem('active_household') || '{}');
-    existing.members = membersList;
-    existing.memberCount = membersList.length;
-    localStorage.setItem('active_household', JSON.stringify(existing));
+    saveMembers(updated);
   };
 
   const roleColors = {
@@ -142,12 +83,27 @@ function FamilyContent() {
           </button>
         </div>
 
+        <section aria-label="Family invitation privacy" className="glass-panel rounded-2xl p-4 border border-secondary/30 space-y-2">
+          <h2 className="text-sm font-bold text-secondary">Private family invitations</h2>
+          <p className="text-xs text-on-surface-variant leading-relaxed">
+            An invite opens that member’s own account. It does not grant access to other family members’ locations. Sharing their own location is optional and requires permission on their device.
+          </p>
+          <details className="text-xs text-on-surface-variant leading-relaxed">
+            <summary className="cursor-pointer font-semibold text-on-surface">How your invite link is protected</summary>
+            <p className="mt-2">Links work once and expire after 24 hours. You can revoke an unused link or create a replacement. To end access after someone has joined, remove that family member.</p>
+            <p className="mt-2">Share only in a private message with the intended person. Anyone holding an unused link can sign in as that member, so don’t post it publicly or forward it to others.</p>
+          </details>
+        </section>
+
+        {loading && <p role="status" className="text-sm text-on-surface-variant">Loading family members…</p>}
+        {error && <div role="alert" className="text-sm text-error">{error} {loadFailed && <button onClick={reload} className="underline ml-2">Retry</button>}</div>}
+        <fieldset disabled={loading || saving || loadFailed} className="space-y-4">
         {/* Members List */}
         {members.map((member) => {
-          const memberPhoto = member.avatarUrl || (member.isSelf ? (household?.avatarUrl || user?.photoURL) : null);
+          const memberPhoto = member.avatarUrl || (member.isSelf ? user?.photoURL : null);
           return (
             <div key={member.id} className="glass-panel rounded-2xl p-4 border border-white/10 flex items-center justify-between">
-              <div className="flex items-center gap-3">
+              <div className="flex items-start gap-3 min-w-0">
                 <div className="w-11 h-11 rounded-full bg-surface-container border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
                   {memberPhoto ? (
                     <img src={memberPhoto} alt={member.name} className="w-full h-full object-cover" />
@@ -157,7 +113,7 @@ function FamilyContent() {
                     </span>
                   )}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="font-label-md text-sm font-bold text-on-surface flex items-center gap-2">
                     {member.name}
                     {member.isSelf && (
@@ -179,6 +135,7 @@ function FamilyContent() {
                       </span>
                     </button>
                   </div>
+                  {!member.isSelf && <FamilyInviteButton member={member} onChanged={reload} />}
                 </div>
               </div>
               {!member.isSelf && (
@@ -194,7 +151,7 @@ function FamilyContent() {
         })}
 
         {/* Empty State */}
-        {members.length === 0 && (
+        {!loading && !error && members.length === 0 && (
           <div className="glass-panel rounded-2xl p-8 border border-white/10 text-center space-y-2">
             <span className="material-symbols-outlined text-4xl text-on-surface-variant">group_add</span>
             <h3 className="font-label-md text-sm font-bold text-on-surface">No Family Members Yet</h3>
@@ -257,6 +214,7 @@ function FamilyContent() {
             Add Family Member
           </button>
         )}
+        </fieldset>
       </main>
 
       <BottomNav />

@@ -1,0 +1,32 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync('src/app/api/profile/family/route.js', 'utf8').replace(/^import .*;\r?\n/gm, '').replace(/export async function/g, 'async function');
+let record = { memberCount: 3 }, rejected = false, offline = false, writtenUid;
+const context = vm.createContext({ NextResponse: { json: (data, options = {}) => ({ data, status: options.status || 200 }) }, authenticateFirebaseRequest: async () => { if (rejected) throw new Error('UNAUTHENTICATED'); return { uid: 'owner' }; }, FieldValue: { serverTimestamp: () => 'timestamp' }, getAdminFirestore: () => ({ runTransaction: async fn => fn({ get: ref => ref.get(), set: (ref, data) => ref.set(data) }), collection: () => ({ doc: uid => ({ get: async () => { if (offline) throw new Error('offline'); return { data: () => record }; }, set: async data => { if (offline) throw new Error('offline'); writtenUid = uid; record = { ...record, ...data }; } }) }) }) });
+vm.runInContext(source, context);
+const request = members => ({ text: async () => JSON.stringify({ uid: 'someone-else', members }) });
+(async () => {
+  assert.equal((await context.GET({})).data.members, null);
+  let members = [{ id: 'member1', name: 'Thabo', phone: '', role: 'Member', locationSharing: false }];
+  assert.equal((await context.PUT(request(members))).status, 200);
+  assert.equal(writtenUid, 'owner');
+  assert.equal((await context.GET({})).data.members[0].name, 'Thabo');
+  assert.equal((await context.GET({})).data.members.length, 1);
+  assert.equal((await context.PUT(request([]))).status, 200);
+  assert.equal((await context.GET({})).data.members.length, 0);
+  assert.equal(record.memberCount, 3); // Signup household size never determines the actual list.
+  assert.equal((await context.PUT(request([members[0], members[0]]))).status, 400);
+  rejected = true; assert.equal((await context.PUT(request(members))).status, 401); assert.equal((await context.GET({})).status, 401); rejected = false;
+  offline = true; assert.equal((await context.PUT(request(members))).status, 503); assert.equal(record.members.length, 0);
+  const clientSource = fs.readFileSync('src/lib/family-members.js', 'utf8').replace(/^import .*;\r?\n/gm, '').replace('export function useFamilyMembers', 'function useFamilyMembers');
+  const cache = new Map([['safelink_account_uid', 'owner'], ['active_household', JSON.stringify({ members })]]);
+  const client = vm.createContext({ localStorage: { getItem: key => cache.get(key) || null, setItem: (key, value) => cache.set(key, value) } });
+  vm.runInContext(clientSource, client);
+  assert.equal(client.readCachedMembers('owner').length, 1);
+  assert.equal(client.readCachedMembers('other').length, 0);
+  client.cacheMembers('owner', []);
+  assert.equal(client.readCachedMembers('owner').length, 0);
+  assert.equal(JSON.parse(cache.get('household_owner')).members.length, 0);
+  console.log('PASS: household size is separate, add/load/remove, real names retained, duplicate validation, account isolation, failure handling, and empty cache counts.');
+})().catch(error => { console.error(error); process.exitCode = 1; });

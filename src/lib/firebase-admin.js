@@ -1,6 +1,8 @@
 import 'server-only';
+import { authorizeInvitedMember } from './family-invites';
 
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore';
 
 const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'safelink-b8071';
@@ -20,7 +22,7 @@ if (clientEmail && privateKey) {
   }
 }
 
-const adminApp =
+export const adminApp =
   getApps()[0] ??
   initializeApp({
     projectId: projectId || undefined,
@@ -31,7 +33,7 @@ export function getAdminFirestore() {
   return getFirestore(adminApp);
 }
 
-export async function authenticateFirebaseRequest(request) {
+export async function authenticateFirebaseRequest(request, { allowUnverified = false } = {}) {
   const authorization = request.headers.get('authorization') || '';
   if (!authorization.startsWith('Bearer ')) {
     throw new Error('UNAUTHENTICATED');
@@ -42,8 +44,13 @@ export async function authenticateFirebaseRequest(request) {
     throw new Error('UNAUTHENTICATED');
   }
 
-  // Support demo / test sessions and direct uid tokens
-  if (idToken.startsWith('test_') || idToken === 'demo-test-token') {
+  // Demo tokens are deliberately opt-in and can never authenticate production traffic.
+  // A staging developer must set both flags explicitly; the public deployment must not.
+  if (
+    process.env.NODE_ENV !== 'production'
+    && process.env.SAFELINK_ALLOW_DEMO_AUTH === 'true'
+    && (idToken.startsWith('test_') || idToken === 'demo-test-token')
+  ) {
     const cleanUid = idToken.startsWith('test_') ? idToken.replace('test_', '') : 'user_827675092';
     return {
       uid: cleanUid,
@@ -54,32 +61,28 @@ export async function authenticateFirebaseRequest(request) {
 
   // Real Firebase ID token verification
   try {
-    const { getAuth } = await import('firebase-admin/auth');
     const decoded = await getAuth(adminApp).verifyIdToken(idToken);
-    if (!decoded.uid) {
+    if (!decoded.uid || (!allowUnverified && !decoded.email_verified && !decoded.phone_number && decoded.familyMember !== true)) {
       throw new Error('UNAUTHENTICATED');
     }
+    await authorizeInvitedMember(decoded, request, getAdminFirestore());
     return decoded;
   } catch (err) {
-    // If firebase-admin/auth encounters bundler ESM issues or fails in Lambda, safely decode JWT payload
-    try {
-      const parts = idToken.split('.');
-      if (parts.length === 3) {
-        const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-        if (payload && (payload.user_id || payload.sub)) {
-          return {
-            uid: payload.user_id || payload.sub,
-            email: payload.email || 'user@safelink.co.za',
-            displayName: payload.name || 'SafeLink User',
-          };
-        }
-      }
-    } catch {}
+    // Never trust an unverified JWT payload. A malformed Firebase Admin setup must
+    // fail closed instead of turning an attacker-controlled payload into a session.
+    console.warn('[auth] Firebase token verification rejected:', err.code || err.name || 'verification-failed', err instanceof TypeError ? err.message.slice(0, 120) : '');
     throw new Error('UNAUTHENTICATED');
   }
 }
 
-export async function savePaymentIntent({ uid, email, reference, checkout, delivery }) {
+export async function assertDeviceOwnership(uid, imei) {
+  const snapshot = await getAdminFirestore().collection('devices').doc(`device_${imei}`).get();
+  if (!snapshot.exists || snapshot.data()?.uid !== uid) {
+    throw new Error('FORBIDDEN');
+  }
+}
+
+export async function savePaymentIntent({ uid, email, reference, checkout, delivery, companyId }) {
   const firestore = getAdminFirestore();
   await firestore.collection('paymentIntents').doc(reference).set({
     uid,
@@ -93,6 +96,7 @@ export async function savePaymentIntent({ uid, email, reference, checkout, deliv
     currency: checkout.currency,
     fingerprint: checkout.fingerprint,
     delivery,
+    companyId: companyId || null,
     status: 'initialized',
     expiresAt: Timestamp.fromDate(new Date(Date.now() + 24 * 60 * 60 * 1000)),
     createdAt: FieldValue.serverTimestamp(),
@@ -141,6 +145,7 @@ export async function saveVerifiedPaidOrder({ paymentIntent, transaction: paysta
       paidAt: paystackTransaction.paid_at || paystackTransaction.paidAt || null,
       paymentChannel: paystackTransaction.channel || null,
       paymentGateway: 'paystack',
+      securityCompanyId: paymentIntent.companyId || null,
       uid,
       householdId: uid,
       status: 'pending',

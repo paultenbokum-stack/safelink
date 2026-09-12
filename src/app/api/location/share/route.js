@@ -6,9 +6,11 @@
  * - opt_in:  Record consent + create phone device entry
  * - opt_out: Remove phone device entry + clear location
  *
- * GET /api/location/share — List all phone-shared locations for the household.
+ * GET /api/location/share — Read the signed-in account's shared phone location.
  */
-import { NextResponse } from 'next/server';
+import { timestampMillis, batteryPercent } from '@/lib/telemetry';
+import { recordSafetyNotification, drainPushQueue } from '@/lib/notification-push';
+import { NextResponse, after } from 'next/server';
 import { authenticateFirebaseRequest, getAdminFirestore } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 
@@ -30,7 +32,7 @@ export async function POST(request) {
         const firestore = getAdminFirestore();
         await firestore.collection('phone_sharing_consent').doc(decoded.uid).set({
           uid: decoded.uid,
-          email: decoded.email,
+          email: decoded.email || '',
           nickname: body.nickname || 'My Phone',
           consentGranted: true,
           consentTimestamp: body.consentTimestamp || new Date().toISOString(),
@@ -105,7 +107,8 @@ export async function POST(request) {
       heading: heading ? parseFloat(heading) : null,
       nickname: nickname || 'My Phone',
       updatedAt: new Date().toISOString(),
-      gpsTime: new Date().toISOString(),
+      gpsTime: timestampMillis(body.timestamp) && timestampMillis(body.timestamp) <= Date.now() + 60000 ? new Date(timestampMillis(body.timestamp)).toISOString() : null,
+      battery: batteryPercent(body.battery),
     };
 
     // 1. Immediately store in high-speed memory cache
@@ -140,26 +143,31 @@ export async function GET(request) {
     const decoded = await authenticateFirebaseRequest(request);
     const phoneLocationsMap = new Map();
 
-    // 1. Populate from fast memory cache
-    for (const [uid, loc] of globalPhoneLocations.entries()) {
-      phoneLocationsMap.set(loc.id, loc);
+    // Family access requires an explicit membership/consent model. Until then,
+    // both storage paths must return only the authenticated account's phone.
+    const phoneDocId = `phone_${decoded.uid}`;
+    const cached = globalPhoneLocations.get(decoded.uid);
+    if (cached?.uid === decoded.uid && cached.id === phoneDocId) {
+      phoneLocationsMap.set(phoneDocId, cached);
     }
 
     // 2. Supplement from Firestore if available
     try {
       const firestore = getAdminFirestore();
-      const phoneLocationsSnap = await firestore
+      const phoneLocation = await firestore
         .collection('device_locations')
-        .where('isPhoneDevice', '==', true)
+        .doc(phoneDocId)
         .get();
 
-      for (const doc of phoneLocationsSnap.docs) {
-        const data = doc.data();
-        phoneLocationsMap.set(doc.id, {
-          id: doc.id,
-          ...data,
-          updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || data.updatedAt || null,
-        });
+      if (phoneLocation.exists) {
+        const data = phoneLocation.data();
+        if (data.uid === decoded.uid && data.isPhoneDevice === true) {
+          phoneLocationsMap.set(phoneDocId, {
+            ...data,
+            id: phoneDocId,
+            updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || data.updatedAt || null,
+          });
+        }
       }
     } catch (fsErr) {
       console.warn('[api/location/share] Firestore GET fallback:', fsErr.message);
@@ -208,7 +216,7 @@ async function checkPhoneGeofences(firestore, uid, lat, lng) {
         const eventType = isInside ? 'geofence_enter' : 'geofence_exit';
 
         // Write alert
-        await firestore.collection('device_alerts').add({
+        const alertRef = await firestore.collection('device_alerts').add({
           uid,
           deviceType: 'phone',
           alarmType: eventType,
@@ -220,6 +228,8 @@ async function checkPhoneGeofences(firestore, uid, lat, lng) {
           receivedAt: FieldValue.serverTimestamp(),
           processed: false,
         });
+        await recordSafetyNotification({ uid, eventId: `phone-geofence:${alertRef.id}`, groupId: `phone-geofence:${doc.id}`, title: 'Phone geofence update', body: `Your phone ${isInside ? 'entered' : 'left'} ${fence.name || 'a saved area'}.`, priority: 'important' });
+        after(() => drainPushQueue());
       }
 
       // Update state

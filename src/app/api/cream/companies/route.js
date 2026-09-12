@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase-admin';
+import { DEMO_COMPANIES } from '@/lib/demo-companies';
 import { FieldValue } from 'firebase-admin/firestore';
 
 /**
@@ -11,101 +12,16 @@ export async function GET() {
     const firestore = getAdminFirestore();
     const snap = await firestore.collection('security_companies').get();
 
-    let companies = [];
-    if (snap.empty) {
-      // Seed default companies if collection is currently blank
-      companies = [
-        {
-          id: 'help24_security',
-          name: 'Help24 Security Command',
-          registrationNumber: 'PSIRA-2024/99182',
-          dispatchPhone: '+27 11 123 4567',
-          contactEmail: 'controlroom@help24.co.za',
-          status: 'active',
-          memberCount: 142,
-          deviceCount: 38,
-          aura: { enabled: true, environment: 'staging' },
-          accounting: {
-            provider: 'sage',
-            environment: 'production',
-            apiKey: '',
-            companyId: 'ZA-H24-001',
-            status: 'connected',
-            lastSync: new Date().toISOString(),
-          },
-          cameraSystem: {
-            defaultBrand: 'Hikvision',
-            cloudApiKey: '',
-            status: 'connected',
-          },
-        },
-        {
-          id: 'global_security',
-          name: 'Global Security Consulting',
-          registrationNumber: 'PSIRA-2023/55410',
-          dispatchPhone: '+27 10 999 8888',
-          contactEmail: 'ops@globalsecurity.co.za',
-          status: 'active',
-          memberCount: 89,
-          deviceCount: 19,
-          aura: { enabled: true, environment: 'staging' },
-          accounting: {
-            provider: 'listener',
-            environment: 'production',
-            apiKey: '',
-            companyId: 'LST-GSC-01',
-            status: 'connected',
-            lastSync: new Date().toISOString(),
-          },
-          cameraSystem: {
-            defaultBrand: 'Dahua',
-            cloudApiKey: '',
-            status: 'connected',
-          },
-        },
-        {
-          id: 'fidelity_adt',
-          name: 'Fidelity ADT Dispatch',
-          registrationNumber: 'PSIRA-1998/00124',
-          dispatchPhone: '+27 86 121 2100',
-          contactEmail: 'dispatch@fidelity-adt.co.za',
-          status: 'active',
-          memberCount: 512,
-          deviceCount: 120,
-          aura: { enabled: false, environment: 'staging' },
-          accounting: {
-            provider: 'zoho',
-            environment: 'production',
-            apiKey: '',
-            companyId: '700192841',
-            status: 'connected',
-            lastSync: new Date().toISOString(),
-          },
-          cameraSystem: {
-            defaultBrand: 'EZVIZ',
-            cloudApiKey: '',
-            status: 'connected',
-          },
-        },
-      ];
-
-      for (const comp of companies) {
-        await firestore.collection('security_companies').doc(comp.id).set({
-          ...comp,
-          createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-      }
-    } else {
-      companies = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate?.()?.toISOString?.() || null,
-        updatedAt: doc.data().updatedAt?.toDate?.()?.toISOString?.() || null,
-      }));
-    }
-
-    return NextResponse.json({ companies });
+    // Never seed demo tenants during a GET request. Expose only presentation fields.
+    const companies = snap.empty ? DEMO_COMPANIES : snap.docs.map(doc => {
+      const c = doc.data();
+      const legacyDemo = ['PSIRA-2024/99182', 'PSIRA-2023/55410', 'PSIRA-1998/00124'].includes(c.registrationNumber);
+      return { id: doc.id, name: c.name, isDemo: c.isDemo === true || legacyDemo, status: c.status,
+        memberCount: c.memberCount || 0, deviceCount: c.deviceCount || 0,
+        accounting: { provider: c.accounting?.provider }, cameraSystem: { defaultBrand: c.cameraSystem?.defaultBrand },
+        aura: { enabled: c.aura?.enabled === true }, cameras: (c.cameras || []).map(() => ({})) };
+    });
+    return NextResponse.json({ companies: companies.every(c => c.isDemo) ? DEMO_COMPANIES : companies.filter(c => !c.isDemo) });
   } catch (err) {
     console.error('[api/cream/companies] Error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

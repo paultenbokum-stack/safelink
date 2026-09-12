@@ -10,9 +10,18 @@
  * This endpoint is registered with TrackSolid Pro during API setup.
  * POST https://your-domain.com/api/webhooks/tracksolid
  */
-import { NextResponse } from 'next/server';
+import { recordSafetyNotification, drainPushQueue } from '@/lib/notification-push';
+import { NextResponse, after } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+
+function hasValidWebhookSecret(request) {
+  const secret = process.env.TRACKSOLID_WEBHOOK_SECRET;
+  if (!secret) return false;
+  const supplied = request.headers.get('x-safelink-webhook-secret')
+    || request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+  return Boolean(supplied && supplied === secret);
+}
 
 // Alarm type mapping from JIMI's alarm codes to SafeLink alarm types
 const ALARM_TYPE_MAP = {
@@ -30,6 +39,9 @@ const ALARM_TYPE_MAP = {
 
 export async function POST(request) {
   try {
+    if (!hasValidWebhookSecret(request)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     const body = await request.json();
     const firestore = getAdminFirestore();
 
@@ -118,6 +130,18 @@ async function handleAlarmPush(body, firestore) {
       });
     }
   }
+
+  // Only the authenticated provider webhook can create these safety priorities.
+  try {
+    let owner = (await firestore.collection('devices').doc(`device_${imei}`).get()).data();
+    if (!owner?.uid) { const owners = await firestore.collection('devices').where('imei_plain', '==', imei).limit(1).get(); owner = owners.docs[0]?.data(); }
+    if (owner?.uid) {
+      const urgent = ['sos', 'fall_detected'].includes(safelinkAlarmType);
+      const identity = body.eventId || body.id || body.gpsTime || body.gps_time || Math.floor(Date.now() / 60000);
+      await recordSafetyNotification({ uid: owner.uid, eventId: `tracksolid:${imei}:${safelinkAlarmType}:${identity}`, groupId: `device:${imei}:${safelinkAlarmType}`, title: urgent ? 'Device emergency alert' : 'Device safety update', body: `${owner.nickname || owner.deviceName || 'Your tracker'}: ${String(safelinkAlarmType).replaceAll('_', ' ')}. Open device telemetry for the latest report.`, priority: urgent ? 'urgent' : 'important' });
+      after(() => drainPushQueue());
+    }
+  } catch { console.warn('[notifications] Device alert delivery could not be queued.'); }
 
   // Update device's last alert timestamp
   await updateDeviceLastAlert(firestore, imei, safelinkAlarmType);

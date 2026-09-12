@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 
 /**
@@ -11,12 +11,18 @@ import { useAuth } from '@/lib/auth-context';
 export default function AuthGuard({ children }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const familyRedirect = user?.isFamilyMember && !['/family', '/sos', '/notifications'].includes(pathname);
 
   useEffect(() => {
     if (!loading && !user) {
       router.replace('/login');
+    } else if (!loading && familyRedirect) {
+      router.replace('/family');
+    } else if (!loading && user && !user.isPartnerSession && !user.isFamilyMember && !user.emailVerified) {
+      router.replace('/login/verify');
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, familyRedirect]);
 
   if (loading) {
     return (
@@ -35,7 +41,7 @@ export default function AuthGuard({ children }) {
     );
   }
 
-  if (!user) return null;
+  if (!user || familyRedirect || (!user.isPartnerSession && !user.isFamilyMember && !user.emailVerified)) return null;
 
   return children;
 }

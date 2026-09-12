@@ -6,6 +6,8 @@ import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
 import { useAuth } from '@/lib/auth-context';
+import TelemetryStatus from '@/app/components/TelemetryStatus';
+import { registerRefresh, refreshScope } from '@/lib/refresh';
 import { useLocationSharing } from '@/lib/location-sharing';
 
 /* ─── Device type helpers ────────────────────────────────────────── */
@@ -55,7 +57,9 @@ function statusColor(status) {
 
 function formatRelativeTime(ts) {
   if (!ts) return 'Unknown';
-  const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  const time = ts?.seconds ? ts.seconds * 1000 : new Date(ts).getTime();
+  if (!Number.isFinite(time)) return 'Unknown';
+  const diff = Math.max(0, Math.floor((Date.now() - time) / 1000));
   if (diff < 60) return 'Just now';
   if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
@@ -85,6 +89,7 @@ function DevicesContent() {
   const [newLabel, setNewLabel]          = useState('');
   const [newDeviceName, setNewDeviceName] = useState('');
   const [newDeviceImei, setNewDeviceImei] = useState('');
+  const [fetchError, setFetchError] = useState('');
   const [isLive, setIsLive]             = useState(false);
   const [loading, setLoading]           = useState(true);
   const [addError, setAddError]         = useState('');
@@ -100,6 +105,7 @@ function DevicesContent() {
     optIn: optInPhoneSharing,
     optOut: optOutPhoneSharing,
     setNickname: setPhoneNickname,
+    refreshLocation, checkedAt: phoneCheckedAt, battery: phoneBattery,
   } = useLocationSharing();
   const [editingPhoneName, setEditingPhoneName] = useState(false);
   const [tempPhoneName, setTempPhoneName] = useState('');
@@ -125,6 +131,7 @@ function DevicesContent() {
 
   /* ── Fetch devices ── */
   useEffect(() => {
+    let cancelled = false;
     async function fetchDevices() {
       if (!user) return;
 
@@ -132,9 +139,11 @@ function DevicesContent() {
       if (isPartner && partnerSession?.sessionToken) {
         try {
           const res = await fetch('/api/partner/devices', {
-            headers: { Authorization: `Bearer ${partnerSession.sessionToken}` },
+            cache: 'no-store', headers: { Authorization: `Bearer ${partnerSession.sessionToken}` },
           });
-          if (res.ok) {
+          if (!res.ok) throw new Error('Device service unavailable');
+          if (res.ok && !cancelled) {
+            setFetchError('');
             const data = await res.json();
             if (Array.isArray(data)) {
               setDevices(data.map((d) => ({
@@ -148,6 +157,7 @@ function DevicesContent() {
                 statusColor: statusColor(d.status),
                 battery: d.battery,
                 lastPing: formatRelativeTime(d.lastSeen),
+                reportedAt: d.lastSeen, checkedAt: d.checkedAt || null,
                 location: d.address || (d.lat && d.lng
                   ? `${d.lat.toFixed(4)}°S, ${d.lng.toFixed(4)}°E`
                   : 'Locating...'),
@@ -158,7 +168,8 @@ function DevicesContent() {
             }
           }
         } catch (e) {
-          console.warn('[devices] Partner fetch error:', e);
+          setFetchError('Could not check partner devices. Showing last known reports.');
+          throw e;
         }
         setLoading(false);
         return;
@@ -166,36 +177,6 @@ function DevicesContent() {
 
       /* Live Firebase & Test sessions — TrackSolid via /api/devices */
       try {
-        // Load locally cached devices immediately for fast render
-        try {
-          const cached = localStorage.getItem('safelink_user_devices');
-          if (cached) {
-            let parsed = JSON.parse(cached);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              let mutated = false;
-              parsed = parsed.map((d) => {
-                if (d.imei === '980980820010378' || d.id === '980980820010378' || d.id === 'device_980980820010378') {
-                  mutated = true;
-                  return {
-                    ...d,
-                    id: 'device_980980820010318',
-                    imei: '980980820010318',
-                    name: d.name && !d.name.includes('10378') ? d.name : 'AARON - NODE -10318',
-                  };
-                }
-                return d;
-              });
-              if (mutated) {
-                try {
-                  localStorage.setItem('safelink_user_devices', JSON.stringify(parsed));
-                } catch {}
-              }
-              setDevices(parsed);
-              setIsLive(true);
-            }
-          }
-        } catch {}
-
         let token = null;
         if (user && typeof user.getIdToken === 'function') {
           try { token = await user.getIdToken(); } catch {}
@@ -205,12 +186,14 @@ function DevicesContent() {
         }
 
         const res = await fetch('/api/devices', {
-          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store', headers: { Authorization: `Bearer ${token}` },
         });
-        if (res.ok) {
+        if (!res.ok) throw new Error('Device service unavailable');
+        if (res.ok && !cancelled) {
+          setFetchError('');
           const data = await res.json().catch(() => null);
           const devs = (data?.devices || []).filter((d) => !d.isPhoneDevice);
-          if (devs.length > 0) {
+          if (Array.isArray(data?.devices)) {
             const mapped = devs.map((d) => ({
               id: d.id || d.imei || d.imei_plain,
               imei: d.imei || d.imei_plain,
@@ -219,25 +202,44 @@ function DevicesContent() {
               icon: d.deviceType === 'phone' ? 'phone_android' : 'sensors',
               status: d.status === 'active' ? 'Online' : 'Offline',
               statusColor: d.status === 'active' ? '#38a169' : '#a0aec0',
-              battery: d.batteryLevel || null,
-              lastPing: d.updatedAt || 'Unknown',
-              location: d.lastAddress || 'Locating...',
+              battery: d.batteryLevel ?? null,
+              signal: d.signalStrength ?? null,
+              lastPing: formatRelativeTime(d.updatedAt),
+              reportedAt: d.updatedAt, checkedAt: d.checkedAt || null,
+              location: d.lastAddress || (Number.isFinite(d.lat) && Number.isFinite(d.lng) ? `${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}` : 'Awaiting GPS fix'),
             }));
             setDevices(mapped);
-            setIsLive(true);
+            setIsLive(data.tracksolidResolved === true);
             try {
               localStorage.setItem('safelink_user_devices', JSON.stringify(mapped));
             } catch {}
           }
         }
       } catch (e) {
-        console.warn('[devices] Failed to fetch:', e);
+        setFetchError('Connection issue — retrying. Last known data may be out of date.');
+        setIsLive(false);
+        throw e;
       }
       setLoading(false);
     }
-    fetchDevices();
+    const unregister = registerRefresh('devices', fetchDevices);
+    const run = () => { if (!document.hidden) refreshScope('devices').catch(() => {}).finally(() => setLoading(false)); };
+    run();
+    const refresh = setInterval(run, 30000);
+    window.addEventListener('online', run);
+    document.addEventListener('visibilitychange', run);
+    return () => { cancelled = true; unregister(); clearInterval(refresh); window.removeEventListener('online', run); document.removeEventListener('visibilitychange', run); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isPartner]);
+  }, [user, isPartner, partnerSession]);
+
+  async function refreshDevice(device) {
+    if (!device.imei || isPartner) return refreshScope('devices');
+    const token = await user.getIdToken();
+    const response = await fetch(`/api/devices/${device.imei}/location`, { cache: 'no-store', headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000) });
+    if (!response.ok) throw new Error('Telemetry unavailable');
+    const data = await response.json();
+    setDevices(current => current.map(item => item.id === device.id ? { ...item, checkedAt: Date.now(), reportedAt: data.gpsTime, battery: data.batteryLevel ?? data.tagBattery, location: data.address || item.location, status: data.isOnline ? 'Online' : 'Offline' } : item));
+  }
 
   /* ── Delete / Unlink Device ── */
   const handleDeleteDevice = async () => {
@@ -258,7 +260,7 @@ function DevicesContent() {
       if (token && imeiToDelete) {
         await fetch(`/api/devices/${imeiToDelete}`, {
           method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store', headers: { Authorization: `Bearer ${token}` },
         }).catch(() => null);
       }
 
@@ -402,14 +404,14 @@ function DevicesContent() {
             </p>
           </div>
 
-          {/* Only show "Pair New Device" for non-partner sessions */}
+          {/* Only show "Add Sentinel Device" for non-partner sessions */}
           {!isPartner && (
             <button
               onClick={() => setShowAddModal(true)}
               className="bg-secondary text-on-secondary px-md py-2.5 rounded-xl font-label-md text-xs font-bold flex items-center justify-center gap-1.5 shadow-[0_0_12px_rgba(247,187,35,0.25)] hover:bg-secondary-fixed transition-all active:scale-95 shrink-0 cursor-pointer"
             >
               <span className="material-symbols-outlined text-[18px]">add_circle</span>
-              Pair New Device
+              Add Sentinel Device
             </button>
           )}
         </div>
@@ -424,6 +426,7 @@ function DevicesContent() {
           </div>
         )}
 
+        {fetchError && <p role="status" className="text-sm text-red-300">{fetchError}</p>}
         {/* Live indicator */}
         {isLive && (
           <div className="flex items-center gap-1.5 text-xs text-emerald-400">
@@ -520,6 +523,7 @@ function DevicesContent() {
             </div>
           </div>
 
+          <TelemetryStatus name={phoneNickname || 'this phone'} checkedAt={phoneCheckedAt} reportedAt={phonePosition?.timestamp || phonePosition?.updatedAt} battery={phoneBattery} onRefresh={isPhoneSharing ? refreshLocation : undefined} />
           {/* Telemetry diagnostics when active */}
           {isPhoneSharing && (
             <div className="mt-md pt-sm border-t border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -548,7 +552,7 @@ function DevicesContent() {
                   <span className="text-xs font-semibold text-secondary">Live on Map</span>
                 </div>
                 <button
-                  onClick={() => router.push('/map')}
+                  onClick={() => router.push('/map?device=' + encodeURIComponent('phone_' + user.uid))}
                   className="bg-secondary/20 hover:bg-secondary/30 text-secondary p-1.5 rounded-lg transition-colors cursor-pointer"
                   title="View on Live Map"
                 >
@@ -584,7 +588,7 @@ function DevicesContent() {
               <p className="text-on-surface-variant text-sm">
                 {isPartner
                   ? `No devices registered under your ${partnerSession?.partnerName || 'partner'} account yet. Contact your security company to have your devices linked.`
-                  : 'No devices paired yet. Tap "Pair New Device" to link a Sentinel tracker.'}
+                  : 'No devices paired yet. Tap "Add Sentinel Device" to link a Sentinel tracker.'}
               </p>
             </div>
           ) : (
@@ -603,7 +607,7 @@ function DevicesContent() {
                         <h4 className="font-headline-md text-base font-bold text-on-surface leading-tight">
                           {device.name}
                         </h4>
-                        <p className="font-label-sm text-xs text-on-surface-variant">{device.category}</p>
+                        <span className="inline-block text-[10px] text-secondary bg-secondary/10 border border-secondary/30 rounded-full px-2 py-0.5 mt-1">Sentinel</span><p className="text-xs text-on-surface-variant mt-1">{device.category}</p>{device.imei && <p className="text-[11px] text-on-surface-variant mt-1">IMEI · •••••••••{device.imei.slice(-6)}</p>}
                       </div>
                     </div>
                     <span
@@ -619,26 +623,12 @@ function DevicesContent() {
                     </span>
                   </div>
 
-                  {/* Diagnostics */}
-                  <div className="grid grid-cols-2 gap-sm mb-md bg-surface-container-low p-sm rounded-xl border border-white/5">
-                    <div>
-                      <p className="font-label-sm text-[11px] text-on-surface-variant">Battery Level</p>
-                      <div className="flex items-center gap-1 text-on-surface mt-0.5">
-                        <span className="material-symbols-outlined text-secondary text-sm">battery_5_bar</span>
-                        <span className="font-label-md text-xs font-bold">
-                          {device.battery != null ? `${device.battery}%` : '—'}
-                        </span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="font-label-sm text-[11px] text-on-surface-variant">Last Telemetry Ping</p>
-                      <p className="font-label-md text-xs font-semibold text-on-surface mt-0.5">{device.lastPing}</p>
-                    </div>
-                  </div>
+                  <TelemetryStatus name={device.name} checkedAt={device.checkedAt} reportedAt={device.reportedAt} battery={device.battery} onRefresh={() => refreshDevice(device)} />
 
+                  <p className="text-xs text-on-surface-variant mb-3">Signal strength: {device.signal == null ? "Not reported" : device.signal}</p>
                   {/* Location */}
                   <div
-                    onClick={() => router.push('/map')}
+                    onClick={() => router.push('/map?device=' + encodeURIComponent(device.imei || device.id))}
                     className="w-full h-24 rounded-xl overflow-hidden border border-white/5 relative map-bg cursor-pointer"
                   >
                     <div className="absolute inset-0 flex items-center justify-center">
@@ -664,11 +654,11 @@ function DevicesContent() {
                           Rename
                         </button>
                         <button
-                          onClick={() => router.push('/map')}
+                          onClick={() => router.push('/map?device=' + encodeURIComponent(device.imei || device.id))}
                           className="py-1.5 rounded-lg bg-primary-container/30 hover:bg-primary-container/50 text-primary font-label-sm text-xs font-semibold flex items-center justify-center gap-1 active:scale-95 transition-all border border-primary/30"
                         >
                           <span className="material-symbols-outlined text-[16px]">map</span>
-                          Track
+                          Track Now
                         </button>
                         <button
                           onClick={() => setShowDeleteModal(device)}
@@ -689,11 +679,11 @@ function DevicesContent() {
                           Ring
                         </button>
                         <button
-                          onClick={() => router.push('/map')}
+                          onClick={() => router.push('/map?device=' + encodeURIComponent(device.imei || device.id))}
                           className="py-1.5 rounded-lg bg-primary-container/30 hover:bg-primary-container/50 text-primary font-label-sm text-xs font-semibold flex items-center justify-center gap-1 active:scale-95 transition-all border border-primary/30"
                         >
                           <span className="material-symbols-outlined text-[16px]">map</span>
-                          Track
+                          Track Now
                         </button>
                         <button
                           onClick={() => setShowDeleteModal(device)}
@@ -711,6 +701,7 @@ function DevicesContent() {
             </div>
           )}
         </section>
+      <button onClick={() => router.push("/store")} className="glass-panel rounded-xl p-5 w-full flex items-center justify-between border border-secondary/30"><span className="text-left"><strong className="block text-secondary">Shop Sentinel Hardware</strong><span className="text-xs text-on-surface-variant">Personal tags, vehicle GPS and tactical devices</span></span><span>→</span></button>
       </main>
 
       {/* ── Add Device Modal (non-partner sessions) ── */}
@@ -757,7 +748,7 @@ function DevicesContent() {
                   maxLength={15}
                 />
                 <p className="text-[10px] text-on-surface-variant mt-1">
-                  Find the IMEI on the device label. It&apos;s sent to the tracking platform only — never stored in SafeLink.
+                  Find the IMEI on the device label. It is stored securely to link the device to your account.
                 </p>
               </div>
 

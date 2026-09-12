@@ -1,0 +1,25 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const route = fs.readFileSync('src/app/api/profile/avatar/route.js', 'utf8').replace(/^import .*;\r?\n/gm, '').replace(/export async function/g, 'async function');
+let writes = [], saved = {}, failAuth = false, failCommit = false;
+const context = vm.createContext({ Buffer, console: { error() {} }, NextResponse: { json: (data, options = {}) => ({ data, status: options.status || 200 }) }, authenticateFirebaseRequest: async () => { if (failAuth) throw new Error('UNAUTHENTICATED'); return { uid: 'actual-user' }; }, FieldValue: { serverTimestamp: () => 'timestamp' }, getAdminFirestore: () => ({ collection: name => ({ doc: uid => ({ name, uid, get: async () => ({ data: () => saved }) }) }), batch: () => ({ set: (ref, data) => writes.push({ ref, data }), commit: async () => { if (failCommit) throw new Error('offline'); saved = writes[0].data; } }) }) });
+vm.runInContext(route, context);
+const request = (avatarUrl) => ({ json: async () => ({ uid: 'forged-user', avatarUrl }) });
+(async () => {
+  let result = await context.POST(request('data:image/jpeg;base64,YWJj'));
+  assert.equal(result.status, 200); assert.equal(writes.length, 2); assert.ok(writes.every(w => w.ref.uid === 'actual-user'));
+  assert.equal((await context.GET({})).data.avatarUrl, 'data:image/jpeg;base64,YWJj');
+  failAuth = true; assert.equal((await context.POST(request('https://example.com/a.jpg'))).status, 401); failAuth = false;
+  assert.equal((await context.POST(request('javascript:alert(1)'))).status, 400);
+  assert.equal((await context.POST(request('data:image/jpeg;base64,' + 'A'.repeat(750000)))).status, 413);
+  failCommit = true; assert.equal((await context.POST(request('https://example.com/a.jpg'))).status, 500);
+  const source = fs.readFileSync('src/lib/auth-context.js', 'utf8');
+  const fn = source.slice(source.indexOf('  const updateProfileAvatar ='), source.indexOf('  const updateUserProfile'));
+  let stateUpdates = 0, events = 0, ok = false;
+  const client = vm.createContext({ auth: { currentUser: { uid: 'actual-user', getIdToken: async () => 'token' } }, user: { uid: 'actual-user' }, avatarRevision: { current: 0 }, fetch: async () => ({ ok, json: async () => ok ? { success: true } : { error: 'Save failed' } }), setUser: () => stateUpdates++, localStorage: { getItem: () => '{}', setItem: () => { throw new Error('quota'); } }, window: { dispatchEvent: () => events++ }, CustomEvent: class {} });
+  vm.runInContext(fn + '\nglobalThis.save = updateProfileAvatar;', client);
+  await assert.rejects(client.save('photo'), /Save failed/); assert.equal(stateUpdates, 0); assert.equal(events, 0);
+  ok = true; await client.save('photo'); assert.equal(stateUpdates, 1); assert.equal(events, 1);
+  console.log('PASS: authenticated atomic save, reload, auth rejection, invalid/oversized images, database failure, no optimistic success, cache quota resilience.');
+})().catch(error => { console.error(error); process.exitCode = 1; });

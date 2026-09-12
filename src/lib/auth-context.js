@@ -1,14 +1,14 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { requestVerificationEmail } from './verification-errors';
 import {
-  onAuthStateChanged,
+  onIdTokenChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
   sendEmailVerification,
-  updateProfile,
 } from 'firebase/auth';
 import { auth } from './firebase';
 
@@ -19,28 +19,50 @@ export function AuthProvider({ children }) {
   const [loading, setLoading]       = useState(true);
   // Partner session stored in memory only — never localStorage (POPIA)
   const [partnerSession, setPartnerSession] = useState(null);
+  const [verificationEmail, setVerificationEmail] = useState(null);
+  const verificationRequest = useRef(null);
+  const avatarRevision = useRef(0);
 
   useEffect(() => {
-    // Check local storage for test session first
-    const savedUser = typeof window !== 'undefined' ? localStorage.getItem('safelink_user') : null;
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-        setLoading(false);
-      } catch (e) {
-        console.error('Failed to parse saved user', e);
-      }
-    }
-
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
+    // Firebase owns session persistence; never trust a localStorage user as authentication.
+    let generation = 0;
+    const unsubscribe = onIdTokenChanged(auth, async (u) => {
+      const currentGeneration = ++generation;
+      setLoading(true);
       if (u) {
+        try {
+          const { claims } = await u.getIdTokenResult();
+          if (currentGeneration !== generation) return;
+          u = Object.assign(Object.create(Object.getPrototypeOf(u)), u, { isFamilyMember: claims.familyMember === true });
+        } catch {
+          if (currentGeneration !== generation) return;
+          setUser(null); setLoading(false); return;
+        }
+      }
+      if (u) {
+        try {
+          const previousUid = localStorage.getItem('safelink_account_uid');
+          if (previousUid !== u.uid) ['active_household', 'safelink_user_devices', 'last_known_pwa_gps', 'safelink_user', 'popia_gps_consent', 'safelink_location_sharing_consent'].forEach(key => localStorage.removeItem(key));
+          localStorage.setItem('safelink_account_uid', u.uid);
+        } catch { /* Firebase authentication still works without a browser cache. */ }
         setUser(u);
-      } else if (!savedUser) {
+        const revision = avatarRevision.current;
+        u.getIdToken().then((token) => fetch('/api/profile/avatar', {
+          headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+        })).then(async (response) => {
+          if (!response.ok) return;
+          const { avatarUrl } = await response.json();
+          if (avatarUrl && auth.currentUser?.uid === u.uid && revision === avatarRevision.current) {
+            setUser((previous) => previous?.uid === u.uid
+              ? Object.assign(Object.create(Object.getPrototypeOf(previous)), previous, { photoURL: avatarUrl }) : previous);
+          }
+        }).catch(() => { /* Keep the current photo when offline. */ });
+      } else {
         setUser(null);
       }
       setLoading(false);
     });
-    return unsubscribe;
+    return () => { generation += 1; unsubscribe(); };
   }, []);
 
   const login = (email, password) =>
@@ -49,60 +71,7 @@ export function AuthProvider({ children }) {
   const register = (email, password) =>
     createUserWithEmailAndPassword(auth, email, password);
 
-  const loginWithPhone = async (phoneNumber, profileData = {}, password = '') => {
-    const cleanDigits = phoneNumber.replace(/\D/g, '').slice(-9);
-
-    // Hardcoded demo credentials check
-    const DEMO_PHONE = '827675092';
-    const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD || 'Cinoisbosss71!';
-
-    if (cleanDigits !== DEMO_PHONE || password !== DEMO_PASSWORD) {
-      throw new Error('Invalid phone number or password. Access restricted during beta.');
-    }
-
-    const mockUid = 'user_' + cleanDigits;
-
-    // Resolve real user name (defaults to Kyle Saffy for beta credentials, or stored household name)
-    let defaultDisplayName = cleanDigits === '827675092' ? 'Kyle Saffy' : 'SafeLink Member';
-    if (typeof window !== 'undefined') {
-      try {
-        const rawH = localStorage.getItem('active_household') || localStorage.getItem(`household_${mockUid}`);
-        if (rawH) {
-          const h = JSON.parse(rawH);
-          if (h.adminFirstName && !h.adminFirstName.toLowerCase().includes('safelink')) {
-            defaultDisplayName = `${h.adminFirstName} ${h.adminLastName || ''}`.trim();
-          }
-        }
-        const rawU = localStorage.getItem('safelink_user');
-        if (rawU) {
-          const u = JSON.parse(rawU);
-          if (u.displayName && !u.displayName.toLowerCase().includes('safelink admin')) {
-            defaultDisplayName = u.displayName;
-          }
-        }
-      } catch {}
-    }
-
-    const resolvedDisplayName =
-      (profileData.displayName && !profileData.displayName.includes('SafeLink Admin'))
-        ? profileData.displayName
-        : (profileData.adminFirstName || defaultDisplayName);
-
-    const customUser = {
-      uid: mockUid,
-      phoneNumber: `+27${cleanDigits}`,
-      displayName: resolvedDisplayName,
-      email: profileData.email || `${mockUid}@safelink.co.za`,
-      photoURL: profileData.photoURL || null,
-      isTestSession: true,
-      ...profileData,
-    };
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('safelink_user', JSON.stringify(customUser));
-    }
-    setUser(customUser);
-    return customUser;
-  };
+  const loginWithPhone = async () => { throw new Error('Use your registered email and password. Phone verification is not enabled.'); };
 
   /**
    * Login via a security partner (Security Brokers, Thompsons, etc.)
@@ -153,34 +122,35 @@ export function AuthProvider({ children }) {
   };
 
   const updateProfileAvatar = async (photoURL) => {
-    if (user) {
-      const updated = { ...user, photoURL };
-      setUser(updated);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('safelink_user', JSON.stringify(updated));
-        const h = localStorage.getItem('active_household');
-        if (h) {
-          try {
-            const parsed = JSON.parse(h);
-            parsed.avatarUrl = photoURL;
-            localStorage.setItem('active_household', JSON.stringify(parsed));
-          } catch (e) {}
-        }
-        window.dispatchEvent(new CustomEvent('safelink_avatar_updated', { detail: { photoURL } }));
+    const account = auth.currentUser;
+    if (!account || account.uid !== user?.uid) throw new Error('Please sign in again to save your picture.');
+    avatarRevision.current += 1;
+    const token = await account.getIdToken();
+    const response = await fetch('/api/profile/avatar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ avatarUrl: photoURL }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.success) throw new Error(result.error || 'Your picture could not be saved. Please try again.');
+    if (auth.currentUser?.uid !== account.uid) return;
+    setUser((previous) => previous?.uid === account.uid
+      ? Object.assign(Object.create(Object.getPrototypeOf(previous)), previous, { photoURL }) : previous);
+    // Firestore owns the image; browser caches are only a convenience.
+    try {
+      for (const key of ['active_household', `household_${account.uid}`]) {
+        const household = JSON.parse(localStorage.getItem(key) || '{}');
+        localStorage.setItem(key, JSON.stringify({ ...household, avatarUrl: photoURL }));
       }
-      try {
-        if (auth.currentUser) {
-          await updateProfile(auth.currentUser, { photoURL });
-        }
-      } catch (e) {}
-    }
+    } catch { /* A full/disabled cache must not turn a successful save into an error. */ }
+    window.dispatchEvent(new CustomEvent('safelink_avatar_updated', { detail: { photoURL } }));
   };
 
   const updateUserProfile = async ({ displayName, firstName, lastName }) => {
     const resolvedName = displayName || `${firstName || ''} ${lastName || ''}`.trim();
     if (!resolvedName) return;
     setUser((prev) => {
-      const updated = { ...(prev || {}), displayName: resolvedName };
+      const updated = Object.assign(Object.create(Object.getPrototypeOf(prev || {})), prev, { displayName: resolvedName });
       if (typeof window !== 'undefined') {
         localStorage.setItem('safelink_user', JSON.stringify(updated));
       }
@@ -193,7 +163,7 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('safelink_user');
+      ['safelink_user', 'active_household', 'safelink_user_devices', 'last_known_pwa_gps', 'safelink_account_uid'].forEach(key => localStorage.removeItem(key));
     }
     setUser(null);
     setPartnerSession(null);
@@ -206,8 +176,13 @@ export function AuthProvider({ children }) {
 
   const resetPassword = (email) => sendPasswordResetEmail(auth, email);
 
-  const verifyEmail = () =>
-    auth.currentUser ? sendEmailVerification(auth.currentUser) : Promise.resolve();
+  const verifyEmail = async (account = auth.currentUser) => {
+    if (!account) throw new Error('Please sign in again before requesting a verification email.');
+    if (verificationRequest.current) return verificationRequest.current;
+    verificationRequest.current = requestVerificationEmail(account, sendEmailVerification, setVerificationEmail);
+    try { await verificationRequest.current; }
+    finally { verificationRequest.current = null; }
+  };
 
   return (
     <AuthContext.Provider
@@ -224,6 +199,7 @@ export function AuthProvider({ children }) {
         logout,
         resetPassword,
         verifyEmail,
+        verificationEmail,
       }}
     >
       {children}

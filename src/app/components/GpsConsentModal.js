@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { usePathname } from 'next/navigation';
 
 export default function GpsConsentModal() {
   const { user } = useAuth();
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [consentStatus, setConsentStatus] = useState('pending');
   const [trackingActive, setTrackingActive] = useState(false);
@@ -12,7 +14,14 @@ export default function GpsConsentModal() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (!user || (!user.isPartnerSession && !user.isFamilyMember && !user.emailVerified) || !['/dashboard', '/map', '/devices', '/family'].includes(pathname)) {
+      setIsOpen(false);
+      return;
+    }
 
+    const handleReopen = () => setIsOpen(true);
+    window.addEventListener('open_gps_consent_modal', handleReopen);
+    let timer;
     const savedConsent = localStorage.getItem('popia_gps_consent');
     if (savedConsent === 'granted') {
       setConsentStatus('granted');
@@ -21,17 +30,15 @@ export default function GpsConsentModal() {
       setConsentStatus('denied');
     } else {
       // First-time user, prompt after 1.5s
-      const timer = setTimeout(() => setIsOpen(true), 1500);
-      return () => clearTimeout(timer);
+      timer = setTimeout(() => setIsOpen(true), 1500);
     }
 
-    const handleReopen = () => setIsOpen(true);
-    window.addEventListener('open_gps_consent_modal', handleReopen);
     return () => {
+      clearTimeout(timer);
       window.removeEventListener('open_gps_consent_modal', handleReopen);
       stopLocationWatcher();
     };
-  }, [user]);
+  }, [user, pathname]);
 
   const getAuthToken = async () => {
     if (user && typeof user.getIdToken === 'function') {
@@ -52,6 +59,7 @@ export default function GpsConsentModal() {
     const sendCoords = async (position) => {
       const { latitude, longitude, accuracy, speed, heading, altitude } = position.coords;
       const payload = {
+        timestamp: position.timestamp,
         lat: latitude,
         lng: longitude,
         accuracy,
@@ -182,17 +190,17 @@ export default function GpsConsentModal() {
         </div>
 
         <p className="text-xs text-on-surface-variant leading-relaxed">
-          SafeLink requires continuous high-accuracy geolocation tracking to dispatch armed security response units, route EMS medical teams to your exact coordinates, and notify verified family members during emergencies.
+          Share your phone location with Safelink while the app is open. You can use the app without sharing. Background tracking is not supported by this PWA, and SOS dispatch is a labelled demonstration.
         </p>
 
         <div className="space-y-2 py-2">
           <div className="flex items-start gap-2.5 text-xs text-on-surface">
             <span className="material-symbols-outlined text-secondary text-sm shrink-0 mt-0.5">verified_user</span>
-            <span>Used strictly for life-safety dispatch and geofence safety alerts.</span>
+            <span>Used to display your phone on your safety map.</span>
           </div>
           <div className="flex items-start gap-2.5 text-xs text-on-surface">
             <span className="material-symbols-outlined text-secondary text-sm shrink-0 mt-0.5">lock</span>
-            <span>Encrypted transmission to authorized security control rooms only.</span>
+            <span>Your shared coordinates are sent to your Safelink account.</span>
           </div>
           <div className="flex items-start gap-2.5 text-xs text-on-surface">
             <span className="material-symbols-outlined text-secondary text-sm shrink-0 mt-0.5">toggle_on</span>

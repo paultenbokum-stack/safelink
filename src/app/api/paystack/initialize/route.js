@@ -21,11 +21,30 @@ export async function POST(request) {
 
     const customer = await authenticateFirebaseRequest(request);
     const email = normaliseEmail(customer.email);
-    const { cart, delivery } = await request.json();
+    const body = await request.json();
+    const { cart, delivery, companyId } = body;
     const checkout = buildCanonicalCheckout(cart);
     const safeDelivery = normaliseDelivery(delivery);
     const secret = getPaystackSecret();
     const reference = `SL-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+
+    // Check if customer is linked to a security company with a Paystack subaccount
+    const db = getAdminFirestore();
+    let effectiveCompanyId = companyId || null;
+    if (!effectiveCompanyId) {
+      const householdDoc = await db.collection('households').doc(customer.uid).get();
+      if (householdDoc.exists) {
+        effectiveCompanyId = householdDoc.data()?.securityCompanyId || null;
+      }
+    }
+
+    let subaccountCode = null;
+    if (effectiveCompanyId) {
+      const companyDoc = await db.collection('security_companies').doc(effectiveCompanyId).get();
+      if (companyDoc.exists) {
+        subaccountCode = companyDoc.data()?.paystackSubaccountCode || null;
+      }
+    }
 
     await savePaymentIntent({
       uid: customer.uid,
@@ -33,7 +52,27 @@ export async function POST(request) {
       reference,
       checkout,
       delivery: safeDelivery,
+      companyId: effectiveCompanyId,
     });
+
+    const initializePayload = {
+      email,
+      amount: String(checkout.amountSubunit),
+      currency: checkout.currency,
+      reference,
+      metadata: {
+        safelink_checkout: true,
+        safelink_user_id: customer.uid,
+        company_id: effectiveCompanyId,
+        cart_fingerprint: checkout.fingerprint,
+        expected_amount_subunit: checkout.amountSubunit,
+        items: checkout.items.map(({ id, name, qty }) => ({ id, name, qty })),
+      },
+      ...(subaccountCode ? {
+        subaccount: subaccountCode,
+        bearer: 'account',
+      } : {}),
+    };
 
     const response = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
@@ -41,19 +80,7 @@ export async function POST(request) {
         Authorization: `Bearer ${secret}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        email,
-        amount: String(checkout.amountSubunit),
-        currency: checkout.currency,
-        reference,
-        metadata: {
-          safelink_checkout: true,
-          safelink_user_id: customer.uid,
-          cart_fingerprint: checkout.fingerprint,
-          expected_amount_subunit: checkout.amountSubunit,
-          items: checkout.items.map(({ id, name, qty }) => ({ id, name, qty })),
-        },
-      }),
+      body: JSON.stringify(initializePayload),
       cache: 'no-store',
       signal: AbortSignal.timeout(10_000),
     });

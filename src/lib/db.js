@@ -3,35 +3,27 @@ import {
   collection, addDoc, getDocs,
   query, where, orderBy, serverTimestamp,
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { encryptIMEI } from './crypto';
 
 /* ─── Households ─────────────────────────────────────────────── */
 
 export async function createHousehold(uid, data) {
-  const record = {
-    ...data,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    membershipStatus: 'active',
-  };
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(`household_${uid}`, JSON.stringify(record));
-    localStorage.setItem('active_household', JSON.stringify({ id: uid, ...record }));
-  }
-  try {
-    await setDoc(doc(db, 'households', uid), {
-      ...data,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      membershipStatus: 'active',
-    });
-  } catch (err) {
-    console.warn('Firestore setDoc notice (using local storage fallback):', err.message);
-  }
+  const token = await auth.currentUser?.getIdToken();
+  if (!token || auth.currentUser.uid !== uid) throw new Error('Please sign in to save your profile.');
+  const res = await fetch('/api/profile/setup', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(data) });
+  if (!res.ok) { const result = await res.json().catch(() => ({})); throw new Error(result.error || 'Profile could not be saved. Please retry.'); }
+  const record = { id: uid, ...data, updatedAt: new Date().toISOString() };
+  localStorage.setItem('household_' + uid, JSON.stringify(record));
+  localStorage.setItem('active_household', JSON.stringify(record));
 }
 
 export async function getHousehold(uid) {
+  if (auth.currentUser?.uid === uid) {
+    const token = await auth.currentUser.getIdToken();
+    const response = await fetch('/api/profile/setup', { headers: { Authorization: 'Bearer ' + token } });
+    if (response.ok) { const { household } = await response.json(); if (household) { localStorage.setItem('active_household', JSON.stringify(household)); localStorage.setItem('household_' + uid, JSON.stringify(household)); } return household; }
+  }
   if (typeof window !== 'undefined') {
     const cachedActive = localStorage.getItem('active_household');
     const cachedUid = localStorage.getItem(`household_${uid}`);
@@ -222,4 +214,3 @@ export async function getAllOrders() {
   );
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
-

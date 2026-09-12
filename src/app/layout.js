@@ -1,6 +1,8 @@
 import './globals.css';
+import { NotificationProvider } from '@/lib/notification-context';
 import { AuthProvider } from '@/lib/auth-context';
 import { ThemeProvider } from '@/lib/theme-context';
+import AppUpdates from '@/app/components/AppUpdates';
 
 export const metadata = {
   title: 'SafeLink - Digital Bodyguard',
@@ -23,6 +25,7 @@ export default function RootLayout({ children }) {
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" href="/icons/shield-192.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -35,7 +38,7 @@ export default function RootLayout({ children }) {
               (function() {
                 try {
                   var saved = localStorage.getItem('safelink_theme');
-                  var theme = saved || 'dark';
+                  var theme = saved === 'light' ? 'light' : 'dark';
                   document.documentElement.classList.remove('light', 'dark');
                   document.documentElement.classList.add(theme);
                   document.documentElement.setAttribute('data-theme', theme);
@@ -47,10 +50,15 @@ export default function RootLayout({ children }) {
       </head>
       <body className="bg-background text-on-background min-h-screen selection:bg-secondary/30 selection:text-secondary">
         <ThemeProvider>
+
           <AuthProvider>
-            <PwaRegister />
-            <GpsConsentModal />
-            {children}
+            <NotificationProvider>
+            <PwaRegister>
+              <AppUpdates />
+              <GpsConsentModal />
+              {children}
+            </PwaRegister>
+            </NotificationProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

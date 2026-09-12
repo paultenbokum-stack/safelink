@@ -3,7 +3,8 @@
  * POST /api/sos/cancel — Cancel an active dispatch.
  * GET  /api/sos/status — Get incident status.
  */
-import { NextResponse } from 'next/server';
+import { recordSafetyNotification, drainPushQueue } from '@/lib/notification-push';
+import { NextResponse, after } from 'next/server';
 import { authenticateFirebaseRequest, getAdminFirestore } from '@/lib/firebase-admin';
 import { dispatchEmergency, cancelDispatch, getIncidentStatus } from '@/lib/aura';
 import { hasFeature } from '@/lib/subscriptions';
@@ -76,6 +77,12 @@ export async function POST(request) {
       companyId,
     });
 
+    if (result.incidentId) {
+      try {
+        await recordSafetyNotification({ uid: decoded.uid, eventId: `incident:${result.incidentId}:requested`, groupId: `incident:${result.incidentId}`, title: 'Family SOS requested', body: 'An emergency response has been requested. Open SafeLink for incident details.', priority: 'urgent' });
+        after(() => drainPushQueue());
+      } catch { console.warn('[notifications] SOS notification could not be queued.'); }
+    }
     return NextResponse.json(result);
   } catch (err) {
     if (err.message === 'UNAUTHENTICATED') {

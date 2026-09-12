@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { createHousehold } from '@/lib/db';
+import { updateProfile } from 'firebase/auth';
 import SouthAfricaFlag from '@/app/components/SouthAfricaFlag';
 
 const SA_PROVINCES = [
@@ -21,11 +22,13 @@ const SA_PROVINCES = [
 
 export default function SignUpPage() {
   const router = useRouter();
-  const { loginWithPhone } = useAuth();
+  const { register, verifyEmail } = useAuth();
 
   const [step, setStep] = useState(1); // 1 = Profile Identity, 2 = Family Circle & Home, 3 = Emergency Safeguards
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [createdAccount, setCreatedAccount] = useState(null);
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   const [formData, setFormData] = useState({
     // Step 1: Personal Info
@@ -33,6 +36,7 @@ export default function SignUpPage() {
     lastName: '',
     phone: '',
     email: '',
+    password: '',
     // Step 2: Life360 Circle & Home Address
     circleName: '',
     circleRole: 'Primary Guardian',
@@ -49,6 +53,8 @@ export default function SignUpPage() {
     safetyPin: '',
     medicalNotes: '',
   });
+
+  const passwordsMismatch = confirmPassword.length > 0 && confirmPassword !== formData.password;
 
   const updateField = (field) => (e) => {
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));
@@ -70,8 +76,12 @@ export default function SignUpPage() {
     setError('');
 
     if (step === 1) {
+      if (formData.password.length < 12 || formData.password !== confirmPassword) {
+        setError('Use a password of at least 12 characters and make sure both passwords match.');
+        return;
+      }
       const cleanPhone = formData.phone.replace(/\s/g, '');
-      if (cleanPhone.length < 9) {
+      if (!/^[6-8]\d{8}$/.test(cleanPhone)) {
         setError('Please enter a valid 9-digit South African mobile number.');
         return;
       }
@@ -93,6 +103,12 @@ export default function SignUpPage() {
     e.preventDefault();
     setError('');
 
+    if (formData.password.length < 12 || formData.password !== confirmPassword) {
+      setError('Your passwords must match and contain at least 12 characters.');
+      setStep(1);
+      return;
+    }
+
     if (!formData.emergencyName || !formData.emergencyPhone) {
       setError('Please provide an emergency contact.');
       return;
@@ -101,16 +117,10 @@ export default function SignUpPage() {
     setLoading(true);
     try {
       const cleanPhone = formData.phone.replace(/\s/g, '');
-      const uid = 'user_' + cleanPhone.slice(-9);
-
-      // Create session in Auth Context (disabling MFA during testing)
-      await loginWithPhone(cleanPhone, {
-        displayName: `${formData.firstName} ${formData.lastName}`,
-        email: formData.email || `${cleanPhone}@safelink.co.za`,
-        adminFirstName: formData.firstName,
-        adminLastName: formData.lastName,
-      });
-
+      const account = createdAccount || (await register(formData.email.trim(), formData.password)).user;
+      setCreatedAccount(account);
+      const uid = account.uid;
+      await updateProfile(account, { displayName: formData.firstName + ' ' + formData.lastName });
       // Save complete household & circle profile in Firestore / LocalStorage
       await createHousehold(uid, {
         adminFirstName: formData.firstName,
@@ -132,18 +142,18 @@ export default function SignUpPage() {
           phone: formData.emergencyPhone,
           relation: formData.emergencyRelation,
         },
-        safetyPin: formData.safetyPin || '1234',
+        phoneVerified: false,
         medicalNotes: formData.medicalNotes,
         onboardingCompleted: true,
       });
 
-      // Direct redirect to dashboard
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 500);
+      // A mail failure must not discard an account that was already created.
+      // The verification page shows the provider error and offers a retry.
+      try { await verifyEmail(account); } catch { /* Status is kept in AuthProvider. */ }
+      router.push('/login/verify');
     } catch (err) {
       console.error(err);
-      setError('Failed to create your profile. Please try again.');
+      setError(err.code === 'auth/email-already-in-use' ? 'This email is already registered. Please sign in.' : err.code === 'auth/operation-not-allowed' ? 'Email registration is not enabled in Firebase yet.' : err.message || 'Unable to create account. Please try again.');
       setLoading(false);
     }
   };
@@ -160,7 +170,7 @@ export default function SignUpPage() {
         <div className="flex flex-col items-center text-center gap-2">
           <div className="w-24 h-24 flex items-center justify-center p-1 drop-shadow-[0_0_25px_rgba(247,187,35,0.3)]">
             <img
-              src="/logo.png"
+              src="/safelink-shield.png"
               alt="SafeLink Logo"
               className="w-full h-full object-contain"
             />
@@ -203,7 +213,7 @@ export default function SignUpPage() {
 
         {/* Error Alert */}
         {error && (
-          <div className="bg-red-500/15 border border-red-500/40 text-red-400 p-3 rounded-xl text-xs flex items-center gap-2">
+          <div role="alert" className="bg-error-container text-on-error-container p-3 rounded-xl text-sm flex items-center gap-2">
             <span className="material-symbols-outlined text-base">error</span>
             <span>{error}</span>
           </div>
@@ -256,6 +266,7 @@ export default function SignUpPage() {
                 <input
                   type="tel"
                   required
+                  maxLength={11}
                   placeholder="82 345 6789"
                   value={formData.phone}
                   onChange={handlePhoneFormat}
@@ -265,9 +276,9 @@ export default function SignUpPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-on-surface-variant">Email Address (Optional)</label>
+              <label className="text-xs font-semibold text-on-surface-variant">Email Address</label>
               <input
-                type="email"
+                type="email" required autoComplete="email"
                 placeholder="sipho.khumalo@example.co.za"
                 value={formData.email}
                 onChange={updateField('email')}
@@ -275,6 +286,14 @@ export default function SignUpPage() {
               />
             </div>
 
+            <label className="text-sm text-on-surface-variant" htmlFor="signup-password">Account password (at least 12 characters)
+              <input id="signup-password" required type="password" autoComplete="new-password" minLength={12} value={formData.password} onChange={updateField('password')} className="block w-full bg-surface-container-low border border-white/10 rounded-xl px-3 py-3 mt-2 text-on-surface" />
+            </label>
+            <label className="text-sm text-on-surface-variant" htmlFor="confirm-password">Confirm password
+              <input id="confirm-password" required type="password" autoComplete="new-password" minLength={12} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} aria-invalid={passwordsMismatch} aria-describedby={passwordsMismatch ? 'password-match-error' : undefined} className="block w-full bg-surface-container-low border border-white/10 rounded-xl px-3 py-3 mt-2 text-on-surface" />
+            </label>
+            {passwordsMismatch && <p id="password-match-error" role="status" className="text-sm text-error">Passwords do not match. Please enter the same password in both fields.</p>}
+            <p className="text-sm text-on-surface-variant">We’ll email you a verification link after you create your account.</p>
             <button
               type="submit"
               className="mt-2 w-full bg-secondary hover:bg-secondary-fixed text-on-secondary py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(247,187,35,0.25)] active:scale-95 transition-all cursor-pointer"
@@ -291,7 +310,7 @@ export default function SignUpPage() {
             <div className="border-b border-white/10 pb-3 mb-1">
               <h2 className="text-base font-bold text-on-surface flex items-center gap-2">
                 <span className="material-symbols-outlined text-secondary text-lg">family_restroom</span>
-                Life360 Circle & Safety Geofence
+                Family Circle & Home
               </h2>
               <p className="text-xs text-on-surface-variant">Set your family circle name and primary home dispatch address.</p>
             </div>
@@ -462,18 +481,6 @@ export default function SignUpPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-on-surface-variant">4-Digit Duress / Safety PIN</label>
-                <input
-                  type="password"
-                  maxLength={4}
-                  placeholder="••••"
-                  value={formData.safetyPin}
-                  onChange={updateField('safetyPin')}
-                  className="bg-surface-container-low border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-on-surface text-center tracking-widest outline-none focus:border-secondary transition-colors"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold text-on-surface-variant">Medical Notes (Optional)</label>
                 <input
                   type="text"
@@ -488,7 +495,7 @@ export default function SignUpPage() {
             <div className="p-3 rounded-xl bg-secondary/10 border border-secondary/20 flex items-start gap-2.5 text-xs text-on-surface-variant">
               <span className="material-symbols-outlined text-secondary text-base shrink-0 mt-0.5">verified_user</span>
               <span>
-                <strong>Testing Mode Active:</strong> MFA setup is bypassed. Submitting this profile will activate your account and immediately load your live SafeLink Dashboard.
+                <strong>Secure account registration:</strong> Next, verify your email before opening your dashboard. Your phone number remains an unverified contact detail. SMS verification and MFA are not enabled.
               </span>
             </div>
 
@@ -512,7 +519,7 @@ export default function SignUpPage() {
                   </>
                 ) : (
                   <>
-                    <span>Complete & Go to Dashboard</span>
+                    <span>Create Account & Verify Email</span>
                     <span className="material-symbols-outlined text-base">rocket_launch</span>
                   </>
                 )}

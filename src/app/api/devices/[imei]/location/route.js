@@ -4,25 +4,28 @@
  * Returns lat, lng, speed, direction, address, and timestamp
  * for a specific device identified by IMEI.
  */
+import { batteryPercent } from '@/lib/telemetry';
 import { NextResponse } from 'next/server';
-import { authenticateFirebaseRequest } from '@/lib/firebase-admin';
+import { authenticateFirebaseRequest, assertDeviceOwnership } from '@/lib/firebase-admin';
 import { getDeviceLocation, getTagLocation } from '@/lib/tracksolid';
 
 export async function GET(request, { params }) {
   try {
-    await authenticateFirebaseRequest(request);
+    const user = await authenticateFirebaseRequest(request);
     const { imei } = await params;
 
     if (!imei || !/^\d{15}$/.test(imei)) {
       return NextResponse.json({ error: 'Invalid IMEI' }, { status: 400 });
     }
 
+    await assertDeviceOwnership(user.uid, imei);
+
     // Try GPS device first, then BLE TAG
     let result = await getDeviceLocation(imei);
 
     if (result.code === 0 && result.result) {
       const locations = Array.isArray(result.result) ? result.result : [result.result];
-      const device = locations.find((d) => d.imei === imei) || locations[0];
+      const device = locations.find((d) => String(d.imei) === imei) || (locations.length === 1 && !locations[0].imei ? locations[0] : null);
 
       if (device) {
         let address = device.address;
@@ -43,11 +46,6 @@ export async function GET(request, { params }) {
           }
         }
 
-        const isVillage = !isNaN(lat) && !isNaN(lng) && Math.abs(lat - (-29.5282)) < 0.02 && Math.abs(lng - 31.2111) < 0.02;
-        if (isVillage) {
-          address = address ? `${address} (The Village)` : '36 Leonora Dr, Ballito (The Village)';
-        }
-
         return NextResponse.json({
           imei,
           lat,
@@ -55,9 +53,9 @@ export async function GET(request, { params }) {
           speed: parseFloat(device.speed) || 0,
           direction: parseFloat(device.direction) || 0,
           gpsTime: device.gpsTime || device.positionTime,
-          address: address || (lat && lng ? `${lat.toFixed(4)}°S, ${lng.toFixed(4)}°E` : null),
+          address: address || (lat && lng ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : null),
           status: device.status,
-          batteryLevel: parseFloat(device.batteryPowerVal || device.electricity || device.batteryLevel) || null,
+          batteryLevel: batteryPercent(device.batteryPowerVal ?? device.electricity ?? device.batteryLevel),
           isOnline: device.status === '0' || device.status === '1' || device.status === 'online' || device.status === 'NORMAL',
           deviceName: device.deviceName || 'Sentinel Tag',
         });
@@ -74,7 +72,7 @@ export async function GET(request, { params }) {
         lng: parseFloat(tagData.lng) || null,
         isTag: true,
         tagRssi: tagData.rssi || null,
-        tagBattery: tagData.battery || null,
+        tagBattery: batteryPercent(tagData.battery),
         gpsTime: tagData.gpsTime || null,
       });
     }
@@ -84,6 +82,7 @@ export async function GET(request, { params }) {
       { status: 404 }
     );
   } catch (err) {
+    if (err.message === 'FORBIDDEN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     if (err.message === 'UNAUTHENTICATED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

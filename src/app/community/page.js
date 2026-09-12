@@ -1,31 +1,20 @@
+
 'use client';
 
+import Link from 'next/link';
 import AuthGuard from '@/app/components/AuthGuard';
+import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
-import ComingSoon from '@/app/components/ComingSoon';
-import { FEATURES } from '@/lib/features';
 
 export default function CommunityPage() {
-  return (
-    <AuthGuard>
-      <div style={{ minHeight: '100vh', background: 'var(--bg-dark)', color: 'var(--text-primary)', paddingBottom: 90 }}>
-        <div style={{ padding: '24px 20px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>Community Watch</h1>
-        </div>
-        {FEATURES.COMMUNITY_WATCH ? (
-          <div style={{ padding: 20 }}>
-            <p style={{ color: 'var(--text-secondary)' }}>Community watch feed coming soon...</p>
-          </div>
-        ) : (
-          <ComingSoon
-            icon="👁️"
-            title="Community Watch"
-            description="Share and receive real-time security alerts from neighbours in your area. Build a safer street, together."
-            accentColor="#805ad5"
-          />
-        )}
-        <BottomNav />
-      </div>
-    </AuthGuard>
-  );
+  return <AuthGuard><div className="min-h-screen bg-background text-on-surface pb-28">
+    <Header title="Community updates" showBack />
+    <main className="pt-20 px-4 max-w-2xl mx-auto">
+      <section className="glass-panel rounded-2xl p-5 space-y-3">
+        <h2 className="font-bold text-lg">Your community, in one inbox</h2>
+        <p className="text-sm text-on-surface-variant">Read updates from authorised community and security-company publishers in Notifications. Only channels connected to your family appear there.</p>
+        <Link href="/notifications" className="inline-block bg-secondary text-on-secondary font-bold rounded-xl px-4 py-3">Open notifications</Link>
+      </section>
+    </main><BottomNav />
+  </div></AuthGuard>;
 }

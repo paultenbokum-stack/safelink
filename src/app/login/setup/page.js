@@ -88,10 +88,7 @@ export default function HouseholdSetupPage() {
       {/* Header */}
       <div className="setup-header">
         <div className="setup-logo">
-          <svg viewBox="0 0 24 24" fill="none" width="28" height="28">
-            <path d="M12 2L3 7v5c0 5.25 3.75 10.15 9 11.35C17.25 22.15 21 17.25 21 12V7L12 2z" fill="var(--primary)" stroke="var(--accent)" strokeWidth="1.5" />
-            <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <img src="/safelink-shield.png" alt="" width="36" height="36" style={{ objectFit: 'contain' }} />
           <span style={{ fontWeight: 800, fontSize: 18 }}>SafeLink</span>
         </div>
         <h1 className="setup-title">Set up your household</h1>

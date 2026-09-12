@@ -126,8 +126,8 @@ html.light,
   --on-primary-rgb:            255 255 255;
   --on-primary-container:      #1e3a8a;
 
-  --secondary:                 #d97706;
-  --secondary-rgb:             217 119 6;
+  --secondary:                 #a65300;
+  --secondary-rgb:             166 83 0;
   --secondary-fixed:           #fef3c7;
   --secondary-fixed-dim:       #fde68a;
   --secondary-container:       #fef3c7;
@@ -174,6 +174,11 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
+
+html { color-scheme: dark; }
+html.light { color-scheme: light; }
+:root { --bg-dark: var(--background); --text-primary: var(--on-surface); --text-secondary: var(--on-surface-variant); --accent: var(--secondary); }
+button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 /* Glassmorphism Classes */
 .glass-panel {

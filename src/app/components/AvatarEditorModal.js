@@ -37,7 +37,7 @@ const PRESET_AVATARS = [
 ];
 
 export default function AvatarEditorModal({ isOpen, onClose, currentAvatar, onAvatarSaved }) {
-  const { user, updateProfileAvatar } = useAuth();
+  const { updateProfileAvatar } = useAuth();
   const [preview, setPreview] = useState(currentAvatar);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -92,51 +92,13 @@ export default function AvatarEditorModal({ isOpen, onClose, currentAvatar, onAv
     setError('');
 
     try {
-      // 1. Update Auth Context & localStorage
-      if (updateProfileAvatar) {
-        await updateProfileAvatar(preview);
-      } else {
-        if (typeof window !== 'undefined') {
-          const h = localStorage.getItem('active_household');
-          if (h) {
-            const parsed = JSON.parse(h);
-            parsed.avatarUrl = preview;
-            localStorage.setItem('active_household', JSON.stringify(parsed));
-          }
-          const u = localStorage.getItem('safelink_user');
-          if (u) {
-            const parsedUser = JSON.parse(u);
-            parsedUser.photoURL = preview;
-            localStorage.setItem('safelink_user', JSON.stringify(parsedUser));
-          }
-          window.dispatchEvent(new CustomEvent('safelink_avatar_updated', { detail: { photoURL: preview } }));
-        }
-      }
-
-      // 2. Persist to backend Firestore API
-      try {
-        let headers = { 'Content-Type': 'application/json' };
-        if (user && typeof user.getIdToken === 'function') {
-          const token = await user.getIdToken();
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-        await fetch('/api/profile/avatar', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            uid: user?.uid || 'user_827675092',
-            avatarUrl: preview,
-          }),
-        });
-      } catch (err) {
-        console.warn('Backend avatar persist non-fatal error:', err);
-      }
+      await updateProfileAvatar(preview);
 
       if (onAvatarSaved) onAvatarSaved(preview);
       onClose();
     } catch (err) {
       console.error('Failed to save avatar:', err);
-      setError('Error saving avatar. Please try again.');
+      setError(err.message || 'Error saving avatar. Please try again.');
     } finally {
       setSaving(false);
     }

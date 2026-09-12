@@ -1,5 +1,8 @@
 'use client';
 
+import { InstallAppPrompt } from '@/app/components/PwaRegister';
+
+import InvestorIntro from '@/app/components/InvestorIntro';
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -20,9 +23,9 @@ function getPartnerBranding(partnerId) {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { loginWithPhone, loginWithPartnerId } = useAuth();
+  const { login, loginWithPartnerId, resetPassword } = useAuth();
 
-  const [mode, setMode] = useState('partner'); // 'phone' | 'partner'
+  const [mode, setMode] = useState('phone'); // 'phone' | 'partner'
 
   // Phone login state
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -35,31 +38,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [quickError, setQuickError] = useState('');
 
-  const handlePhoneFormat = (e) => {
-    let val = e.target.value.replace(/\D/g, '');
-    let formatted = '';
-    if (val.length > 0) {
-      formatted = val.substring(0, 2);
-      if (val.length > 2) formatted += ' ' + val.substring(2, 5);
-      if (val.length > 5) formatted += ' ' + val.substring(5, 9);
-    }
-    setPhoneNumber(formatted);
-  };
-
   const handlePhoneSignIn = async (e) => {
     e.preventDefault();
     setQuickError('');
-    const cleanPhone = phoneNumber.replace(/\s/g, '');
-    if (cleanPhone.length < 9) {
-      setQuickError('Please enter a valid 9-digit South African mobile number.');
-      return;
-    }
     setLoading(true);
     try {
-      await loginWithPhone(cleanPhone, {}, password);
+      await login(phoneNumber.trim(), password);
       setTimeout(() => router.push('/dashboard'), 400);
     } catch (err) {
-      setQuickError(err.message || 'Failed to sign in. Please try again.');
+      setQuickError('Unable to sign in. Check your email and password, or reset your password.');
       setLoading(false);
     }
   };
@@ -88,7 +75,7 @@ export default function LoginPage() {
   const partnerBranding = mode === 'partner' ? getPartnerBranding(partnerId) : null;
 
   return (
-    <div className="text-on-surface antialiased min-h-screen flex flex-col items-center justify-center p-gutter relative overflow-hidden" style={{ background: '#050505' }}>
+    <div className="bg-background text-on-surface antialiased min-h-screen flex flex-col items-center justify-center p-gutter relative overflow-hidden">
       {/* Background Atmospheric Glow */}
       <div className="absolute inset-0 pointer-events-none flex justify-center items-center">
         <div
@@ -100,39 +87,43 @@ export default function LoginPage() {
       <main className="w-full max-w-md z-10 flex flex-col justify-center gap-6 my-auto">
         {/* Branding */}
         <div className="flex flex-col items-center text-center gap-2">
-          <div className="w-64 h-24 flex items-center justify-center drop-shadow-[0_0_25px_rgba(198,154,44,0.25)]">
-            <img src="/sovereign-intervention-logo.png" alt="Sovereign Intervention" className="w-full h-full object-contain" />
+          <div className="w-28 h-28 flex items-center justify-center drop-shadow-[0_0_25px_rgba(198,154,44,0.25)]">
+            <img src="/safelink-shield.png" alt="Safelink" className="w-full h-full object-contain" />
           </div>
           <div className="h-px w-28 bg-[#C69A2C] mt-1" />
           <h1 className="font-headline-lg-mobile text-3xl font-black text-on-surface tracking-tight">
-            {partnerBranding ? `${partnerBranding.name}` : 'Welcome to Sovereign Intervention'}
+            {partnerBranding ? `${partnerBranding.name}` : 'Welcome to Safelink'}
           </h1>
           <p className="font-body-md text-sm text-on-surface-variant max-w-[320px]">
             {partnerBranding
               ? `Powered by SafeLink — ${partnerBranding.hint}`
-              : 'Executive protection, armed response and connected client safety.'}
+              : 'Connected safety for you and your family.'}
           </p>
         </div>
 
+        <InstallAppPrompt />
+        <InvestorIntro />
+        <Link href="/signup" className="block text-center rounded-xl border border-secondary/50 bg-secondary/10 text-secondary py-3 font-bold text-sm">New to Safelink? Create your account →</Link>
+        <p className="text-xs text-on-surface-variant text-center">Register with your cell number and email. Sign in using email and password.</p>
         {/* Login Mode Tabs */}
-        <div className="grid grid-cols-2 p-1 bg-black/70 border border-[#C69A2C]/40 rounded-xl">
+        <div className="grid grid-cols-2 p-1 bg-surface-container border border-[#C69A2C]/40 rounded-xl">
           <button
             type="button"
             onClick={() => { setMode('phone'); setQuickError(''); }}
             className={`py-2.5 rounded-lg font-bold text-xs transition-all ${
               mode === 'phone'
-                ? 'bg-[#C69A2C]/20 text-[#E7C66C] border border-[#C69A2C]/60 shadow-sm'
+                ? 'bg-[#C69A2C]/20 text-secondary border border-[#C69A2C]/60 shadow-sm'
                 : 'text-on-surface-variant hover:text-on-surface'
             }`}
           >
-            📱 Mobile Login
+            📱 Account Login
           </button>
           <button
             type="button"
             onClick={() => { setMode('partner'); setQuickError(''); }}
             className={`py-2.5 rounded-lg font-bold text-xs transition-all ${
               mode === 'partner'
-                ? 'bg-[#C69A2C]/20 text-[#E7C66C] border border-[#C69A2C]/60 shadow-sm'
+                ? 'bg-[#C69A2C]/20 text-secondary border border-[#C69A2C]/60 shadow-sm'
                 : 'text-on-surface-variant hover:text-on-surface'
             }`}
           >
@@ -142,32 +133,29 @@ export default function LoginPage() {
 
         {/* Error Banner */}
         {quickError && (
-          <div className="bg-red-500/15 border border-red-500/40 text-red-400 p-3 rounded-xl text-xs flex items-center gap-2">
+          <div className="bg-red-500/15 border border-red-500/40 text-error p-3 rounded-xl text-xs flex items-center gap-2">
             <span className="material-symbols-outlined text-base">error</span>
             <span>{quickError}</span>
           </div>
         )}
 
+<button type="button" onClick={async () => { if (!phoneNumber.includes('@')) { setQuickError('Enter your email address first.'); return; } try { await resetPassword(phoneNumber.trim()); setQuickError('If this email has an account, a reset link has been sent.'); } catch { setQuickError('Unable to request reset. Please try again later.'); } }} className="text-xs text-secondary text-right">Forgot password?</button>
         {/* ── Phone Login Form ── */}
         {mode === 'phone' && (
           <form onSubmit={handlePhoneSignIn} className="flex flex-col gap-4 w-full">
             <div className="glass-panel rounded-2xl p-4 flex flex-col gap-2 border border-[#C69A2C]/25">
               <label className="font-label-sm text-xs text-on-surface-variant uppercase tracking-wider font-semibold" htmlFor="phone">
-                Mobile Number
+                Email Address
               </label>
-              <div className="flex items-center gap-2 bg-black/40 border border-outline/30 rounded-xl p-3 focus-within:border-[#C69A2C] transition-all duration-200">
-                <div className="flex items-center gap-1.5 pr-2.5 border-r border-outline/30">
-                  <SouthAfricaFlag className="w-6 h-4" />
-                  <span className="font-body-lg text-sm font-bold text-on-surface">+27</span>
-                </div>
+              <div className="flex items-center gap-2 bg-surface-container-lowest border border-outline/30 rounded-xl p-3 focus-within:border-[#C69A2C] transition-all duration-200">
                 <input
                   id="phone"
-                  type="tel"
-                  placeholder="82 345 6789"
+                  type="email"
+                  placeholder="you@example.com"
                   value={phoneNumber}
-                  onChange={handlePhoneFormat}
-                  autoComplete="tel-national"
-                  className="w-full bg-transparent border-none focus:ring-0 font-body-lg text-base text-on-surface placeholder-on-surface-variant/40 outline-none"
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  autoComplete="email"
+                  className="w-full bg-transparent border-none focus:ring-0 font-body-lg text-base text-on-surface placeholder:text-on-surface-variant outline-none"
                   required
                 />
               </div>
@@ -177,7 +165,7 @@ export default function LoginPage() {
               <label className="font-label-sm text-xs text-on-surface-variant uppercase tracking-wider font-semibold" htmlFor="password">
                 Password
               </label>
-              <div className="flex items-center gap-2 bg-black/40 border border-outline/30 rounded-xl p-3 focus-within:border-[#C69A2C] transition-all duration-200">
+              <div className="flex items-center gap-2 bg-surface-container-lowest border border-outline/30 rounded-xl p-3 focus-within:border-[#C69A2C] transition-all duration-200">
                 <span className="material-symbols-outlined text-on-surface-variant text-lg">lock</span>
                 <input
                   id="password"
@@ -186,16 +174,16 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
-                  className="w-full bg-transparent border-none focus:ring-0 font-body-lg text-base text-on-surface placeholder-on-surface-variant/40 outline-none"
+                  className="w-full bg-transparent border-none focus:ring-0 font-body-lg text-base text-on-surface placeholder:text-on-surface-variant outline-none"
                   required
                 />
               </div>
             </div>
 
             <div className="px-1 flex items-center justify-between text-xs text-on-surface-variant">
-              <span className="flex items-center gap-1 text-emerald-400 font-medium">
+              <span className="flex items-center gap-1 text-primary font-medium">
                 <span className="material-symbols-outlined text-sm">verified_user</span>
-                Beta Access — Authorised Users Only
+                Secure Firebase account
               </span>
             </div>
 
@@ -228,7 +216,7 @@ export default function LoginPage() {
                 <span className="material-symbols-outlined text-primary text-xl">shield</span>
                 <div>
                   <div className="text-xs font-bold text-primary">{partnerBranding.name} Client</div>
-                  <div className="text-[10px] text-on-surface-variant">Your session is encrypted & not stored</div>
+                  <div className="text-xs text-on-surface-variant">Your session is encrypted & not stored</div>
                 </div>
               </div>
             )}
@@ -237,7 +225,7 @@ export default function LoginPage() {
               <label className="font-label-sm text-xs text-on-surface-variant uppercase tracking-wider font-semibold" htmlFor="partner-id">
                 Account Number
               </label>
-              <div className="flex items-center gap-2 bg-black/40 border border-outline/30 rounded-xl p-3 focus-within:border-[#C69A2C] transition-all duration-200">
+              <div className="flex items-center gap-2 bg-surface-container-lowest border border-outline/30 rounded-xl p-3 focus-within:border-[#C69A2C] transition-all duration-200">
                 <span className="material-symbols-outlined text-on-surface-variant text-lg">badge</span>
                 <input
                   id="partner-id"
@@ -247,11 +235,11 @@ export default function LoginPage() {
                   onChange={(e) => setPartnerId(e.target.value.toUpperCase())}
                   autoCapitalize="characters"
                   autoComplete="off"
-                  className="w-full bg-transparent border-none focus:ring-0 font-body-lg text-base text-on-surface placeholder-on-surface-variant/40 outline-none font-mono tracking-wider"
+                  className="w-full bg-transparent border-none focus:ring-0 font-body-lg text-base text-on-surface placeholder:text-on-surface-variant outline-none font-mono tracking-wider"
                   required
                 />
               </div>
-              <p className="text-[10px] text-on-surface-variant pl-1">
+              <p className="text-xs text-on-surface-variant pl-1">
                 SI = Sovereign Intervention · SB = Security Brokers · TH = Thompsons · MS = Marshal&apos;s
               </p>
             </div>
@@ -260,7 +248,7 @@ export default function LoginPage() {
               <label className="font-label-sm text-xs text-on-surface-variant uppercase tracking-wider font-semibold" htmlFor="partner-pin">
                 PIN / Password
               </label>
-              <div className="flex items-center gap-2 bg-black/40 border border-outline/30 rounded-xl p-3 focus-within:border-[#C69A2C] transition-all duration-200">
+              <div className="flex items-center gap-2 bg-surface-container-lowest border border-outline/30 rounded-xl p-3 focus-within:border-[#C69A2C] transition-all duration-200">
                 <span className="material-symbols-outlined text-on-surface-variant text-lg">pin</span>
                 <input
                   id="partner-pin"
@@ -269,19 +257,19 @@ export default function LoginPage() {
                   value={partnerPin}
                   onChange={(e) => setPartnerPin(e.target.value)}
                   autoComplete="current-password"
-                  className="w-full bg-transparent border-none focus:ring-0 font-body-lg text-base text-on-surface placeholder-on-surface-variant/40 outline-none"
+                  className="w-full bg-transparent border-none focus:ring-0 font-body-lg text-base text-on-surface placeholder:text-on-surface-variant outline-none"
                   required
                 />
               </div>
-              <p className="text-[10px] text-on-surface-variant pl-1">
+              <p className="text-xs text-on-surface-variant pl-1">
                 Issued by your security company. Contact them if you&apos;ve forgotten your PIN.
               </p>
             </div>
 
             {/* POPIA notice */}
             <div className="flex items-start gap-2 bg-[#C69A2C]/10 border border-[#C69A2C]/30 rounded-xl p-3">
-              <span className="material-symbols-outlined text-[#E7C66C] text-base mt-0.5">privacy_tip</span>
-              <p className="text-[10px] text-[#E7C66C] leading-relaxed">
+              <span className="material-symbols-outlined text-secondary text-base mt-0.5">privacy_tip</span>
+              <p className="text-xs text-secondary leading-relaxed">
                 <strong>No data stored.</strong> Your account details remain with your security company.
                 SafeLink only reads your device list for this session.
               </p>

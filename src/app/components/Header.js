@@ -2,17 +2,18 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import NotificationBell from './NotificationBell';
+import ThemeSwitch from './ThemeSwitch';
+import RefreshButton from './RefreshButton';
 import { useAuth } from '@/lib/auth-context';
-import { useTheme } from '@/lib/theme-context';
 import { useRouter } from 'next/navigation';
 
 export default function Header({ title, showBack = false, showNotification = true, badgeCount = 0 }) {
   const { user } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const router = useRouter();
 
   const [avatarSrc, setAvatarSrc] = React.useState(
-    user?.photoURL || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'
+    user?.photoURL || '/safelink-shield.png'
   );
 
   const [userName, setUserName] = React.useState(() => {
@@ -34,6 +35,7 @@ export default function Header({ title, showBack = false, showNotification = tru
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
+      const initialSync = setTimeout(() => {
       const h = localStorage.getItem('active_household');
       if (h) {
         try {
@@ -51,6 +53,7 @@ export default function Header({ title, showBack = false, showNotification = tru
         setUserName('Kyle');
       }
 
+      }, 0);
       const handleAvatarUpdated = (e) => {
         if (e.detail?.photoURL) setAvatarSrc(e.detail.photoURL);
       };
@@ -65,6 +68,7 @@ export default function Header({ title, showBack = false, showNotification = tru
       window.addEventListener('safelink_avatar_updated', handleAvatarUpdated);
       window.addEventListener('safelink_profile_updated', handleProfileUpdated);
       return () => {
+        clearTimeout(initialSync);
         window.removeEventListener('safelink_avatar_updated', handleAvatarUpdated);
         window.removeEventListener('safelink_profile_updated', handleProfileUpdated);
       };
@@ -74,7 +78,7 @@ export default function Header({ title, showBack = false, showNotification = tru
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-surface/80 backdrop-blur-md border-b border-white/10 shadow-sm flex justify-between items-center px-gutter h-16 w-full transition-all">
       <div className="max-w-7xl mx-auto w-full flex items-center justify-between">
-        <div className="flex items-center gap-sm">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           {showBack ? (
             <button
               onClick={() => router.back()}
@@ -83,24 +87,24 @@ export default function Header({ title, showBack = false, showNotification = tru
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
           ) : (
-            <Link href="/profile" className="w-10 h-10 rounded-full overflow-hidden border border-outline/30 flex items-center justify-center bg-surface-container-high shrink-0 hover:border-secondary transition-colors ring-1 ring-secondary/30">
+            <Link href="/profile" className={`w-11 h-11 flex items-center justify-center shrink-0 ${avatarSrc === '/safelink-shield.png' ? '' : 'rounded-full overflow-hidden border border-outline/30 bg-surface-container-high'}`}>
               <img
-                className="w-full h-full object-cover"
+                className={`w-full h-full ${avatarSrc === '/safelink-shield.png' ? 'object-contain' : 'object-cover'}`}
                 alt="Profile"
                 src={avatarSrc}
               />
             </Link>
           )}
 
-          <div className="flex flex-col">
-            <h1 className="font-headline-md text-headline-md-mobile md:text-headline-md text-secondary font-bold tracking-tight">
-              {title || `Good morning, ${userName}`}
+          <div className="flex flex-col min-w-0">
+            <h1 className="truncate text-sm sm:text-base text-secondary font-bold tracking-tight">
+              {title || `Hi ${userName}`}
             </h1>
           </div>
         </div>
 
         {/* Desktop Navigation Links */}
-        <nav className="hidden md:flex items-center gap-lg">
+        <nav className="hidden xl:flex items-center gap-lg">
           <Link href="/dashboard" className="text-on-surface-variant hover:text-secondary text-label-md flex items-center gap-xs transition-colors">
             <span className="material-symbols-outlined text-[20px]">home</span> Home
           </Link>
@@ -124,33 +128,10 @@ export default function Header({ title, showBack = false, showNotification = tru
           </Link>
         </nav>
 
-        <div className="flex items-center gap-1.5 sm:gap-sm">
-          {/* Light / Dark Mode Toggle */}
-          <button
-            type="button"
-            onClick={toggleTheme}
-            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            className="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:text-secondary transition-all active:scale-90 rounded-full hover:bg-white/5 cursor-pointer relative group"
-          >
-            <span
-              className="material-symbols-outlined text-[22px] transition-transform duration-300 group-hover:rotate-45 text-secondary"
-              style={{ fontVariationSettings: "'FILL' 1" }}
-            >
-              {theme === 'dark' ? 'light_mode' : 'dark_mode'}
-            </span>
-          </button>
-
-          {showNotification && (
-            <Link
-              href="/dashboard"
-              className="relative w-10 h-10 flex items-center justify-center text-on-surface-variant hover:text-secondary transition-colors active:scale-95 rounded-full hover:bg-white/5"
-            >
-              <span className="material-symbols-outlined text-2xl">notifications</span>
-              <span className="absolute top-2 right-2.5 w-2 h-2 bg-error rounded-full animate-ping"></span>
-              <span className="absolute top-2 right-2.5 w-2 h-2 bg-error rounded-full"></span>
-            </Link>
-          )}
+        <div className="flex items-center shrink-0">
+          <ThemeSwitch />
+          <RefreshButton />
+          {showNotification && <NotificationBell />}
         </div>
       </div>
     </header>

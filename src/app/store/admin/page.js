@@ -4,8 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { SENTINEL_PRODUCTS, formatZAR } from '@/lib/products';
 
-/* ─── Simple passphrase guard (same as /admin) ─── */
-const ADMIN_PASS = process.env.NEXT_PUBLIC_ADMIN_PASS ?? 'sbsecurity2024';
+/* Browser-visible passphrases are not security controls. Role-based access will replace this screen. */
+const ADMIN_PASS = null;
 
 /* ─── Editable product row ─── */
 function ProductRow({ product, overrides, onChange }) {
@@ -210,7 +210,7 @@ export default function ProductAdminPage() {
   }, []);
 
   const handleLogin = () => {
-    if (pass === ADMIN_PASS) {
+    if (ADMIN_PASS && pass === ADMIN_PASS) {
       setAuthed(true);
       setPassError('');
     } else {

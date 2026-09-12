@@ -4,12 +4,12 @@
  * Supports: alarm test, arm/disarm, siren, locate.
  */
 import { NextResponse } from 'next/server';
-import { authenticateFirebaseRequest } from '@/lib/firebase-admin';
+import { assertDeviceOwnership, authenticateFirebaseRequest } from '@/lib/firebase-admin';
 import { sendCommand, getCommandList, getCommandResult } from '@/lib/tracksolid';
 
 export async function POST(request, { params }) {
   try {
-    await authenticateFirebaseRequest(request);
+    const user = await authenticateFirebaseRequest(request);
     const { imei } = await params;
     const body = await request.json();
     const { action, instructionId } = body;
@@ -17,6 +17,8 @@ export async function POST(request, { params }) {
     if (!imei || !/^\d{15}$/.test(imei)) {
       return NextResponse.json({ error: 'Invalid IMEI' }, { status: 400 });
     }
+
+    await assertDeviceOwnership(user.uid, imei);
 
     // Action: list available commands for this device
     if (action === 'list') {
@@ -50,6 +52,9 @@ export async function POST(request, { params }) {
   } catch (err) {
     if (err.message === 'UNAUTHENTICATED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (err.message === 'FORBIDDEN') {
+      return NextResponse.json({ error: 'You do not have access to this device.' }, { status: 403 });
     }
     console.error('[api/devices/command] Error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

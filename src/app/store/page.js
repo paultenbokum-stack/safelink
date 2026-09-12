@@ -33,6 +33,7 @@ function badgeColour(badge) {
 }
 
 function ProductVisual({ product, priority = false, compact = false }) {
+  if (product.investorTier) return <span className="material-symbols-outlined text-secondary text-6xl">{product.icon}</span>;
   const studioTreatment = 'studio-image-mask !p-0 scale-[1.03] group-hover:scale-[1.08]';
 
   return (
@@ -411,7 +412,7 @@ function StoreContent() {
   const [addedId, setAddedId] = useState(null);
 
   const filtered = selectedCategory === 'All'
-    ? SENTINEL_PRODUCTS
+    ? SENTINEL_PRODUCTS.filter(p => !p.investorTier)
     : SENTINEL_PRODUCTS.filter((product) => product.category === selectedCategory);
   const featured = SENTINEL_PRODUCTS.find((product) => product.id === 'aura-cube');
 
@@ -451,7 +452,7 @@ function StoreContent() {
           </button>
           <div>
             <h1 className="text-base font-bold text-secondary leading-tight">SafeLink Store</h1>
-            <p className="text-[10px] text-on-surface-variant">Sentinel IoT x AURA range</p>
+            <p className="text-[10px] text-on-surface-variant">Sentinel hardware · connected safety</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -470,6 +471,7 @@ function StoreContent() {
       </header>
 
       <main className="pt-20 pb-32 px-4 max-w-7xl mx-auto space-y-8">
+        <section><div className="mb-4"><p className="text-secondary text-xs uppercase tracking-widest">One app. Every device.</p><h2 className="text-2xl font-bold mt-2">Find your Sentinel</h2><p className="text-xs text-on-surface-variant mt-2">[Demo] Proposed packages and pricing · Paystack test checkout · no hardware fulfilment</p></div><div className="grid sm:grid-cols-3 gap-4">{SENTINEL_PRODUCTS.filter(p => p.investorTier).map(product => <article key={product.id} className="glass-panel rounded-2xl p-5 flex flex-col border border-secondary/20"><span className="material-symbols-outlined text-4xl text-secondary mb-4">{product.icon}</span><small className="text-on-surface-variant">[Demo]</small><h3 className="text-lg font-bold mt-1">{product.name}</h3><p className="text-2xl font-black text-secondary my-3">R{product.sellingPrice.toLocaleString('en-US')} <span className="text-xs font-normal text-on-surface-variant">incl. VAT</span></p><p className="text-sm text-on-surface-variant mb-3">{product.desc}</p><ul className="text-xs space-y-2 mb-5 flex-1">{product.specs.map(spec => <li key={spec}>✓ {spec}</li>)}</ul><button onClick={() => { addToCart(product); setCartOpen(true); }} className="bg-secondary text-on-secondary rounded-xl py-3 font-bold text-sm">Add to Cart</button><p className="text-[11px] text-on-surface-variant mt-3">{product.platform}</p></article>)}</div></section>
         <section className="glass-card rounded-2xl p-5 md:p-8 flex flex-col md:flex-row gap-6 items-center relative overflow-hidden border-secondary/20 group">
           <div className="absolute inset-0 bg-gradient-to-br from-secondary/10 via-transparent to-primary/5" />
           <div className="flex-1 space-y-3 relative z-10">

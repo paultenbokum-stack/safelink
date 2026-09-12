@@ -40,6 +40,17 @@ export function useLocationSharing() {
   const [isSharing, setIsSharing] = useState(false);
   const [lastPosition, setLastPosition] = useState(null);
   const [error, setError] = useState(null);
+  const [checkedAt, setCheckedAt] = useState(null);
+  const [battery, setBattery] = useState(null);
+  const batteryRef = useRef(null);
+  const positionRef = useRef(null);
+  useEffect(() => { positionRef.current = lastPosition; }, [lastPosition]);
+  useEffect(() => {
+    let active = true, manager;
+    const sync = () => { if (active && manager) { batteryRef.current = Math.round(manager.level * 100); setBattery(batteryRef.current); } };
+    navigator.getBattery?.().then(value => { if (!active) return; manager = value; sync(); manager.addEventListener('levelchange', sync); }).catch(() => {});
+    return () => { active = false; manager?.removeEventListener('levelchange', sync); };
+  }, []);
   const [nickname, setNicknameState] = useState('My Phone');
 
   const watchIdRef = useRef(null);
@@ -49,7 +60,7 @@ export function useLocationSharing() {
   // Load consent status and cached GPS from localStorage on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
-
+    const timer = setTimeout(() => {
     const consent = localStorage.getItem(STORAGE_KEY_CONSENT) || localStorage.getItem(STORAGE_KEY_POPIA);
     const savedNickname = localStorage.getItem(STORAGE_KEY_NICKNAME);
     const cachedGpsRaw = localStorage.getItem(STORAGE_KEY_LAST_GPS);
@@ -70,36 +81,9 @@ export function useLocationSharing() {
         }
       } catch {}
     }
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
-
-  // Auto-start sharing when opted in
-  useEffect(() => {
-    if (isOptedIn) {
-      startSharing();
-    }
-    return () => stopSharing();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOptedIn, user]);
-
-  // Handle visibility change — maintain continuous GPS in foreground
-  useEffect(() => {
-    function handleVisibilityChange() {
-      if (document.hidden) {
-        if (watchIdRef.current !== null) {
-          navigator.geolocation.clearWatch(watchIdRef.current);
-          watchIdRef.current = null;
-        }
-      } else {
-        if (isOptedIn && isSharing) {
-          startWatching();
-        }
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOptedIn, isSharing]);
 
   /**
    * Helper to build auth token
@@ -118,20 +102,22 @@ export function useLocationSharing() {
    * Send location update to server.
    */
   const sendLocationUpdate = useCallback(async (pos) => {
-    if (!pos || !pos.lat || !pos.lng) return;
+    if (!pos || pos.lat == null || pos.lng == null) return;
 
     lastSentRef.current = Date.now();
 
     try {
       const token = getAuthToken();
 
-      await fetch('/api/location/share', {
+      const response = await fetch('/api/location/share', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
+          timestamp: pos.timestamp,
+          battery: batteryRef.current,
           lat: pos.lat,
           lng: pos.lng,
           accuracy: pos.accuracy,
@@ -143,8 +129,13 @@ export function useLocationSharing() {
           userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
         }),
       });
+      if (!response.ok) throw new Error('Location upload failed');
+      setCheckedAt(Date.now());
+      return true;
     } catch (err) {
+      setError('Could not upload this phone’s report.');
       console.warn('[location-sharing] Upload failed:', err);
+      return false;
     }
   }, [getAuthToken, nickname, user]);
 
@@ -212,12 +203,12 @@ export function useLocationSharing() {
     // Periodic upload interval
     if (!intervalRef.current) {
       intervalRef.current = setInterval(() => {
-        if (lastPosition) {
-          sendLocationUpdate(lastPosition);
+        if (!document.hidden && positionRef.current) {
+          sendLocationUpdate(positionRef.current);
         }
       }, LOCATION_UPDATE_INTERVAL);
     }
-  }, [lastPosition, sendLocationUpdate, startWatching]);
+  }, [sendLocationUpdate, startWatching]);
 
   /**
    * Stop all GPS tracking.
@@ -340,7 +331,47 @@ export function useLocationSharing() {
     }
   }, []);
 
+  const refreshLocation = useCallback(async () => {
+    if (!isOptedIn || !navigator.geolocation) throw new Error('Location sharing is off');
+    const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }));
+    const pos = { lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy, altitude: position.coords.altitude, speed: position.coords.speed, heading: position.coords.heading, timestamp: position.timestamp };
+    setLastPosition(pos);
+    localStorage.setItem(STORAGE_KEY_LAST_GPS, JSON.stringify(pos));
+    window.dispatchEvent(new CustomEvent('safelink_phone_location_updated', { detail: pos }));
+    if (!await sendLocationUpdate(pos)) throw new Error('Could not upload report');
+    setError(null);
+  }, [isOptedIn, sendLocationUpdate]);
+
+  // Auto-start sharing when opted in
+  useEffect(() => {
+    const timer = setTimeout(() => { if (isOptedIn) startSharing(); }, 0);
+    return () => { clearTimeout(timer); stopSharing(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOptedIn, user]);
+
+  // Handle visibility change — maintain continuous GPS in foreground
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        if (watchIdRef.current !== null) {
+          navigator.geolocation.clearWatch(watchIdRef.current);
+          watchIdRef.current = null;
+        }
+      } else {
+        if (isOptedIn && isSharing) {
+          startWatching();
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOptedIn, isSharing]);
+
+
   return {
+    refreshLocation, checkedAt, battery,
     isOptedIn,
     isSharing,
     lastPosition,

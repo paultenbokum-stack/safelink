@@ -10,6 +10,7 @@ import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
 import LocationSharingSettings from '@/app/components/LocationSharingSettings';
 import AvatarEditorModal from '@/app/components/AvatarEditorModal';
+import { useFamilyMembers } from '@/lib/family-members';
 
 export default function ProfilePage() {
   return (
@@ -85,7 +86,8 @@ function ProfileContent() {
     ? (partnerSession?.partnerId || 'Security Partner')
     : (household?.phone || user?.phoneNumber || '+27 82 345 6789');
 
-  const memberCount = household?.members?.length || household?.memberCount || 1;
+  const { members, loading: membersLoading, error: membersError } = useFamilyMembers(isPartner ? null : user?.uid);
+  const memberCount = members.length;
 
   // Partner sessions: some settings are read-only (managed by security company)
   const settingsItems = isPartner ? [
@@ -110,8 +112,8 @@ function ProfileContent() {
       readOnly: true,
     },
     {
-      title: 'Notification & SOS Rules',
-      subtitle: 'Alerts, siren & silent mode overrides',
+      title: 'Notification preferences',
+      subtitle: 'Push, icon badges and quiet hours',
       icon: 'tune',
       href: '/profile/notifications',
     },
@@ -159,8 +161,8 @@ function ProfileContent() {
       href: '/devices',
     },
     {
-      title: 'Notification & SOS Rules',
-      subtitle: 'Alerts, siren & silent mode overrides',
+      title: 'Notification preferences',
+      subtitle: 'Push, icon badges and quiet hours',
       icon: 'tune',
       href: '/profile/notifications',
     },

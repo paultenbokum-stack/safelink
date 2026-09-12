@@ -8,6 +8,9 @@ import {
   getLinePriceBreakdown,
   roundCurrency,
 } from '@/lib/products';
+import { getTransactionSplitParams } from '@/lib/paystack-subaccounts';
+
+export { getTransactionSplitParams };
 
 const PRODUCT_BY_ID = new Map(SENTINEL_PRODUCTS.map((product) => [product.id, product]));
 const MAX_CART_LINES = SENTINEL_PRODUCTS.length;
@@ -137,8 +140,8 @@ export function buildCanonicalCheckout(cart) {
 
 export function getPaystackSecret() {
   const secret = process.env.PAYSTACK_SECRET_KEY?.trim();
-  if (!secret || !/^sk_(test|live)_/.test(secret)) {
-    throw new Error('PAYSTACK_SECRET_KEY is not configured correctly.');
+  if (!secret || !/^sk_test_/.test(secret)) {
+    throw new Error('Paystack test checkout is not configured. Live payments are disabled for the investor demonstration.');
   }
   return secret;
 }

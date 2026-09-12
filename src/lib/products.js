@@ -13,6 +13,9 @@ export const MAX_ORDER_QUANTITY = 1000;
 const sharedConnectivity = 'Global BLE crowdsourced ecosystem (Gen 3 - dual-broadcast)';
 
 export const SENTINEL_PRODUCTS = [
+{"id":"sentinel-personal","ref":101,"name":"Sentinel Personal Tag","sellingPrice":799,"desc":"BLE personal tracker — handbag, wallet, keys","specs":["BLE personal tracking","Handbag, wallet and keys","12 months monitoring included"],"icon":"sensors","investorTier":true,"isDemo":true,"range":"Sentinel","category":"Investor Tiers","badge":"[Demo] Proposed package","costPrice":0,"connectivity":"BLE personal tracking","platform":"Includes 12 months TrackSolid monitoring. From R99/month thereafter.","useCases":["BLE personal tracking","Handbag, wallet and keys","12 months monitoring included"],"priceTiers":[{"minQty":1,"maxQty":null,"label":"Retail","unitPriceExVat":694.7826086956522}]},
+{"id":"sentinel-vehicle","ref":102,"name":"Sentinel Vehicle GPS","sellingPrice":1499,"desc":"Full GPS + cellular — vehicles & motorcycles","specs":["GPS positioning","Cellular connectivity","Vehicles and motorcycles"],"icon":"directions_car","investorTier":true,"isDemo":true,"range":"Sentinel","category":"Investor Tiers","badge":"[Demo] Proposed package","costPrice":0,"connectivity":"GPS positioning","platform":"Includes 12 months TrackSolid monitoring. From R99/month thereafter.","useCases":["GPS positioning","Cellular connectivity","Vehicles and motorcycles"],"priceTiers":[{"minQty":1,"maxQty":null,"label":"Retail","unitPriceExVat":1303.4782608695652}]},
+{"id":"sentinel-pro","ref":103,"name":"Sentinel Pro (Armatek)","sellingPrice":2999,"desc":"Tactical grade — firearms, equipment, personnel","specs":["Tactical applications","Equipment and personnel","Armatek range"],"icon":"shield","investorTier":true,"isDemo":true,"range":"Sentinel","category":"Investor Tiers","badge":"[Demo] Proposed package","costPrice":0,"connectivity":"Tactical applications","platform":"Includes 12 months TrackSolid monitoring. From R99/month thereafter.","useCases":["Tactical applications","Equipment and personnel","Armatek range"],"priceTiers":[{"minQty":1,"maxQty":null,"label":"Retail","unitPriceExVat":2607.826086956522}]},
   {
     id: 'aura-cube', ref: 1, name: 'Sentinel Cube', range: 'AURA', category: 'Asset Trackers', badge: 'Best Seller',
     connectivity: sharedConnectivity,
@@ -198,4 +201,20 @@ export function formatZAR(amount) {
   return `R${Number(amount).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export const PRODUCT_CATEGORIES = ['All', 'Asset Trackers', 'Tags & Labels', 'Specialist Trackers'];
+export const PRODUCT_CATEGORIES = ['All', 'Investor Tiers', 'Asset Trackers', 'Tags & Labels', 'Specialist Trackers'];
+
+/**
+ * Fetch master products from the CREAM master catalogue API.
+ * Falls back to hardcoded SENTINEL_PRODUCTS if offline or error.
+ */
+export async function fetchMasterProducts(token) {
+  try {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await fetch('/api/cream/products', { headers });
+    if (!res.ok) return SENTINEL_PRODUCTS;
+    const data = await res.json();
+    return Array.isArray(data.products) && data.products.length > 0 ? data.products : SENTINEL_PRODUCTS;
+  } catch {
+    return SENTINEL_PRODUCTS;
+  }
+}

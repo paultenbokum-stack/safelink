@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
+import { useAuth } from '@/lib/auth-context';
 
 export default function PartnerDashboardPage() {
   return (
@@ -14,6 +15,8 @@ export default function PartnerDashboardPage() {
 }
 
 function PartnerDashboardContent() {
+  const { partnerSession } = useAuth();
+  const partnerName = partnerSession?.partnerName || 'SafeLink Partner';
   const [activeDispatches, setActiveDispatches] = useState([
     {
       id: 'disp-1',
@@ -55,7 +58,7 @@ function PartnerDashboardContent() {
 
   return (
     <div className="bg-background text-on-background font-body-md antialiased min-h-screen pb-32">
-      <Header title="Help24 Tactical Partner Portal" showNotification={true} />
+      <Header title={`${partnerName} Portal`} showNotification={true} />
 
       <main className="pt-20 px-gutter max-w-7xl mx-auto space-y-lg">
         {/* Welcome Header (from Stitch partner_dashboard/code.html) */}
@@ -70,7 +73,7 @@ function PartnerDashboardContent() {
             Command Dashboard & Fleet
           </h2>
           <p className="font-body-md text-xs md:text-sm text-on-surface-variant">
-            Help24 Holdings Regional Armed Response Unit Network — Gauteng Sector
+            {partnerName} response network
           </p>
         </div>
 

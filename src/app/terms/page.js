@@ -27,7 +27,7 @@ export default function TermsPage() {
                 1. Background Location Tracking
               </h2>
               <p className="text-xs text-on-surface-variant leading-relaxed">
-                To provide continuous "Digital Bodyguard" services, this application requires background GPS telemetry to calculate instant dispatch routes for armed response vehicles and update household members during panic alerts.
+                To provide Digital Bodyguard services, this application uses GPS telemetry while SafeLink is open to calculate dispatch routes and update authorised household members during panic alerts.
               </p>
             </div>
 
@@ -39,7 +39,7 @@ export default function TermsPage() {
                 2. Emergency Audio Capture
               </h2>
               <p className="text-xs text-on-surface-variant leading-relaxed">
-                Upon activation of an SOS panic button, ambient audio is automatically transmitted to the Help24 Tactical Control Room to verify situational threats and dispatch appropriate armed backup.
+                Upon activation of an SOS panic button, available incident information may be transmitted to the response provider linked to your SafeLink account to verify the situation and coordinate assistance.
               </p>
             </div>
 

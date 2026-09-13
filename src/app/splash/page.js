@@ -38,7 +38,7 @@ export default function SplashScreen() {
           Powered by
         </p>
         <p className="font-label-md text-sm text-on-surface font-bold mt-0.5">
-          SB Security & Help24 Tactical
+          SafeLink by CREAM Technologies
         </p>
 
         <div className="mt-md flex space-x-1.5">

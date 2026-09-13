@@ -13,7 +13,7 @@ export async function POST(request) {
     if (!effectiveKey || effectiveKey.includes('••••')) {
       try {
         const firestore = getAdminFirestore();
-        const doc = await firestore.collection('security_companies').doc(companyId || 'help24_security').get();
+        const doc = await firestore.collection('security_companies').doc(companyId || 'safelink_default').get();
         if (doc.exists) {
           effectiveKey = doc.data()?.accounting?.apiKey || '';
         }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 
 export const SA_ACCOUNTING_PACKAGES = [
@@ -89,7 +89,7 @@ export const SA_CAMERA_BRANDS = [
 
 export default function ControlRoomPage() {
   const [activeTab, setActiveTab] = useState('incidents'); // 'incidents' | 'cameras' | 'aura' | 'fleet' | 'accounting'
-  const [companyId, setCompanyId] = useState('help24_security');
+  const [companyId, setCompanyId] = useState('safelink_default');
   const [company, setCompany] = useState(null);
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -119,7 +119,7 @@ export default function ControlRoomPage() {
   });
 
   // Fetch company settings & incidents
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [compRes, incRes] = await Promise.all([
         fetch(`/api/control-room/company?companyId=${companyId}`),
@@ -134,13 +134,13 @@ export default function ControlRoomPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [companyId]);
 
   useEffect(() => {
-    fetchData();
+    const initial = setTimeout(fetchData, 0);
     const interval = setInterval(fetchData, 15000);
-    return () => clearInterval(interval);
-  }, [companyId]);
+    return () => { clearTimeout(initial); clearInterval(interval); };
+  }, [fetchData]);
 
   // Toggle Aura Integration
   const handleToggleAura = async () => {
@@ -386,9 +386,7 @@ export default function ControlRoomPage() {
                 onChange={(e) => setCompanyId(e.target.value)}
                 className="bg-[#0c1c2b] text-white border border-white/20 rounded px-2 py-0.5 text-xs font-semibold focus:outline-none focus:border-secondary cursor-pointer"
               >
-                <option value="help24_security">Help24 Security Command</option>
-                <option value="global_security">Global Security Consulting</option>
-                <option value="fidelity_adt">Fidelity ADT Dispatch</option>
+                <option value="safelink_default">SafeLink Default Network</option>
               </select>
             </p>
           </div>

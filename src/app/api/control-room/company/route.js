@@ -9,22 +9,22 @@ import { FieldValue } from 'firebase-admin/firestore';
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const companyId = searchParams.get('companyId') || 'help24_security';
+    const companyId = searchParams.get('companyId') || 'safelink_default';
     const firestore = getAdminFirestore();
 
     const doc = await firestore.collection('security_companies').doc(companyId).get();
 
     if (!doc.exists) {
-      // Seed default initial company profile for Help24 / Global Security
+      // Seed a neutral platform profile until a security company is assigned.
       const defaultCompany = {
         id: companyId,
-        name: companyId === 'help24_security' ? 'Help24 Security Command' : 'Global Security Consulting',
-        registrationNumber: 'PSIRA-2024/99182',
-        dispatchPhone: '+27 11 123 4567',
-        contactEmail: 'controlroom@help24.co.za',
+        name: companyId === 'safelink_default' ? 'SafeLink Default Network' : 'Security Company',
+        registrationNumber: '',
+        dispatchPhone: '',
+        contactEmail: '',
         status: 'active',
         aura: {
-          enabled: true,
+          enabled: false,
           environment: 'staging',
           clientId: process.env.AURA_CLIENT_ID || '',
           clientSecret: process.env.AURA_CLIENT_SECRET ? '••••••••••••' : '',
@@ -35,50 +35,19 @@ export async function GET(request) {
           environment: 'production',
           apiKey: '',
           clientId: '',
-          companyId: 'ZA-SEC-001',
-          autoSyncClients: true,
-          status: 'configured',
-          lastSync: new Date().toISOString(),
+          companyId: '',
+          autoSyncClients: false,
+          status: 'not_configured',
+          lastSync: null,
         },
         cameraSystem: {
-          defaultBrand: 'Hikvision', // Hikvision | Dahua | EZVIZ | Uniview | Axis | Provision-ISR | Milesight | ONVIF
+          defaultBrand: '', // Hikvision | Dahua | EZVIZ | Uniview | Axis | Provision-ISR | Milesight | ONVIF
           cloudApiKey: '',
-          cloudAccount: 'sec-command-cloud',
-          gatewayUrl: 'rtsp-gateway.safelink.co.za:8554',
-          status: 'connected',
+          cloudAccount: '',
+          gatewayUrl: '',
+          status: 'not_configured',
         },
-        cameras: [
-          {
-            id: 'cam_01',
-            name: 'North Gate LPR Camera',
-            brand: 'Hikvision',
-            ipOrHost: '196.25.1.10',
-            port: 554,
-            channel: 1,
-            streamUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-            status: 'online',
-          },
-          {
-            id: 'cam_02',
-            name: 'Substation Perimeter Dahua PTZ',
-            brand: 'Dahua',
-            ipOrHost: '196.25.1.11',
-            port: 37777,
-            channel: 2,
-            streamUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-            status: 'online',
-          },
-          {
-            id: 'cam_03',
-            name: 'Clubhouse Entrance EZVIZ',
-            brand: 'EZVIZ',
-            ipOrHost: 'ezviz-cloud.open.com',
-            port: 443,
-            channel: 1,
-            streamUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-            status: 'online',
-          },
-        ],
+        cameras: [],
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       };
@@ -116,7 +85,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const companyId = body.id || body.companyId || 'help24_security';
+    const companyId = body.id || body.companyId || 'safelink_default';
     const firestore = getAdminFirestore();
 
     const companyRef = firestore.collection('security_companies').doc(companyId);

@@ -60,7 +60,7 @@ export async function POST(request) {
     // Get user profile for contact info
     const profile = householdDoc.data() || {};
     const partnerCode = profile.securityPartner || null;
-    const companyId = profile.securityCompanyId || partnerCode || 'help24_security';
+    const companyId = profile.securityCompanyId || partnerCode || 'safelink_default';
 
     const result = await dispatchEmergency({
       uid: decoded.uid,

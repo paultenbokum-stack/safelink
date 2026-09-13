@@ -434,7 +434,7 @@ export default function SignUpPage() {
                 <span className="material-symbols-outlined text-secondary text-lg">emergency</span>
                 Emergency Contact & Safeguard Protocols
               </h2>
-              <p className="text-xs text-on-surface-variant">Who should SB Security & Help24 alert when SOS is triggered?</p>
+              <p className="text-xs text-on-surface-variant">Who should SafeLink alert when SOS is triggered?</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

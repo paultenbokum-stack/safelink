@@ -1,6 +1,6 @@
 /**
  * Sentinel Aura product catalogue — pricing in ZAR.
- * costPrice: what SB Security pays Sentinel (for profit/margin tracking).
+ * costPrice: the wholesale Sentinel cost used for profit/margin tracking.
  * price:     what the customer pays via SafeLink.
  *
  * TODO: Update costPrice values once confirmed from the Sentinel pricing sheet.

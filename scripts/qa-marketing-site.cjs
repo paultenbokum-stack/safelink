@@ -29,9 +29,18 @@ const base = process.env.QA_BASE || 'http://localhost:3092';
       assert.equal(await page.locator('a[href="tel:+27721699422"]').count(), 1);
       await page.screenshot({ path: `${output}/homepage-${viewport.name}.png`, fullPage: true });
       if (viewport.name === 'desktop') {
+        const fontSize = async selector => parseFloat(await page.locator(selector).first().evaluate(element => getComputedStyle(element).fontSize));
+        assert.equal(await fontSize('header nav a') >= 14, true, 'desktop navigation remains legible');
+        assert.equal(await fontSize('article p') >= 15, true, 'desktop card copy remains legible');
+        assert.equal(await fontSize('section[class*="audiences"] article p') >= 16, true, 'audience descriptions remain legible');
+        await page.locator('header').screenshot({ path: `${output}/homepage-header-desktop.png` });
         await page.locator('section[class*="hero"]').screenshot({ path: `${output}/homepage-hero-desktop.png` });
+        await page.locator('section[class*="reality"]').screenshot({ path: `${output}/homepage-reality-desktop.png` });
+        await page.locator('section[class*="platform"]').screenshot({ path: `${output}/homepage-platform-desktop.png` });
         await page.locator('section[class*="dispatchSection"]').screenshot({ path: `${output}/homepage-dispatch-desktop.png` });
         await page.locator('section[class*="audiences"]').screenshot({ path: `${output}/homepage-audiences-desktop.png` });
+        await page.locator('section[class*="partnerBanner"]').screenshot({ path: `${output}/homepage-partner-desktop.png` });
+        await page.locator('section[class*="contact"]').screenshot({ path: `${output}/homepage-contact-desktop.png` });
       }
       assert.deepEqual(errors, []);
       await page.close();

@@ -12,7 +12,21 @@
 .mapGrid{background-image:linear-gradient(rgba(235,242,244,.12),rgba(215,229,233,.2)),url('/safelink-dispatch-map.svg');background-position:55% 47%;background-size:430px auto}
 .dispatchMap{background-image:linear-gradient(rgba(3,19,31,.42),rgba(3,19,31,.56)),url('/safelink-dispatch-map.svg');background-position:center;background-size:cover;filter:saturate(.72) brightness(.82)}
 .dispatchMap:after{background:radial-gradient(circle at 60% 48%,rgba(15,151,110,.22),transparent 24%),linear-gradient(90deg,rgba(3,19,31,.05),#071c29 118%)}
-.audienceGrid p{font-size:15px;line-height:1.75}
+.navbar{height:96px}
+.navbar .brand img{width:60px;height:60px}
+.brand strong{font-size:20px}.brand small{font-size:10px}
+.navbar nav a,.portalLink{font-size:14px}.appLink,.primaryCta,.secondaryCta{font-size:14px;padding:15px 21px}
+.eyebrow,.kicker{font-size:12px}.heroCopy>p{font-size:20px}.trustLine span{font-size:12px}.trustLine i{font-size:18px}
+.heroVisual{height:580px}.orbitOne{width:550px;height:550px}.orbitTwo{width:430px;height:430px}
+.phone{width:280px;height:560px}.phoneTop{height:62px}.phoneTop span{font-size:14px}.phoneTop i{font-size:20px}
+.sos{width:150px;height:150px}.sos strong{font-size:24px}.phone>p{font-size:9px}.mapCard{height:185px}.liveBadge{font-size:9px}
+.signalCard{padding:16px 18px}.signalCard>span{font-size:28px}.signalCard small{font-size:9px}.signalCard strong{font-size:13px}.trackerCard img{width:64px;height:64px}.responseCard{top:84px;right:-10px}.trackerCard{bottom:54px;left:-52px}
+.sectionIntro>p{font-size:17px}.statCard{min-height:300px;padding:32px}.statCard h3{font-size:16px}.statCard p{font-size:15px}.statCard a{font-size:11px}.statNote{font-size:12px}
+.cardNumber{font-size:12px}.capabilityCard h3{font-size:25px}.capabilityCard p{font-size:16px}
+.dispatchPanel{width:320px;padding:21px}.dispatchPanel>small{font-size:10px}.dispatchPanel b{font-size:12px}.dispatchPanel em{font-size:10px}.dispatchPanel i{font-size:10px}.dispatchCopy>p{font-size:16px}.dispatchCopy li{font-size:14px}.dispatchCopy>a{font-size:13px}
+.audienceGrid article{min-height:280px}.audienceGrid p{font-size:16px;line-height:1.75}
+.partnerBanner p{font-size:17px}.contactCards small{font-size:10px}.contactCards strong{font-size:18px}
+.footer>p{font-size:13px}.footer>div:last-of-type a{font-size:12px}.footer>small{font-size:11px}
 @media(max-width:980px){.dispatchSection,.partnerBanner{width:auto;max-width:none}}
-@media(max-width:640px){.navbar{padding-inline:16px}.hero{padding-inline:18px}.reality,.platform,.audiences{padding-inline:18px}.dispatchSection,.partnerBanner{width:auto}.contact{padding-inline:18px}.footer{padding-inline:18px}}
+@media(max-width:640px){.navbar{height:78px;padding-inline:16px}.navbar .brand img{width:48px;height:48px}.brand strong{font-size:17px}.appLink{font-size:12px;padding:11px 12px}.hero{padding-inline:18px}.eyebrow,.kicker{font-size:11px}.heroCopy>p{font-size:16px}.trustLine span{font-size:10px}.heroVisual{height:500px;transform:scale(.84);margin:-10px -34px}.orbitOne{width:450px;height:450px}.orbitTwo{width:360px;height:360px}.reality,.platform,.audiences{padding-inline:18px}.statCard{min-height:240px;padding:27px}.statCard h3{font-size:15px}.statCard p{font-size:14px}.statCard a{font-size:10px}.statNote{font-size:11px}.capabilityCard p{font-size:15px}.dispatchSection,.partnerBanner{width:auto}.dispatchPanel{width:auto;padding:18px}.dispatchCopy>p{font-size:15px}.dispatchCopy li{font-size:13px}.audienceGrid article{min-height:250px}.audienceGrid p{font-size:15px}.partnerBanner p{font-size:15px}.contact{padding-inline:18px}.contactCards strong{font-size:14px}.footer{padding-inline:18px}.footer>div:last-of-type a{font-size:11px}.footer>small{font-size:10px}}
 @media(prefers-reduced-motion:reduce){.site *{scroll-behavior:auto!important;transition:none!important}}

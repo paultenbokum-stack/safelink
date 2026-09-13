@@ -28,6 +28,9 @@ const base = process.env.QA_BASE || 'http://localhost:3092';
       assert.equal(await page.locator('a[href^="mailto:kyle@creamtech.co.za"]').count() >= 1, true);
       assert.equal(await page.locator('a[href="tel:+27721699422"]').count(), 1);
       await page.screenshot({ path: `${output}/homepage-${viewport.name}.png`, fullPage: true });
+      if (viewport.name === 'desktop') {
+        await page.locator('section[class*="dispatchSection"]').screenshot({ path: `${output}/homepage-dispatch-desktop.png` });
+      }
       assert.deepEqual(errors, []);
       await page.close();
     }

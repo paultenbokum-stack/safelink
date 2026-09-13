@@ -31,6 +31,7 @@ const base = process.env.QA_BASE || 'http://localhost:3092';
       if (viewport.name === 'desktop') {
         await page.locator('section[class*="hero"]').screenshot({ path: `${output}/homepage-hero-desktop.png` });
         await page.locator('section[class*="dispatchSection"]').screenshot({ path: `${output}/homepage-dispatch-desktop.png` });
+        await page.locator('section[class*="audiences"]').screenshot({ path: `${output}/homepage-audiences-desktop.png` });
       }
       assert.deepEqual(errors, []);
       await page.close();

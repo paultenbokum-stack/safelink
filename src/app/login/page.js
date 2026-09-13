@@ -38,6 +38,12 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [quickError, setQuickError] = useState('');
 
+  React.useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('mode') !== 'partner') return;
+    const timer = window.setTimeout(() => setMode('partner'), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const handlePhoneSignIn = async (e) => {
     e.preventDefault();
     setQuickError('');

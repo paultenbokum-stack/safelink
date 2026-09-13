@@ -17,6 +17,18 @@ function handler({ decoded = { uid: 'alice' }, records = {}, cache = new Map(), 
       if (!decoded) throw Error('UNAUTHENTICATED');
       return decoded;
     },
+    getFamilyCircleAccess: async user => {
+      if (unavailable) throw Error('Unavailable');
+      const guardianUid = user.familyMember ? user.guardianUid : user.uid;
+      const household = records.households?.[guardianUid] || {};
+      const members = household.members || [];
+      const linkedMembers = members.filter(member => {
+        const link = records.familyMemberships?.[member.linkedUid];
+        return member.linkedUid && link?.guardianUid === guardianUid && link?.memberId === member.id;
+      });
+      if (user.familyMember && !linkedMembers.some(member => member.linkedUid === user.uid && member.id === user.familyMemberId)) throw Error('FORBIDDEN');
+      return { guardianUid, household, members, linkedMembers, ownerUids: [guardianUid, ...linkedMembers.map(member => member.linkedUid)] };
+    },
     getAdminFirestore: () => ({ collection: collection => ({
       doc: id => ({ get: async () => {
         reads.push(`${collection}/${id}`);
@@ -83,17 +95,31 @@ test('guardian cannot receive hidden, unverified, or non-consenting linked phone
   assert.equal((await handler({ records: base }).GET({})).body.locations.length, 0);
 });
 
-test('an invited member receives only their own consented phone', async () => {
+test('an invited member receives all visible, consenting family phones', async () => {
   const { GET, reads } = handler({
     decoded: { uid: 'bob', familyMember: true, guardianUid: 'alice', familyMemberId: 'member_bob' },
     records: {
+      households: { alice: { adminFirstName: 'Alice', members: [{ id: 'member_bob', name: 'Bob', linkedUid: 'bob', locationSharing: true }] } },
+      familyMemberships: { bob: { guardianUid: 'alice', memberId: 'member_bob' } },
       phone_sharing_consent: { bob: { consentGranted: true }, alice: { consentGranted: true } },
       device_locations: { phone_bob: bob, phone_alice: alice },
     },
   });
   const locations = (await GET({})).body.locations;
-  assert.equal(JSON.stringify(Array.from(locations, item => item.uid)), JSON.stringify(['bob']));
-  assert.equal(reads.some(path => path.includes('alice')), false);
+  assert.equal(JSON.stringify(Array.from(locations, item => item.uid).sort()), JSON.stringify(['alice', 'bob']));
+  assert.equal(reads.some(path => path.includes('alice')), true);
+});
+
+test('joined family members remain listed when their GPS consent is off', async () => {
+  const { GET } = handler({ records: {
+    households: { alice: { adminFirstName: 'Alice', members: [{ id: 'member_bob', name: 'Bob', linkedUid: 'bob', locationSharing: true }] } },
+    familyMemberships: { bob: { guardianUid: 'alice', memberId: 'member_bob' } },
+    phone_sharing_consent: { alice: consent, bob: { consentGranted: false } },
+    device_locations: { phone_alice: alice },
+  } });
+  const result = await GET({});
+  assert.equal(result.body.familyMembers.find(member => member.uid === 'bob').sharingEnabled, false);
+  assert.equal(result.body.locations.some(location => location.uid === 'bob'), false);
 });
 
 test('database failure never exposes cached coordinates', async () => {

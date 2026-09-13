@@ -12,7 +12,7 @@ function location({ failed = false, revokeDuringUpload = false } = {}) {
   const db = { collection: name => ({ doc: id => ({ key: `${name}/${id}`, get: async () => ({ exists: records.has(`${name}/${id}`), data: () => records.get(`${name}/${id}`) }) }), where: () => ({ get: async () => ({ empty: true }) }) }), batch: () => {
     const operations = [];
     return { set: (ref, data) => operations.push(() => records.set(ref.key, { ...records.get(ref.key), ...data })), delete: ref => operations.push(() => records.delete(ref.key)), commit: async () => { if (failed) throw Error('offline'); operations.forEach(fn => fn()); } };
-  }, runTransaction: async fn => { if (failed) throw Error('offline'); if (revokeDuringUpload) records.set('phone_sharing_consent/alice', { consentGranted: false }); return fn({ get: ref => ref.get(), set: (ref, data) => records.set(ref.key, data) }); } };
+  }, runTransaction: async fn => { if (failed) throw Error('offline'); if (revokeDuringUpload) records.set('phone_sharing_consent/alice', { consentGranted: false }); return fn({ get: ref => ref.get(), set: (ref, data) => records.set(ref.key, data), delete: ref => records.delete(ref.key) }); } };
   return { records, ...load('src/app/api/location/share/route.js', ['POST'], { authenticateFirebaseRequest: async () => ({ uid: 'alice' }), getAdminFirestore: () => db, timestampMillis: value => value || null, batteryPercent: value => value ?? null }) };
 }
 const request = body => ({ json: async () => body });

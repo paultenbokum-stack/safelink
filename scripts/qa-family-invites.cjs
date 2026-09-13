@@ -45,6 +45,8 @@ const req = (method = 'GET', path = '/api/family/session') => ({ method, url: `h
   const claims = JSON.parse(result.customToken);
   assert.notEqual(claims.uid, 'guardian'); assert.equal(claims.familyMember, true); assert.equal(claims.admin, undefined);
   await authorizeInvitedMember(claims, req(), firestore);
+  await authorizeInvitedMember(claims, req('GET', '/api/devices'), firestore);
+  await authorizeInvitedMember(claims, req('GET', '/api/devices/980980820010318/location'), firestore);
   assert.equal(JSON.parse((await service.redeem(valid.token, deviceAttempt)).customToken).uid, claims.uid, 'Same browser can retry a lost response');
   await assert.rejects(service.redeem(valid.token, attempt()), /already been used/);
   await assert.rejects(authorizeInvitedMember(claims, req('POST', '/api/paystack/initialize'), firestore), /UNAUTHENTICATED/);

@@ -50,7 +50,7 @@ export default function JoinFamilyPage() {
     task.current.then(result => {
       if (!active) return;
       if (result === 'switch') { setSwitchAccount(true); setMessage('You are already signed in. Continue to switch to the invited family member’s account.'); }
-      else router.replace('/family');
+      else router.replace('/dashboard');
     }).catch(error => { if (active) { setMessage(error.message); setFailed(true); } });
     return () => { active = false; };
   // The initial invitation must be redeemed only once, independently of renders.
@@ -58,7 +58,7 @@ export default function JoinFamilyPage() {
 
   async function retry() {
     setFailed(false); setSwitchAccount(false); setMessage('Signing you into SafeLink…');
-    try { await join(true); router.replace('/family'); }
+    try { await join(true); router.replace('/dashboard'); }
     catch (error) { setMessage(error.message); setFailed(true); }
   }
   return <main className="min-h-screen flex items-center justify-center bg-background text-on-surface p-5">

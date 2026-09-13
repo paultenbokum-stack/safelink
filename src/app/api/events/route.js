@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
-import { authenticateFirebaseRequest, getAdminFirestore } from '@/lib/firebase-admin';
+import { authenticateFirebaseRequest, getAdminFirestore, getFamilyCircleAccess } from '@/lib/firebase-admin';
 
 export async function GET(request) {
   try {
     const user = await authenticateFirebaseRequest(request);
+    const access = await getFamilyCircleAccess(user);
     // A single-field account query works with the existing project; no new index or rules.
-    const snap = await getAdminFirestore().collection('events').where('uid', '==', user.uid).get();
-    const events = snap.docs.map((doc) => {
+    const snapshots = await Promise.all(access.ownerUids.map(uid => getAdminFirestore().collection('events').where('uid', '==', uid).get()));
+    const events = snapshots.flatMap(snap => snap.docs).map((doc) => {
       const e = doc.data();
       const time = e.createdAt || e.timestamp || e.receivedAt;
       return { id: doc.id, title: e.title, description: e.description || e.message, icon: e.icon,

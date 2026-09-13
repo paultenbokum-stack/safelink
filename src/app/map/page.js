@@ -538,6 +538,32 @@ function LiveFamilyMapContent() {
               });
             }
           });
+
+          // Keep every joined family member visible in the map switcher even
+          // before they share a coordinate. Consent is still required for a marker.
+          (phoneData.familyMembers || []).forEach((member) => {
+            if (allMembers.some(item => item.id === member.id)) return;
+            allMembers.push({
+              id: member.id,
+              name: member.nickname || 'Family member',
+              role: member.isOwn ? 'My Phone GPS' : 'Family Phone GPS',
+              status: member.sharingEnabled && member.visible ? 'Awaiting GPS' : 'GPS Off',
+              zone: 'Family member',
+              battery: null,
+              speed: 0,
+              address: member.sharingEnabled && member.visible ? 'Waiting for the first phone location report' : 'Location sharing is off',
+              lastSeen: null,
+              checkedAt: Date.now(),
+              avatar: member.isOwn ? user?.photoURL || null : null,
+              color: '#10b981',
+              lat: null,
+              lng: null,
+              device: `📱 ${member.nickname || 'Family member'} • GPS Beacon`,
+              isTag: false,
+              isPhone: true,
+              isDemo: false,
+            });
+          });
         } catch (e) {
           console.warn('[map] phonesRes parse error:', e);
         }
@@ -559,7 +585,7 @@ function LiveFamilyMapContent() {
             localStorage.getItem('safelink_location_sharing_consent') === 'granted'));
 
       if (hasConsent && localPhoneGps?.lat && localPhoneGps?.lng) {
-        const phoneIdx = allMembers.findIndex((m) => m.isPhone || m.id.startsWith('phone_'));
+        const phoneIdx = allMembers.findIndex((m) => m.id === `phone_${user?.uid || 'me'}`);
         const phoneEntry = {
           id: `phone_${user?.uid || 'me'}`,
           name: user?.displayName || phoneNickname || localPhoneGps.nickname || 'My Phone',
@@ -1443,13 +1469,19 @@ function LiveFamilyMapContent() {
                     <span className="material-symbols-outlined text-[16px] text-primary">sensors</span>
                     Device Telemetry
                   </button>
-                  <button
-                    onClick={() => router.push(`/sos?lat=${selectedMember.lat}&lng=${selectedMember.lng}&target=${encodeURIComponent(selectedMember.name)}`)}
-                    className="bg-error hover:bg-error-container text-white py-2 rounded-xl font-label-md text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-[0_0_12px_rgba(229,62,62,0.4)] cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">emergency</span>
-                    Dispatch to Location
-                  </button>
+                  {Number.isFinite(selectedMember.lat) && Number.isFinite(selectedMember.lng) ? (
+                    <button
+                      onClick={() => router.push(`/sos?lat=${selectedMember.lat}&lng=${selectedMember.lng}&target=${encodeURIComponent(selectedMember.name)}`)}
+                      className="bg-error hover:bg-error-container text-white py-2 rounded-xl font-label-md text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-[0_0_12px_rgba(229,62,62,0.4)] cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">emergency</span>
+                      Dispatch to Location
+                    </button>
+                  ) : (
+                    <button type="button" disabled className="glass-panel py-2 rounded-xl text-on-surface-variant text-xs font-semibold cursor-default">
+                      Location sharing is off
+                    </button>
+                  )}
                 </div>
               </div>
           </div>

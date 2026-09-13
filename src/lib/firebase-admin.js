@@ -82,6 +82,45 @@ export async function assertDeviceOwnership(uid, imei) {
   }
 }
 
+/** Resolve the account IDs that belong to the signed-in user's family circle. */
+export async function getFamilyCircleAccess(user) {
+  const firestore = getAdminFirestore();
+  const guardianUid = user.familyMember === true ? user.guardianUid : user.uid;
+  const householdSnapshot = await firestore.collection('households').doc(guardianUid).get();
+  const household = householdSnapshot.data() || {};
+  const members = Array.isArray(household.members) ? household.members : [];
+  const linkedMembers = (await Promise.all(members.filter(member => member?.linkedUid).map(async member => {
+    const membership = await firestore.collection('familyMemberships').doc(member.linkedUid).get();
+    const link = membership.data();
+    return membership.exists && link?.guardianUid === guardianUid && link?.memberId === member.id ? member : null;
+  }))).filter(Boolean);
+
+  if (user.familyMember === true) {
+    const membership = await firestore.collection('familyMemberships').doc(user.uid).get();
+    const link = membership.data();
+    const member = members.find(item => item.id === user.familyMemberId && item.linkedUid === user.uid);
+    if (!membership.exists || !member || link?.guardianUid !== guardianUid || link?.memberId !== member.id) {
+      throw new Error('FORBIDDEN');
+    }
+  }
+
+  return {
+    guardianUid,
+    household,
+    members,
+    linkedMembers,
+    ownerUids: [...new Set([guardianUid, ...linkedMembers.map(member => member.linkedUid)])],
+  };
+}
+
+export async function assertDeviceFamilyAccess(user, imei) {
+  const snapshot = await getAdminFirestore().collection('devices').doc(`device_${imei}`).get();
+  if (!snapshot.exists) throw new Error('FORBIDDEN');
+  const access = await getFamilyCircleAccess(user);
+  if (!access.ownerUids.includes(snapshot.data()?.uid)) throw new Error('FORBIDDEN');
+  return snapshot.data();
+}
+
 export async function savePaymentIntent({ uid, email, reference, checkout, delivery, companyId }) {
   const firestore = getAdminFirestore();
   await firestore.collection('paymentIntents').doc(reference).set({

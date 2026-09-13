@@ -3,12 +3,12 @@
  * GET /api/devices/[imei]/track — Get historical track/route data.
  */
 import { NextResponse } from 'next/server';
-import { authenticateFirebaseRequest } from '@/lib/firebase-admin';
+import { authenticateFirebaseRequest, assertDeviceFamilyAccess } from '@/lib/firebase-admin';
 import { getAlarmHistory, getTrackHistory } from '@/lib/tracksolid';
 
 export async function GET(request, { params }) {
   try {
-    await authenticateFirebaseRequest(request);
+    const user = await authenticateFirebaseRequest(request);
     const { imei } = await params;
     const { searchParams } = new URL(request.url);
     const beginTime = searchParams.get('from');
@@ -17,6 +17,7 @@ export async function GET(request, { params }) {
     if (!imei || !/^\d{15}$/.test(imei)) {
       return NextResponse.json({ error: 'Invalid IMEI' }, { status: 400 });
     }
+    await assertDeviceFamilyAccess(user, imei);
 
     // Default to last 24 hours if no time range provided
     const now = new Date();
@@ -35,6 +36,7 @@ export async function GET(request, { params }) {
       error: result.code !== 0 ? result.message : undefined,
     });
   } catch (err) {
+    if (err.message === 'FORBIDDEN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     if (err.message === 'UNAUTHENTICATED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

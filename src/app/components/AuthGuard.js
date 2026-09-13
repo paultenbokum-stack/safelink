@@ -12,13 +12,15 @@ export default function AuthGuard({ children }) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const familyRedirect = user?.isFamilyMember && !['/family', '/sos', '/notifications'].includes(pathname);
+  const familyRoutes = ['/dashboard', '/map', '/devices', '/profile', '/profile/notifications', '/notifications', '/sos', '/family', '/services', '/about', '/terms', '/store'];
+  const familyRoutePrefixes = ['/sos/', '/services/', '/store/'];
+  const familyRedirect = user?.isFamilyMember && !familyRoutes.includes(pathname) && !familyRoutePrefixes.some(route => pathname.startsWith(route));
 
   useEffect(() => {
     if (!loading && !user) {
       router.replace('/login');
     } else if (!loading && familyRedirect) {
-      router.replace('/family');
+      router.replace('/dashboard');
     } else if (!loading && user && !user.isPartnerSession && !user.isFamilyMember && !user.emailVerified) {
       router.replace('/login/verify');
     }

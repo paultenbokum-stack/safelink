@@ -6,7 +6,7 @@
  */
 import { batteryPercent } from '@/lib/telemetry';
 import { NextResponse } from 'next/server';
-import { authenticateFirebaseRequest, getAdminFirestore } from '@/lib/firebase-admin';
+import { authenticateFirebaseRequest, getAdminFirestore, getFamilyCircleAccess, assertDeviceOwnership } from '@/lib/firebase-admin';
 import { listDevices, bindDevice, getDeviceLocation } from '@/lib/tracksolid';
 import { FieldValue } from 'firebase-admin/firestore';
 
@@ -19,12 +19,13 @@ if (!global._safelinkDevices) {
 export async function GET(request) {
   try {
     const decoded = await authenticateFirebaseRequest(request);
+    const access = await getFamilyCircleAccess(decoded);
     const devicesMap = new Map();
     let tracksolidResolved = false;
 
     // 1. Load from fast memory cache
     for (const [key, dev] of globalDevices.entries()) {
-      if (dev.uid === decoded.uid) {
+      if (access.ownerUids.includes(dev.uid)) {
         devicesMap.set(dev.imei || dev.id, dev);
       }
     }
@@ -32,16 +33,12 @@ export async function GET(request) {
     // 2. Load from Firestore
     try {
       const firestore = getAdminFirestore();
-      const snapshot = await firestore
-        .collection('devices')
-        .where('uid', '==', decoded.uid)
-        .get();
-
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        const imei = data.imei || data.imei_plain || doc.id.replace('device_', '');
-        devicesMap.set(imei, { ...data, id: doc.id, imei });
-      });
+      const snapshots = await Promise.all(access.ownerUids.map(uid => firestore.collection('devices').where('uid', '==', uid).get()));
+      snapshots.forEach(snapshot => snapshot.forEach((doc) => {
+          const data = doc.data();
+          const imei = data.imei || data.imei_plain || doc.id.replace('device_', '');
+          devicesMap.set(imei, { ...data, id: doc.id, imei, isShared: data.uid !== decoded.uid });
+        }));
     } catch (fsErr) {
       console.warn('[api/devices] Firestore read note:', fsErr.message);
     }
@@ -51,7 +48,7 @@ export async function GET(request) {
       let tracksolidAccount = process.env.TRACKSOLID_USER_ID;
       try {
         const firestore = getAdminFirestore();
-        const householdDoc = await firestore.collection('households').doc(decoded.uid).get();
+        const householdDoc = await firestore.collection('households').doc(access.guardianUid).get();
         if (householdDoc.exists && householdDoc.data()?.tracksolidAccount) {
           tracksolidAccount = householdDoc.data().tracksolidAccount;
         }
@@ -156,7 +153,7 @@ export async function POST(request) {
 
     const deviceDocId = `device_${cleanImei}`;
     const existingDevice = await getAdminFirestore().collection('devices').doc(deviceDocId).get();
-    if (existingDevice.exists && existingDevice.data()?.uid !== decoded.uid) return NextResponse.json({ error: 'This device is already linked to another account.' }, { status: 409 });
+    if (existingDevice.exists && existingDevice.data()?.uid && existingDevice.data()?.uid !== decoded.uid) return NextResponse.json({ error: 'This device is already linked to another account.' }, { status: 409 });
     const cleanNickname = (nickname || '').trim() || `Sentinel ${cleanImei.slice(-4)}`;
 
     // Resolve TrackSolid account
@@ -242,8 +239,10 @@ export async function DELETE(request) {
       return NextResponse.json({ error: 'Missing device id or imei' }, { status: 400 });
     }
 
-    const docId = id || `device_${imei}`;
     const cleanImei = imei || id?.replace('device_', '');
+    if (!/^\d{15}$/.test(cleanImei || '')) return NextResponse.json({ error: 'Invalid IMEI' }, { status: 400 });
+    await assertDeviceOwnership(decoded.uid, cleanImei);
+    const docId = `device_${cleanImei}`;
 
     globalDevices.delete(cleanImei);
 
@@ -256,6 +255,7 @@ export async function DELETE(request) {
 
     return NextResponse.json({ success: true, message: 'Device removed' });
   } catch (err) {
+    if (err.message === 'FORBIDDEN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     if (err.message === 'UNAUTHENTICATED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

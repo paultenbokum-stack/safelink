@@ -80,6 +80,7 @@ function DevicesContent() {
   const router = useRouter();
   const { user, partnerSession } = useAuth();
   const isPartner = !!user?.isPartnerSession;
+  const isFamilyMember = user?.isFamilyMember === true;
 
   const [devices, setDevices]           = useState([]);
   const [showAddModal, setShowAddModal]   = useState(false);
@@ -229,7 +230,6 @@ function DevicesContent() {
     window.addEventListener('online', run);
     document.addEventListener('visibilitychange', run);
     return () => { cancelled = true; unregister(); clearInterval(refresh); window.removeEventListener('online', run); document.removeEventListener('visibilitychange', run); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isPartner, partnerSession]);
 
   async function refreshDevice(device) {
@@ -405,7 +405,7 @@ function DevicesContent() {
           </div>
 
           {/* Only show "Add Sentinel Device" for non-partner sessions */}
-          {!isPartner && (
+          {!isPartner && !isFamilyMember && (
             <button
               onClick={() => setShowAddModal(true)}
               className="bg-secondary text-on-secondary px-md py-2.5 rounded-xl font-label-md text-xs font-bold flex items-center justify-center gap-1.5 shadow-[0_0_12px_rgba(247,187,35,0.25)] hover:bg-secondary-fixed transition-all active:scale-95 shrink-0 cursor-pointer"
@@ -669,6 +669,14 @@ function DevicesContent() {
                           Unlink
                         </button>
                       </>
+                    ) : isFamilyMember ? (
+                      <button
+                        onClick={() => router.push('/map?device=' + encodeURIComponent(device.imei || device.id))}
+                        className="col-span-3 py-2 rounded-lg bg-primary-container/30 text-primary text-xs font-semibold flex items-center justify-center gap-1 border border-primary/30"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">map</span>
+                        View on Family Map
+                      </button>
                     ) : (
                       <>
                         <button
@@ -705,7 +713,7 @@ function DevicesContent() {
       </main>
 
       {/* ── Add Device Modal (non-partner sessions) ── */}
-      {showAddModal && (
+      {showAddModal && !isFamilyMember && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-gutter">
           <div className="glass-panel w-full max-w-md rounded-2xl p-lg bg-surface-container-high border border-white/15 shadow-2xl">
             <div className="flex justify-between items-center mb-md border-b border-white/10 pb-sm">

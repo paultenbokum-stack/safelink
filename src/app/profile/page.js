@@ -30,19 +30,22 @@ function ProfileContent() {
     user?.photoURL || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80'
   );
   const isPartner = !!user?.isPartnerSession;
+  const isFamilyMember = user?.isFamilyMember === true;
 
   React.useEffect(() => {
     if (isPartner) return; // Partner sessions don't use localStorage
     if (typeof window !== 'undefined') {
-      const h = localStorage.getItem('active_household');
-      if (h) {
-        try {
-          const parsed = JSON.parse(h);
-          setHousehold(parsed);
-          if (parsed.avatarUrl) setAvatarUrl(parsed.avatarUrl);
-        } catch(e) {}
-      }
-      if (user?.photoURL) setAvatarUrl(user.photoURL);
+      const initial = setTimeout(() => {
+        const h = localStorage.getItem('active_household');
+        if (h) {
+          try {
+            const parsed = JSON.parse(h);
+            setHousehold(parsed);
+            if (parsed.avatarUrl) setAvatarUrl(parsed.avatarUrl);
+          } catch(e) {}
+        }
+        if (user?.photoURL) setAvatarUrl(user.photoURL);
+      }, 0);
 
       const handleAvatarUpdated = (e) => {
         if (e.detail?.photoURL) setAvatarUrl(e.detail.photoURL);
@@ -56,6 +59,7 @@ function ProfileContent() {
       window.addEventListener('safelink_avatar_updated', handleAvatarUpdated);
       window.addEventListener('safelink_profile_updated', handleProfileUpdated);
       return () => {
+        clearTimeout(initial);
         window.removeEventListener('safelink_avatar_updated', handleAvatarUpdated);
         window.removeEventListener('safelink_profile_updated', handleProfileUpdated);
       };
@@ -86,7 +90,7 @@ function ProfileContent() {
     ? (partnerSession?.partnerId || 'Security Partner')
     : (household?.phone || user?.phoneNumber || '+27 82 345 6789');
 
-  const { members, loading: membersLoading, error: membersError } = useFamilyMembers(isPartner ? null : user?.uid);
+  const { members, loading: membersLoading, error: membersError } = useFamilyMembers(isPartner || isFamilyMember ? null : user?.uid);
   const memberCount = members.length;
 
   // Partner sessions: some settings are read-only (managed by security company)
@@ -120,6 +124,32 @@ function ProfileContent() {
     {
       title: 'Terms & Conditions',
       subtitle: 'Legal privacy & PSIRA armed response terms',
+      icon: 'description',
+      href: '/terms',
+    },
+  ] : isFamilyMember ? [
+    {
+      title: 'My location sharing',
+      subtitle: 'Choose whether your phone appears on the family map',
+      icon: 'my_location',
+      href: null,
+      readOnly: true,
+    },
+    {
+      title: 'Family devices',
+      subtitle: 'View the Sentinel devices shared by your family',
+      icon: 'devices',
+      href: '/devices',
+    },
+    {
+      title: 'Notification preferences',
+      subtitle: 'Push, icon badges and quiet hours',
+      icon: 'tune',
+      href: '/profile/notifications',
+    },
+    {
+      title: 'Terms & Conditions',
+      subtitle: 'Legal privacy & safety terms',
       icon: 'description',
       href: '/terms',
     },

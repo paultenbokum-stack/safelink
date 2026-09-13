@@ -68,9 +68,11 @@ export function familyInviteService({ firestore, auth, now = Date.now }) {
 
 export async function authorizeInvitedMember(decoded, request, firestore) {
   if (decoded.familyMember !== true) return;
+  const path = new URL(request.url).pathname;
   const allowed = new Set(['GET /api/notifications', 'POST /api/notifications', 'PATCH /api/notifications', 'GET /api/family/session', 'GET /api/profile/avatar', 'POST /api/profile/avatar',
-    'GET /api/profile/setup', 'GET /api/location/share', 'POST /api/location/share']);
-  if (!allowed.has(`${request.method} ${new URL(request.url).pathname}`)) throw new Error('UNAUTHENTICATED');
+    'GET /api/profile/setup', 'GET /api/location/share', 'POST /api/location/share', 'GET /api/devices', 'GET /api/events', 'POST /api/sos/dispatch']);
+  const allowedDeviceRead = request.method === 'GET' && /^\/api\/devices\/\d{15}\/(location|track|alarms)$/.test(path);
+  if (!allowed.has(`${request.method} ${path}`) && !allowedDeviceRead) throw new Error('UNAUTHENTICATED');
   const membership = (await firestore.collection('familyMemberships').doc(decoded.uid).get()).data();
   if (!membership || membership.guardianUid !== decoded.guardianUid || membership.memberId !== decoded.familyMemberId ||
     membership.sessionVersion !== decoded.familySessionVersion) throw new Error('UNAUTHENTICATED');

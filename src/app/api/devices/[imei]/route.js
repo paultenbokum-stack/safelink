@@ -3,7 +3,7 @@
  * GET /api/devices/[imei] — Get detailed info for a specific device.
  */
 import { NextResponse } from 'next/server';
-import { authenticateFirebaseRequest, getAdminFirestore } from '@/lib/firebase-admin';
+import { authenticateFirebaseRequest, assertDeviceFamilyAccess, assertDeviceOwnership, getAdminFirestore } from '@/lib/firebase-admin';
 import { unbindDevice, getDeviceDetail } from '@/lib/tracksolid';
 
 export async function DELETE(request, context) {
@@ -12,9 +12,10 @@ export async function DELETE(request, context) {
     const params = await context.params;
     const { imei } = params;
 
-    if (!imei) {
-      return NextResponse.json({ error: 'Device IMEI is required' }, { status: 400 });
+    if (!/^\d{15}$/.test(imei || '')) {
+      return NextResponse.json({ error: 'Valid device IMEI is required' }, { status: 400 });
     }
+    await assertDeviceOwnership(decoded.uid, imei);
 
     const firestore = getAdminFirestore();
 
@@ -57,6 +58,7 @@ export async function DELETE(request, context) {
       message: `Device ${imei} successfully unlinked and removed`,
     });
   } catch (err) {
+    if (err.message === 'FORBIDDEN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     if (err.message === 'UNAUTHENTICATED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -71,15 +73,16 @@ export async function GET(request, context) {
     const params = await context.params;
     const { imei } = params;
 
-    if (!imei) {
-      return NextResponse.json({ error: 'Device IMEI is required' }, { status: 400 });
+    if (!/^\d{15}$/.test(imei || '')) {
+      return NextResponse.json({ error: 'Valid device IMEI is required' }, { status: 400 });
     }
 
-    const firestore = getAdminFirestore();
+    await assertDeviceFamilyAccess(decoded, imei);
     const detail = await getDeviceDetail(imei);
 
     return NextResponse.json({ detail });
   } catch (err) {
+    if (err.message === 'FORBIDDEN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     if (err.message === 'UNAUTHENTICATED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

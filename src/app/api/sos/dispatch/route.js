@@ -5,7 +5,7 @@
  */
 import { recordSafetyNotification, drainPushQueue } from '@/lib/notification-push';
 import { NextResponse, after } from 'next/server';
-import { authenticateFirebaseRequest, getAdminFirestore } from '@/lib/firebase-admin';
+import { authenticateFirebaseRequest, getAdminFirestore, getFamilyCircleAccess } from '@/lib/firebase-admin';
 import { dispatchEmergency, cancelDispatch, getIncidentStatus } from '@/lib/aura';
 import { hasFeature } from '@/lib/subscriptions';
 
@@ -17,7 +17,8 @@ export async function POST(request) {
 
     // Check subscription tier — SOS requires Standard or Premium
     const firestore = getAdminFirestore();
-    const householdDoc = await firestore.collection('households').doc(decoded.uid).get();
+    const access = await getFamilyCircleAccess(decoded);
+    const householdDoc = await firestore.collection('households').doc(access.guardianUid).get();
     const tier = householdDoc.data()?.subscription?.tier || 'free';
 
     if (!hasFeature(tier, 'sos_dispatch')) {

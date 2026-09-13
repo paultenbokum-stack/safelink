@@ -6,7 +6,7 @@
  */
 import { batteryPercent } from '@/lib/telemetry';
 import { NextResponse } from 'next/server';
-import { authenticateFirebaseRequest, assertDeviceOwnership } from '@/lib/firebase-admin';
+import { authenticateFirebaseRequest, assertDeviceFamilyAccess } from '@/lib/firebase-admin';
 import { getDeviceLocation, getTagLocation } from '@/lib/tracksolid';
 
 export async function GET(request, { params }) {
@@ -18,7 +18,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: 'Invalid IMEI' }, { status: 400 });
     }
 
-    await assertDeviceOwnership(user.uid, imei);
+    await assertDeviceFamilyAccess(user, imei);
 
     // Try GPS device first, then BLE TAG
     let result = await getDeviceLocation(imei);

@@ -11,7 +11,7 @@
 import { timestampMillis, batteryPercent } from '@/lib/telemetry';
 import { recordSafetyNotification, drainPushQueue } from '@/lib/notification-push';
 import { NextResponse, after } from 'next/server';
-import { authenticateFirebaseRequest, getAdminFirestore } from '@/lib/firebase-admin';
+import { authenticateFirebaseRequest, getAdminFirestore, getFamilyCircleAccess } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 
 export async function POST(request) {
@@ -24,30 +24,44 @@ export async function POST(request) {
     if (body.action === 'opt_in') {
       try {
         const firestore = getAdminFirestore();
-        const batch = firestore.batch();
-        batch.set(firestore.collection('phone_sharing_consent').doc(decoded.uid), {
-          uid: decoded.uid,
-          email: decoded.email || '',
-          nickname: body.nickname || 'My Phone',
-          consentGranted: true,
-          consentTimestamp: body.consentTimestamp || new Date().toISOString(),
-          updatedAt: FieldValue.serverTimestamp(),
-        }, { merge: true });
+        await firestore.runTransaction(async transaction => {
+          let householdRef;
+          let familyMembers;
+          if (decoded.familyMember === true && decoded.guardianUid && decoded.familyMemberId) {
+            householdRef = firestore.collection('households').doc(decoded.guardianUid);
+            const household = await transaction.get(householdRef);
+            familyMembers = household.data()?.members || [];
+            if (!familyMembers.some(member => member.id === decoded.familyMemberId && member.linkedUid === decoded.uid)) {
+              throw new Error('MEMBERSHIP_ENDED');
+            }
+          }
+          transaction.set(firestore.collection('phone_sharing_consent').doc(decoded.uid), {
+            uid: decoded.uid,
+            email: decoded.email || '',
+            nickname: body.nickname || 'My Phone',
+            consentGranted: true,
+            consentTimestamp: body.consentTimestamp || new Date().toISOString(),
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
 
-        batch.set(firestore.collection('devices').doc(phoneDocId), {
-          uid: decoded.uid,
-          deviceType: 'phone',
-          nickname: body.nickname || 'My Phone',
-          status: 'active',
-          isPhoneDevice: true,
-          createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        }, { merge: true });
-        batch.delete(firestore.collection('device_locations').doc(phoneDocId));
-        await batch.commit();
+          transaction.set(firestore.collection('devices').doc(phoneDocId), {
+            uid: decoded.uid,
+            deviceType: 'phone',
+            nickname: body.nickname || 'My Phone',
+            status: 'active',
+            isPhoneDevice: true,
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+          transaction.delete(firestore.collection('device_locations').doc(phoneDocId));
+          if (householdRef) {
+            transaction.set(householdRef, { members: familyMembers.map(member => member.id === decoded.familyMemberId
+              ? { ...member, locationSharing: true } : member) }, { merge: true });
+          }
+        });
       } catch (fsErr) {
         console.warn('[api/location/share] Consent write failed:', fsErr.message);
-        return NextResponse.json({ error: 'Could not save consent. Please retry.' }, { status: 503 });
+        return NextResponse.json({ error: fsErr.message === 'MEMBERSHIP_ENDED' ? 'Family membership is no longer active.' : 'Could not save consent. Please retry.' }, { status: fsErr.message === 'MEMBERSHIP_ENDED' ? 403 : 503 });
       }
 
       return NextResponse.json({ success: true, message: 'Location sharing enabled' });
@@ -58,20 +72,28 @@ export async function POST(request) {
 
       try {
         const firestore = getAdminFirestore();
-        const batch = firestore.batch();
-        batch.set(firestore.collection('phone_sharing_consent').doc(decoded.uid), {
-          consentGranted: false,
-          revokedAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        }, { merge: true });
+        await firestore.runTransaction(async transaction => {
+          let householdRef;
+          let familyMembers;
+          if (decoded.familyMember === true && decoded.guardianUid && decoded.familyMemberId) {
+            householdRef = firestore.collection('households').doc(decoded.guardianUid);
+            familyMembers = (await transaction.get(householdRef)).data()?.members || [];
+          }
+          transaction.set(firestore.collection('phone_sharing_consent').doc(decoded.uid), {
+            consentGranted: false,
+            revokedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
 
-        batch.set(firestore.collection('devices').doc(phoneDocId), {
-          status: 'inactive',
-          updatedAt: FieldValue.serverTimestamp(),
-        }, { merge: true });
+          transaction.set(firestore.collection('devices').doc(phoneDocId), {
+            status: 'inactive',
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
 
-        batch.delete(firestore.collection('device_locations').doc(phoneDocId));
-        await batch.commit();
+          transaction.delete(firestore.collection('device_locations').doc(phoneDocId));
+          if (householdRef) transaction.set(householdRef, { members: familyMembers.map(member => member.id === decoded.familyMemberId && member.linkedUid === decoded.uid
+            ? { ...member, locationSharing: false } : member) }, { merge: true });
+        });
       } catch (fsErr) {
         console.warn('[api/location/share] Consent revocation failed:', fsErr.message);
         return NextResponse.json({ error: 'Could not revoke sharing. Please retry.' }, { status: 503 });
@@ -151,60 +173,55 @@ export async function GET(request) {
   try {
     const decoded = await authenticateFirebaseRequest(request);
     const phoneLocationsMap = new Map();
+    const familyMembers = [];
 
-    // A family member can read only their own phone. A guardian can also read
-    // linked members who opted in and whose guardian visibility toggle is on.
-    try {
-      const firestore = getAdminFirestore();
-      const candidates = [{ uid: decoded.uid, nickname: decoded.name || decoded.displayName || 'My Phone', isOwn: true }];
-
-      if (decoded.familyMember !== true) {
-        const household = await firestore.collection('households').doc(decoded.uid).get();
-        const members = household.data()?.members || [];
-        for (const member of members) {
-          if (!member?.linkedUid || member.locationSharing !== true) continue;
-          const membership = await firestore.collection('familyMemberships').doc(member.linkedUid).get();
-          const membershipData = membership.data();
-          if (membership.exists && membershipData?.guardianUid === decoded.uid && membershipData?.memberId === member.id) {
-            candidates.push({ uid: member.linkedUid, nickname: member.name, memberId: member.id, isOwn: false });
-          }
-        }
-      }
-
-      for (const candidate of candidates) {
-        const consent = await firestore.collection('phone_sharing_consent').doc(candidate.uid).get();
-        if (!consent.exists || consent.data()?.consentGranted !== true) continue;
-
-        const phoneDocId = `phone_${candidate.uid}`;
-        const phoneLocation = await firestore.collection('device_locations').doc(phoneDocId).get();
-        if (!phoneLocation.exists) continue;
-        const data = phoneLocation.data();
-        if (data.uid === candidate.uid && data.isPhoneDevice === true) {
-          phoneLocationsMap.set(phoneDocId, {
-            ...data,
-            id: phoneDocId,
-            nickname: candidate.nickname || data.nickname,
-            isOwn: candidate.isOwn,
-            memberId: candidate.memberId || null,
-            updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || data.updatedAt || null,
-          });
-        }
-      }
-    } catch (fsErr) {
-      // Database membership and consent checks are mandatory. Never expose
-      // cached coordinates when those checks cannot be completed.
-      console.warn('[api/location/share] Firestore GET failed:', fsErr.message);
-      return NextResponse.json({ error: 'Location sharing is temporarily unavailable' }, { status: 503 });
+    // Every joined account sees the family roster. Coordinates remain available
+    // only for phones with explicit consent and family-map visibility enabled.
+    const firestore = getAdminFirestore();
+    const access = await getFamilyCircleAccess(decoded);
+    const guardianMember = access.members.find(member => member.isSelf || member.id === access.guardianUid);
+    const candidates = [{
+      uid: access.guardianUid,
+      nickname: guardianMember?.name || [access.household.adminFirstName, access.household.adminLastName].filter(Boolean).join(' ') || 'Family guardian',
+      memberId: guardianMember?.id || access.guardianUid,
+      isOwn: decoded.uid === access.guardianUid,
+      visible: guardianMember ? guardianMember.locationSharing === true : true,
+    }];
+    for (const member of access.linkedMembers) {
+      if (!member?.linkedUid || member.linkedUid === access.guardianUid) continue;
+      candidates.push({ uid: member.linkedUid, nickname: member.name, memberId: member.id,
+        isOwn: member.linkedUid === decoded.uid, visible: member.locationSharing === true });
     }
 
-    const phoneLocations = Array.from(phoneLocationsMap.values());
-    return NextResponse.json({ locations: phoneLocations });
+    for (const candidate of candidates) {
+      const consent = await firestore.collection('phone_sharing_consent').doc(candidate.uid).get();
+      const sharingEnabled = consent.exists && consent.data()?.consentGranted === true;
+      familyMembers.push({ id: `phone_${candidate.uid}`, uid: candidate.uid, nickname: candidate.nickname,
+        memberId: candidate.memberId, isOwn: candidate.isOwn, sharingEnabled, visible: candidate.isOwn || candidate.visible });
+      if (!sharingEnabled || (!candidate.isOwn && !candidate.visible)) continue;
+
+      const phoneDocId = `phone_${candidate.uid}`;
+      const phoneLocation = await firestore.collection('device_locations').doc(phoneDocId).get();
+      if (!phoneLocation.exists) continue;
+      const data = phoneLocation.data();
+      if (data.uid === candidate.uid && data.isPhoneDevice === true) {
+        phoneLocationsMap.set(phoneDocId, {
+          ...data,
+          id: phoneDocId,
+          nickname: candidate.nickname || data.nickname,
+          isOwn: candidate.isOwn,
+          memberId: candidate.memberId || null,
+          updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || data.updatedAt || null,
+        });
+      }
+    }
+    return NextResponse.json({ locations: Array.from(phoneLocationsMap.values()), familyMembers });
   } catch (err) {
     if (err.message === 'UNAUTHENTICATED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     console.error('[api/location/share] GET Error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Location sharing is temporarily unavailable' }, { status: 503 });
   }
 }
 

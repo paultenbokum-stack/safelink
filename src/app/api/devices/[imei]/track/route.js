@@ -6,12 +6,12 @@
  *   to   - End time UTC (yyyy-MM-dd HH:mm:ss)
  */
 import { NextResponse } from 'next/server';
-import { authenticateFirebaseRequest } from '@/lib/firebase-admin';
+import { authenticateFirebaseRequest, assertDeviceFamilyAccess } from '@/lib/firebase-admin';
 import { getTrackHistory, getDeviceMileage } from '@/lib/tracksolid';
 
 export async function GET(request, { params }) {
   try {
-    await authenticateFirebaseRequest(request);
+    const user = await authenticateFirebaseRequest(request);
     const { imei } = await params;
     const { searchParams } = new URL(request.url);
     const beginTime = searchParams.get('from');
@@ -21,6 +21,7 @@ export async function GET(request, { params }) {
     if (!imei || !/^\d{15}$/.test(imei)) {
       return NextResponse.json({ error: 'Invalid IMEI' }, { status: 400 });
     }
+    await assertDeviceFamilyAccess(user, imei);
 
     // Default to last 8 hours
     const now = new Date();
@@ -48,6 +49,7 @@ export async function GET(request, { params }) {
 
     return NextResponse.json(response);
   } catch (err) {
+    if (err.message === 'FORBIDDEN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     if (err.message === 'UNAUTHENTICATED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

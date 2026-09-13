@@ -89,13 +89,13 @@ const notification = { id: 'family:fixture', title: 'Family safety alert', body:
     await page.goto(base + '/map');
     await page.getByText('Battery 0%', { exact: true }).waitFor();
     assert.equal(await page.locator('.leaflet-container').evaluate(element => getComputedStyle(element).touchAction), 'none');
-    await page.getByRole('button', { name: 'Close tracker details' }).click();
+    await page.getByRole('button', { name: 'Minimize tracker details' }).click();
     await page.getByText('Battery 0%', { exact: true }).waitFor({ state: 'detached' });
-    assert.equal(await page.getByRole('button', { name: 'Close tracker details' }).count(), 0);
+    await page.getByRole('button', { name: 'Expand details for Kyle’s tracker' }).waitFor();
     const beforePoll = requests;
     await page.waitForTimeout(16000);
     assert.ok(requests > beforePoll, 'A real map poll occurred');
-    assert.equal(await page.getByRole('button', { name: 'Close tracker details' }).count(), 0, 'Polling must not reopen minimized details');
+    assert.equal(await page.getByRole('button', { name: 'Expand details for Kyle’s tracker' }).count(), 1, 'Polling must keep the compact details tab minimized');
     await page.locator('summary').filter({ hasText: 'Map tools' }).click();
     await page.getByRole('button', { name: 'Live · 1 device' }).click();
     await page.getByText('Battery 0%', { exact: true }).waitFor();

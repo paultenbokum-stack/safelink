@@ -12,6 +12,7 @@ import { getHousehold, getUserDevices, getUserOrders } from '@/lib/db';
 import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
 import AuthGuard from '@/app/components/AuthGuard';
+import LiveMapPreview from '@/app/components/LiveMapPreview';
 
 export default function Dashboard() {
   return (
@@ -35,6 +36,8 @@ function DashboardContent() {
     return null;
   });
   const [devices, setDevices] = useState([]);
+  const [mapMembers, setMapMembers] = useState([]);
+  const [waitingFamilyMembers, setWaitingFamilyMembers] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [testAlarmActive, setTestAlarmActive] = useState(false);
@@ -52,12 +55,37 @@ function DashboardContent() {
 
   useEffect(() => {
     if (!user) return;
+    const collectMapMembers = async (loadedDevices, token) => {
+      if (user.isPartnerSession) return { markers: [], waiting: [] };
+      const phonesResult = await fetch('/api/location/share', { cache: 'no-store', headers: { Authorization: 'Bearer ' + token } }).catch(() => null);
+      const phoneData = phonesResult?.ok ? await phonesResult.json() : { locations: [], familyMembers: [] };
+      const hardware = (loadedDevices || []).filter(device => !device.isPhoneDevice && device.imei);
+      const locations = await Promise.all(hardware.map(async device => {
+        const response = await fetch(`/api/devices/${device.imei}/location`, { cache: 'no-store', headers: { Authorization: 'Bearer ' + token } }).catch(() => null);
+        return response?.ok ? response.json() : null;
+      }));
+      const markers = hardware.map((device, index) => {
+        const location = locations[index];
+        return location && Number.isFinite(Number(location.lat)) && Number.isFinite(Number(location.lng)) ? {
+          id: device.imei, name: device.nickname || device.deviceName || `Sentinel ${device.imei.slice(-4)}`,
+          lat: Number(location.lat), lng: Number(location.lng), isPhone: false,
+        } : null;
+      }).filter(Boolean);
+      (phoneData.locations || []).forEach(phone => {
+        if (Number.isFinite(Number(phone.lat)) && Number.isFinite(Number(phone.lng))) {
+          markers.push({ id: phone.id || `phone_${phone.uid}`, name: phone.nickname || 'Family phone', lat: Number(phone.lat), lng: Number(phone.lng), isPhone: true });
+        }
+      });
+      const markedIds = new Set(markers.map(member => member.id));
+      return { markers, waiting: (phoneData.familyMembers || []).filter(member => !markedIds.has(member.id)).map(member => member.nickname || 'Family member') };
+    };
+
     const load = () => Promise.allSettled([
       getHousehold(user.uid),
       (async () => { const token = await user.getIdToken?.(); const partner = user.isPartnerSession; const res = await fetch(partner ? '/api/partner/devices' : '/api/devices', { cache: 'no-store', headers: { Authorization: 'Bearer ' + (partner ? partnerSession?.sessionToken : token) } }); if (!res.ok) throw new Error('Devices unavailable'); const data = await res.json(); return partner ? data : data.devices; })(),
       Promise.resolve([]),
     ])
-      .then(([hr, dr, or]) => {
+      .then(async ([hr, dr, or]) => {
         const h = hr.status === "fulfilled" ? hr.value : null;
         const d = dr.status === "fulfilled" ? dr.value : [];
         const o = or.status === "fulfilled" ? or.value : [];
@@ -65,6 +93,10 @@ function DashboardContent() {
         if (dr.status === "fulfilled") setDevices(d || []);
         if (or.status === "fulfilled") setOrders(o || []);
         if (dr.status === "rejected") throw new Error("Devices could not refresh");
+        const token = await user.getIdToken?.();
+        const liveMap = await collectMapMembers(d || [], token);
+        setMapMembers(liveMap.markers);
+        setWaitingFamilyMembers(liveMap.waiting);
       })
       .finally(() => setLoading(false));
     const unregister = registerRefresh('dashboard', load);
@@ -161,54 +193,8 @@ function DashboardContent() {
             </Link>
           </div>
 
-          <div
-            onClick={() => router.push('/map')}
-            className="relative h-48 w-full bg-surface-container-high cursor-pointer group overflow-hidden"
-          >
-            <div className="absolute inset-0 map-bg opacity-90"></div>
-            
-            <span className="absolute top-2 left-2 text-[10px] text-on-surface-variant">Device overview · open map for locations</span>
-            {/* Live Beacons or Clean Empty Scanner */}
-            {devices.length === 0 ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-4 text-center">
-                <div className="relative flex items-center justify-center mb-2">
-                  <div className="w-16 h-16 rounded-full border border-secondary/30 animate-ping absolute"></div>
-                  <div className="w-10 h-10 rounded-full bg-secondary/10 border border-secondary/50 flex items-center justify-center">
-                    <span className="material-symbols-outlined text-secondary text-xl">radar</span>
-                  </div>
-                </div>
-                <p className="text-xs text-on-surface font-semibold">No Hardware Beacons Active</p>
-                <p className="text-[11px] text-on-surface-variant max-w-xs">Tap to pair your Sentinel GPS device or share Phone GPS on the live map.</p>
-              </div>
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="relative w-full h-full">
-                  {devices.map((dev, idx) => {
-                    const topPos = 40 + (idx % 2) * 20;
-                    const leftPos = 35 + (idx % 3) * 25;
-                    return (
-                      <div
-                        key={dev.id || dev.imei || idx}
-                        className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
-                        style={{ top: `${topPos}%`, left: `${leftPos}%` }}
-                      >
-                        <div className="w-4 h-4 bg-secondary rounded-full border-2 border-background shadow-[0_0_12px_rgba(255,195,47,0.9)] animate-pulse"></div>
-                        <span className="text-[10px] bg-surface-container/90 px-1.5 py-0.5 rounded text-on-surface mt-1 border border-white/10 font-bold">
-                          {dev.nickname || dev.deviceName || 'Sentinel'}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Bottom tap banner */}
-            <div className="absolute bottom-2 right-2 bg-surface-container-highest/90 px-2.5 py-1 rounded-lg text-[11px] text-on-surface flex items-center gap-1 backdrop-blur-md">
-              <span className="material-symbols-outlined text-[14px] text-secondary">explore</span>
-              Tap to open live tracking
-            </div>
-          </div>
+          <LiveMapPreview members={mapMembers} onOpen={() => router.push('/map')} />
+          {waitingFamilyMembers.length > 0 && <p className="px-md py-2 text-[11px] text-on-surface-variant border-t border-white/10">{waitingFamilyMembers.join(', ')}: awaiting a shared GPS location.</p>}
         </section>
 
         <Link href="/about" className="block text-right text-sm text-secondary">ⓘ Why Safelink →</Link>

@@ -286,6 +286,7 @@ function LiveFamilyMapContent() {
   const [members, setMembers] = useState([]);
   const [geofences, setGeofences] = useState([]);
   const [selectedMember, setSelectedMember] = useState(null);
+  const [minimizedMember, setMinimizedMember] = useState(null);
   const detailsDismissed = useRef(false);
   const [showGeofences, setShowGeofences] = useState(true);
   const [mapReady, setMapReady] = useState(false);
@@ -372,6 +373,8 @@ function LiveFamilyMapContent() {
   } = useLocationSharing();
 
   const selectMember = useCallback((member) => {
+    detailsDismissed.current = false;
+    setMinimizedMember(null);
     setSelectedMember(member);
     setMapFocusRequest((request) => request + 1);
   }, []);
@@ -1370,15 +1373,15 @@ function LiveFamilyMapContent() {
         </div>
       )}
 
-      {/* Selected device details. Closing it returns the full map area. */}
+      {/* Selected tracker details can minimize to a small reopen tab. */}
       {selectedMember && (
         <div className={`absolute ${isFullScreen ? 'bottom-0' : 'bottom-20'} left-0 right-0 z-30 max-w-2xl mx-auto pointer-events-auto p-gutter`}>
           <div className="glass-panel shadow-2xl border border-white/15 backdrop-blur-xl bg-surface-container-high/90 rounded-2xl p-sm sm:p-md max-h-[55dvh] overflow-y-auto">
             <button
               type="button"
-              onClick={() => { detailsDismissed.current = true; setSelectedMember(null); }}
-              aria-label="Close tracker details"
-              title="Close tracker details"
+              onClick={() => { detailsDismissed.current = true; setMinimizedMember(selectedMember); setSelectedMember(null); }}
+              aria-label="Minimize tracker details"
+              title="Minimize tracker details"
               className="w-full flex justify-center items-center py-1 cursor-pointer group select-none"
             >
               <div className="flex items-center gap-1 px-3 py-0.5 rounded-full bg-white/10 group-hover:bg-secondary/30 transition-all border border-white/10 shadow-sm">
@@ -1485,6 +1488,21 @@ function LiveFamilyMapContent() {
                 </div>
               </div>
           </div>
+        </div>
+      )}
+
+      {minimizedMember && !selectedMember && (
+        <div className={`absolute ${isFullScreen ? 'bottom-5' : 'bottom-24'} left-1/2 -translate-x-1/2 z-30 pointer-events-auto`}>
+          <button
+            type="button"
+            onClick={() => { detailsDismissed.current = false; setSelectedMember(minimizedMember); setMinimizedMember(null); }}
+            aria-label={`Expand details for ${minimizedMember.name}`}
+            className="glass-panel min-h-11 rounded-full px-4 border border-white/20 shadow-xl bg-surface-container-high/95 backdrop-blur-xl flex items-center gap-2 text-on-surface active:scale-95 transition-transform"
+          >
+            <span className="material-symbols-outlined text-lg text-secondary" aria-hidden="true">keyboard_arrow_up</span>
+            <span className="max-w-[11rem] truncate text-xs font-bold">{minimizedMember.name}</span>
+            <span className="text-[10px] text-on-surface-variant">Details</span>
+          </button>
         </div>
       )}
 

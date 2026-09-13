@@ -50,8 +50,11 @@ const device = { id: 'device_980980820010318', imei: '980980820010318', nickname
     await page.waitForURL('**/dashboard');
     await page.getByRole('heading', { name: 'Hi Sarah', exact: true }).waitFor();
     await page.getByRole('button', { name: /SOS/ }).first().waitFor();
+    await page.getByLabel('Live family map preview').waitFor();
     await page.goto(base + '/map');
     await page.getByText("Kyle's pebble", { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Minimize tracker details' }).click();
+    await page.getByRole('button', { name: "Expand details for Kyle's pebble" }).click();
     await page.locator('summary').filter({ hasText: 'Map tools' }).click();
     await page.getByRole('button', { name: 'Live · 3 devices' }).click();
     await page.getByText('Sarah', { exact: true }).waitFor();

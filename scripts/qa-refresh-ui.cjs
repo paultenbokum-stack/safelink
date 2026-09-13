@@ -14,7 +14,18 @@ const notification = { id: 'family:fixture', title: 'Family safety alert', body:
   const browser = await chromium.launch({ headless: true, channel: 'msedge' });
   try {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'block', permissions: ['geolocation'], geolocation: { latitude: -29.48999, longitude: 31.25021 } });
-    await context.addInitScript(() => { localStorage.setItem('safelink_theme', 'light'); localStorage.setItem('popia_gps_consent', 'denied'); localStorage.setItem('safelink_account_uid', 'local-ui-fixture'); localStorage.setItem('safelink_pwa_dismissed', String(Date.now() + 86400000)); });
+    await context.addInitScript(() => {
+      localStorage.setItem('safelink_theme', 'light');
+      if (!localStorage.getItem('popia_gps_consent')) localStorage.setItem('popia_gps_consent', 'denied');
+      localStorage.setItem('safelink_account_uid', 'local-ui-fixture');
+      localStorage.setItem('safelink_pwa_dismissed', String(Date.now() + 86400000));
+      window.__gpsWatchStarts = 0;
+      const watchPosition = navigator.geolocation.watchPosition.bind(navigator.geolocation);
+      navigator.geolocation.watchPosition = (...args) => {
+        window.__gpsWatchStarts += 1;
+        return watchPosition(...args);
+      };
+    });
     await context.route('**/identitytoolkit.googleapis.com/**', route => route.fulfill({ json: route.request().url().includes('accounts:lookup') ? { users: [account] } : { ...account, idToken: token, refreshToken: 'fixture-refresh', expiresIn: '3600', registered: true } }));
     await context.route('**/securetoken.googleapis.com/**', route => route.fulfill({ json: { access_token: token, refresh_token: 'fixture-refresh', expires_in: '3600', user_id: uid } }));
     await context.route('**/firestore.googleapis.com/**', route => route.abort());
@@ -26,6 +37,10 @@ const notification = { id: 'family:fixture', title: 'Family safety alert', body:
       if (path === '/api/app-version') { versionRequests++; return route.fulfill({ json: version }); }
       if (path === '/api/profile/setup') return route.fulfill({ json: { household: { adminFirstName: 'Kyle', adminLastName: 'Fixture', householdName: 'Saffy Home', members: [], subscription: { tier: 'premium' } } } });
       if (path === '/api/profile/avatar') return route.fulfill({ json: { avatarUrl: null } });
+      if (path === '/api/profile/family') return route.fulfill({ json: { members: [
+        { id: uid, name: 'Kyle', phone: '', role: 'Admin', isSelf: true, locationSharing: true, sharingEnabled: true, lastReportedAt: new Date().toISOString() },
+        { id: 'member-family', name: 'Family Member', phone: '0820000000', role: 'Member', linkedUid: 'family-fixture', locationSharing: true, sharingEnabled: true, lastReportedAt: new Date().toISOString() },
+      ] } });
       if (path === '/api/devices') { requests++; return route.fulfill({ json: { devices: [device], tracksolidResolved: true } }); }
       if (path.includes('/location') && path.startsWith('/api/devices/')) { requests++; return route.fulfill({ json: { ...device, gpsTime: device.updatedAt, isOnline: true } }); }
       if (path === '/api/location/share') return route.fulfill({ json: { locations: [], success: true } });
@@ -71,9 +86,19 @@ const notification = { id: 'family:fixture', title: 'Family safety alert', body:
     }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(base + '/map');
-    await page.getByRole('button', { name: 'Expand device list' }).click();
+    await page.getByText('Battery 0%', { exact: true }).waitFor();
+    assert.equal(await page.locator('.leaflet-container').evaluate(element => getComputedStyle(element).touchAction), 'none');
+    await page.getByRole('button', { name: 'Close tracker details' }).click();
+    await page.getByText('Battery 0%', { exact: true }).waitFor({ state: 'detached' });
+    assert.equal(await page.getByRole('button', { name: 'Close tracker details' }).count(), 0);
+    await page.locator('summary').filter({ hasText: 'Map tools' }).click();
+    await page.getByRole('button', { name: 'Live · 1 device' }).click();
     await page.getByText('Battery 0%', { exact: true }).waitFor();
     await page.screenshot({ path: '.vercel/qa-refresh/map.png' });
+    await page.goto(base + '/profile/family');
+    await page.getByText('Phone sharing on', { exact: true }).waitFor();
+    await page.getByText('Shown on map', { exact: true }).waitFor();
+    await page.getByText('Sharing enabled · last report just now', { exact: true }).first().waitFor();
     await page.goto(base + '/notifications');
     await page.getByText('Family safety alert', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Acknowledge alert' }).click();
@@ -84,7 +109,15 @@ const notification = { id: 'family:fixture', title: 'Family safety alert', body:
     await page.getByText('Preferences saved.', { exact: true }).waitFor();
     assert.equal(savedPreferences.categories.community.push, true);
     await page.screenshot({ path: '.vercel/qa-refresh/notifications.png', fullPage: true });
+    await page.evaluate(() => {
+      localStorage.setItem('popia_gps_consent', 'granted');
+      localStorage.setItem('safelink_location_sharing_consent', 'granted');
+    });
+    await page.goto(base + '/map');
+    await page.locator('summary').filter({ hasText: 'Map tools' }).waitFor();
+    await page.waitForFunction(() => window.__gpsWatchStarts > 0);
+    assert.equal(await page.evaluate(() => window.__gpsWatchStarts), 1, 'Only one shared GPS watcher starts for the app');
     assert.deepEqual(errors, []);
-    console.log('PASS: isolated mocked sign-in, compact header, themes, global/device refresh, zero battery, stale report, 320/360/390px layout, map telemetry, acknowledgement and saved preferences.');
+    console.log('PASS: isolated mocked sign-in, compact header, themes, global/device refresh, zero battery, stale report, 320/360/390px layout, one-finger map touch policy, fully hidden/reopened map telemetry, one shared GPS watcher, acknowledgement and saved preferences.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

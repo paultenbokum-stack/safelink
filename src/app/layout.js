@@ -3,10 +3,20 @@ import { NotificationProvider } from '@/lib/notification-context';
 import { AuthProvider } from '@/lib/auth-context';
 import { ThemeProvider } from '@/lib/theme-context';
 import AppUpdates from '@/app/components/AppUpdates';
+import { LocationSharingProvider } from '@/lib/location-sharing';
 
 export const metadata = {
   title: 'SafeLink - Digital Bodyguard',
   description: 'Your Safety. Our Priority. Armed response, Sentinel devices, and emergency services at your fingertips.',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: '32x32' },
+      { url: '/icons/shield-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/icons/shield-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+  },
 };
 
 export const viewport = {
@@ -25,6 +35,8 @@ export default function RootLayout({ children }) {
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" href="/icons/shield-192.png" type="image/png" sizes="192x192" />
         <link rel="apple-touch-icon" href="/icons/shield-192.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -54,9 +66,11 @@ export default function RootLayout({ children }) {
           <AuthProvider>
             <NotificationProvider>
             <PwaRegister>
-              <AppUpdates />
-              <GpsConsentModal />
-              {children}
+              <LocationSharingProvider>
+                <AppUpdates />
+                <GpsConsentModal />
+                {children}
+              </LocationSharingProvider>
             </PwaRegister>
             </NotificationProvider>
           </AuthProvider>

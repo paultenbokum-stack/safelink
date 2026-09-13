@@ -94,6 +94,18 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Invalid lat/lng numbers' }, { status: 400 });
     }
 
+    let firestore;
+    try {
+      firestore = getAdminFirestore();
+      const consent = await firestore.collection('phone_sharing_consent').doc(decoded.uid).get();
+      if (!consent.exists || consent.data()?.consentGranted !== true) {
+        return NextResponse.json({ error: 'Location-sharing consent is required' }, { status: 403 });
+      }
+    } catch (fsErr) {
+      console.warn('[api/location/share] Consent check failed:', fsErr.message);
+      return NextResponse.json({ error: 'Location sharing is temporarily unavailable' }, { status: 503 });
+    }
+
     const locationRecord = {
       id: phoneDocId,
       uid: decoded.uid,
@@ -116,7 +128,6 @@ export async function POST(request) {
 
     // 2. Persist to Firestore asynchronously / gracefully
     try {
-      const firestore = getAdminFirestore();
       await firestore.collection('device_locations').doc(phoneDocId).set({
         ...locationRecord,
         updatedAt: FieldValue.serverTimestamp(),
@@ -143,34 +154,54 @@ export async function GET(request) {
     const decoded = await authenticateFirebaseRequest(request);
     const phoneLocationsMap = new Map();
 
-    // Family access requires an explicit membership/consent model. Until then,
-    // both storage paths must return only the authenticated account's phone.
-    const phoneDocId = `phone_${decoded.uid}`;
-    const cached = globalPhoneLocations.get(decoded.uid);
-    if (cached?.uid === decoded.uid && cached.id === phoneDocId) {
-      phoneLocationsMap.set(phoneDocId, cached);
-    }
-
-    // 2. Supplement from Firestore if available
+    // A family member can read only their own phone. A guardian can also read
+    // linked members who opted in and whose guardian visibility toggle is on.
     try {
       const firestore = getAdminFirestore();
-      const phoneLocation = await firestore
-        .collection('device_locations')
-        .doc(phoneDocId)
-        .get();
+      const candidates = [{ uid: decoded.uid, nickname: decoded.name || decoded.displayName || 'My Phone', isOwn: true }];
 
-      if (phoneLocation.exists) {
+      if (decoded.familyMember !== true) {
+        const household = await firestore.collection('households').doc(decoded.uid).get();
+        const members = household.data()?.members || [];
+        for (const member of members) {
+          if (!member?.linkedUid || member.locationSharing !== true) continue;
+          const membership = await firestore.collection('familyMemberships').doc(member.linkedUid).get();
+          const membershipData = membership.data();
+          if (membership.exists && membershipData?.guardianUid === decoded.uid && membershipData?.memberId === member.id) {
+            candidates.push({ uid: member.linkedUid, nickname: member.name, memberId: member.id, isOwn: false });
+          }
+        }
+      }
+
+      for (const candidate of candidates) {
+        const consent = await firestore.collection('phone_sharing_consent').doc(candidate.uid).get();
+        if (!consent.exists || consent.data()?.consentGranted !== true) continue;
+
+        const phoneDocId = `phone_${candidate.uid}`;
+        const cached = globalPhoneLocations.get(candidate.uid);
+        if (cached?.uid === candidate.uid && cached.id === phoneDocId) {
+          phoneLocationsMap.set(phoneDocId, { ...cached, nickname: candidate.nickname || cached.nickname, isOwn: candidate.isOwn, memberId: candidate.memberId || null });
+        }
+
+        const phoneLocation = await firestore.collection('device_locations').doc(phoneDocId).get();
+        if (!phoneLocation.exists) continue;
         const data = phoneLocation.data();
-        if (data.uid === decoded.uid && data.isPhoneDevice === true) {
+        if (data.uid === candidate.uid && data.isPhoneDevice === true) {
           phoneLocationsMap.set(phoneDocId, {
             ...data,
             id: phoneDocId,
+            nickname: candidate.nickname || data.nickname,
+            isOwn: candidate.isOwn,
+            memberId: candidate.memberId || null,
             updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || data.updatedAt || null,
           });
         }
       }
     } catch (fsErr) {
-      console.warn('[api/location/share] Firestore GET fallback:', fsErr.message);
+      // Database membership and consent checks are mandatory. Never expose
+      // cached coordinates when those checks cannot be completed.
+      console.warn('[api/location/share] Firestore GET failed:', fsErr.message);
+      return NextResponse.json({ error: 'Location sharing is temporarily unavailable' }, { status: 503 });
     }
 
     const phoneLocations = Array.from(phoneLocationsMap.values());

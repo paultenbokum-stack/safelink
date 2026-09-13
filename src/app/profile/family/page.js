@@ -8,6 +8,14 @@ import { useAuth } from '@/lib/auth-context';
 import FamilyInviteButton from '@/app/components/FamilyInviteButton';
 import { useFamilyMembers } from '@/lib/family-members';
 
+function sharingReport(member) {
+  if (!member.linkedUid && !member.isSelf) return 'Invite required before phone sharing';
+  if (!member.sharingEnabled) return member.isSelf ? 'Phone consent is off' : 'Waiting for consent on their phone';
+  if (!member.lastReportedAt) return 'Sharing enabled · no location received yet';
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(member.lastReportedAt).getTime()) / 60000));
+  return `Sharing enabled · last report ${minutes < 1 ? 'just now' : `${minutes} min ago`}`;
+}
+
 export default function FamilyPage() {
   return (
     <AuthGuard>
@@ -86,7 +94,7 @@ function FamilyContent() {
         <section aria-label="Family invitation privacy" className="glass-panel rounded-2xl p-4 border border-secondary/30 space-y-2">
           <h2 className="text-sm font-bold text-secondary">Private family invitations</h2>
           <p className="text-xs text-on-surface-variant leading-relaxed">
-            An invite opens that member’s own account. It does not grant access to other family members’ locations. Sharing their own location is optional and requires permission on their device.
+            An invite opens that member’s own account. Sharing their own location is optional and requires permission on their device. Their guardian sees it only while that consent and the “Shown on map” setting are both active.
           </p>
           <details className="text-xs text-on-surface-variant leading-relaxed">
             <summary className="cursor-pointer font-semibold text-on-surface">How your invite link is protected</summary>
@@ -126,15 +134,17 @@ function FamilyContent() {
                       {member.role}
                     </span>
                     <button
-                      onClick={() => toggleLocationSharing(member.id)}
-                      className="text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
+                      onClick={() => member.isSelf ? window.dispatchEvent(new CustomEvent('open_gps_consent_modal')) : toggleLocationSharing(member.id)}
+                      disabled={!member.isSelf && !member.linkedUid}
+                      className="text-[10px] flex items-center gap-1 cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      <span className={`w-2 h-2 rounded-full ${member.locationSharing ? 'bg-[#38a169] animate-pulse' : 'bg-white/20'}`} />
-                      <span className={member.locationSharing ? 'text-[#38a169] font-medium' : 'text-on-surface-variant'}>
-                        {member.locationSharing ? 'GPS Active' : 'GPS Off'}
+                      <span className={`w-2 h-2 rounded-full ${(member.isSelf ? member.sharingEnabled : member.locationSharing) ? 'bg-[#38a169]' : 'bg-white/20'}`} />
+                      <span className={(member.isSelf ? member.sharingEnabled : member.locationSharing) ? 'text-[#38a169] font-medium' : 'text-on-surface-variant'}>
+                        {member.isSelf ? (member.sharingEnabled ? 'Phone sharing on' : 'Review consent') : !member.linkedUid ? 'Not linked' : member.locationSharing ? 'Shown on map' : 'Hidden from map'}
                       </span>
                     </button>
                   </div>
+                  <p className="mt-1 text-[10px] text-on-surface-variant">{sharingReport(member)}</p>
                   {!member.isSelf && <FamilyInviteButton member={member} onChanged={reload} />}
                 </div>
               </div>

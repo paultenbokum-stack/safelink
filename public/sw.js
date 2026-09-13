@@ -1,7 +1,8 @@
 /* Cache public static assets only; never account pages, API or RSC data. */
-const CACHE_NAME = 'safelink-static-v6';
-const ASSETS = ['/offline.html', '/icons/shield-192.png', '/icons/shield-512.png'];
+const CACHE_NAME = 'safelink-static-v7';
+const ASSETS = ['/offline.html', '/icons/shield-192.png', '/icons/shield-512.png', '/safelink-shield.png', '/favicon.ico'];
 self.addEventListener('install', event => {
+  self.skipWaiting();
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));
 });
 function accountBinding(value, write = false) {

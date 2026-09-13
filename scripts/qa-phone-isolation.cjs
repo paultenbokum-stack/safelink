@@ -3,24 +3,26 @@ const { runInNewContext } = require('node:vm');
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 
-function handler({ account = 'alice', records = {}, cache = new Map(), unavailable = false } = {}) {
+function handler({ decoded = { uid: 'alice' }, records = {}, cache = new Map(), unavailable = false } = {}) {
   const reads = [];
   const source = readFileSync('src/app/api/location/share/route.js', 'utf8')
     .replace(/^import .*;\r?\n/gm, '')
     .replace(/export async function /g, 'async function ');
   const GET = runInNewContext(source + '\nGET;', {
     global: { _safelinkPhoneLocations: cache },
-    Map, console: { warn() {}, error() {} },
+    Map,
+    console: { warn() {}, error() {} },
     NextResponse: { json: (body, options) => ({ body, status: options?.status || 200 }) },
     authenticateFirebaseRequest: async () => {
-      if (!account) throw Error('UNAUTHENTICATED');
-      return { uid: account };
+      if (!decoded) throw Error('UNAUTHENTICATED');
+      return decoded;
     },
-    getAdminFirestore: () => ({ collection: (collection) => ({
-      doc: (id) => ({ get: async () => {
+    getAdminFirestore: () => ({ collection: collection => ({
+      doc: id => ({ get: async () => {
         reads.push(`${collection}/${id}`);
         if (unavailable) throw Error('Unavailable');
-        return { exists: !!records[id], data: () => records[id] };
+        const value = records[collection]?.[id];
+        return { exists: value !== undefined, data: () => value };
       } }),
     }) }),
   });
@@ -29,34 +31,80 @@ function handler({ account = 'alice', records = {}, cache = new Map(), unavailab
 
 const alice = { id: 'phone_alice', uid: 'alice', isPhoneDevice: true, lat: 1, lng: 2 };
 const bob = { id: 'phone_bob', uid: 'bob', isPhoneDevice: true, lat: 3, lng: 4 };
+const consent = { consentGranted: true };
 
-test('only reads and returns the authenticated phone, including with another cached account', async () => {
-  const { GET, reads } = handler({ records: { phone_alice: alice, phone_bob: bob }, cache: new Map([['bob', bob]]) });
+test('returns the authenticated phone only after consent', async () => {
+  const { GET } = handler({ records: {
+    phone_sharing_consent: { alice: consent },
+    device_locations: { phone_alice: alice },
+  } });
   const result = await GET({});
   assert.equal(result.body.locations.length, 1);
   assert.equal(result.body.locations[0].uid, 'alice');
-  assert.deepEqual(reads, ['device_locations/phone_alice']);
+  assert.equal(result.body.locations[0].isOwn, true);
 });
 
-test('fresh account sees no other account locations', async () => {
-  const { GET } = handler({ records: { phone_bob: bob }, cache: new Map([['bob', bob]]) });
+test('does not return a phone when consent is absent or revoked', async () => {
+  const { GET } = handler({ records: {
+    phone_sharing_consent: { alice: { consentGranted: false } },
+    device_locations: { phone_alice: alice },
+  } });
   assert.equal((await GET({})).body.locations.length, 0);
 });
 
-test('database failure falls back only to the same account cache', async () => {
+test('guardian receives a visible linked member who has consented', async () => {
+  const { GET } = handler({ records: {
+    households: { alice: { members: [{ id: 'member_bob', name: 'Bob', linkedUid: 'bob', locationSharing: true }] } },
+    familyMemberships: { bob: { guardianUid: 'alice', memberId: 'member_bob' } },
+    phone_sharing_consent: { alice: consent, bob: consent },
+    device_locations: { phone_alice: alice, phone_bob: bob },
+  } });
+  const locations = (await GET({})).body.locations;
+  assert.equal(JSON.stringify(Array.from(locations, item => item.uid).sort()), JSON.stringify(['alice', 'bob']));
+  assert.equal(locations.find(item => item.uid === 'bob').nickname, 'Bob');
+  assert.equal(locations.find(item => item.uid === 'bob').isOwn, false);
+});
+
+test('guardian cannot receive hidden, unverified, or non-consenting linked phones', async () => {
+  const base = {
+    households: { alice: { members: [{ id: 'member_bob', linkedUid: 'bob', locationSharing: false }] } },
+    familyMemberships: { bob: { guardianUid: 'alice', memberId: 'member_bob' } },
+    phone_sharing_consent: { bob: consent },
+    device_locations: { phone_bob: bob },
+  };
+  assert.equal((await handler({ records: base }).GET({})).body.locations.length, 0);
+
+  base.households.alice.members[0].locationSharing = true;
+  base.familyMemberships.bob.guardianUid = 'mallory';
+  assert.equal((await handler({ records: base }).GET({})).body.locations.length, 0);
+
+  base.familyMemberships.bob.guardianUid = 'alice';
+  base.phone_sharing_consent.bob.consentGranted = false;
+  assert.equal((await handler({ records: base }).GET({})).body.locations.length, 0);
+});
+
+test('an invited member receives only their own consented phone', async () => {
+  const { GET, reads } = handler({
+    decoded: { uid: 'bob', familyMember: true, guardianUid: 'alice', familyMemberId: 'member_bob' },
+    records: {
+      phone_sharing_consent: { bob: { consentGranted: true }, alice: { consentGranted: true } },
+      device_locations: { phone_bob: bob, phone_alice: alice },
+    },
+  });
+  const locations = (await GET({})).body.locations;
+  assert.equal(JSON.stringify(Array.from(locations, item => item.uid)), JSON.stringify(['bob']));
+  assert.equal(reads.some(path => path.includes('alice')), false);
+});
+
+test('database failure never exposes cached coordinates', async () => {
   const { GET } = handler({ unavailable: true, cache: new Map([['alice', alice], ['bob', bob]]) });
   const result = await GET({});
-  assert.equal(result.body.locations.length, 1);
-  assert.equal(result.body.locations[0].uid, 'alice');
-});
-
-test('mismatched ownership is rejected in both storage paths', async () => {
-  const { GET } = handler({ records: { phone_alice: bob }, cache: new Map([['alice', bob]]) });
-  assert.equal((await GET({})).body.locations.length, 0);
+  assert.equal(result.status, 503);
+  assert.equal(result.body.locations, undefined);
 });
 
 test('unauthenticated request cannot read the database', async () => {
-  const { GET, reads } = handler({ account: null });
+  const { GET, reads } = handler({ decoded: null });
   assert.equal((await GET({})).status, 401);
   assert.deepEqual(reads, []);
 });

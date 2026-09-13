@@ -290,7 +290,6 @@ function LiveFamilyMapContent() {
   const [mapReady, setMapReady] = useState(false);
   const [mapProvider, setMapProvider] = useState('leaflet'); // 'google' | 'mapbox' | 'leaflet'
   const [connectionStatus, setConnectionStatus] = useState('connecting');
-  const [isDrawerCollapsed, setIsDrawerCollapsed] = useState(true);
   const [mapFocusRequest, setMapFocusRequest] = useState(0);
   const [phoneToggling, setPhoneToggling] = useState(false);
 
@@ -373,7 +372,6 @@ function LiveFamilyMapContent() {
 
   const selectMember = useCallback((member) => {
     setSelectedMember(member);
-    setIsDrawerCollapsed(false);
     setMapFocusRequest((request) => request + 1);
   }, []);
 
@@ -516,18 +514,18 @@ function LiveFamilyMapContent() {
           const phoneLocations = phoneData.locations || [];
 
           phoneLocations.forEach((phone) => {
-            if (phone.lat && phone.lng) {
+            if (Number.isFinite(Number(phone.lat)) && Number.isFinite(Number(phone.lng))) {
               allMembers.push({
                 id: phone.id || `phone_${phone.uid}`,
                 name: phone.nickname || 'My Phone',
-                role: 'Phone GPS (Live)',
+                role: phone.isOwn ? 'My Phone GPS' : 'Family Phone GPS',
                 status: 'Live',
                 zone: 'Active Device',
                 battery: phone.battery ?? null,
                 speed: phone.speed || 0,
                 address: `${parseFloat(phone.lat).toFixed(4)}, ${parseFloat(phone.lng).toFixed(4)}`,
                 lastSeen: phone.gpsTime || null, checkedAt: Date.now(),
-                avatar: user?.photoURL || null,
+                avatar: phone.isOwn ? user?.photoURL || null : null,
                 color: '#10b981',
                 lat: parseFloat(phone.lat),
                 lng: parseFloat(phone.lng),
@@ -736,7 +734,12 @@ function LiveFamilyMapContent() {
             center: [initCenter.lng, initCenter.lat],
             zoom: 15,
             attributionControl: false,
+            cooperativeGestures: false,
           });
+
+          map.dragPan.enable();
+          map.touchZoomRotate.enable();
+          map.scrollZoom.enable();
 
 
 
@@ -777,6 +780,10 @@ function LiveFamilyMapContent() {
           zoom: 15,
           zoomControl: false,
           attributionControl: false,
+          dragging: true,
+          touchZoom: true,
+          scrollWheelZoom: true,
+          tap: true,
         });
 
         // ESRI Canvas tiles (World Light Gray vs World Dark Gray)
@@ -1274,7 +1281,7 @@ function LiveFamilyMapContent() {
 
       {/* Map Container — ALWAYS in DOM */}
       <div className={`absolute inset-0 z-0 ${isFullScreen ? '' : 'pt-16 pb-20'}`}>
-        <div ref={mapContainerRef} className={`w-full h-full transition-colors duration-300 ${theme === 'light' ? 'bg-[#f1f5f9]' : 'bg-[#0a0f14]'}`} />
+        <div ref={mapContainerRef} className={`w-full h-full touch-none transition-colors duration-300 ${theme === 'light' ? 'bg-[#f1f5f9]' : 'bg-[#0a0f14]'}`} />
       </div>
 
       {(connectionStatus === 'connecting' || connectionStatus === 'offline') && (
@@ -1292,7 +1299,7 @@ function LiveFamilyMapContent() {
             <span className="material-symbols-outlined text-xl" aria-hidden="true">expand_more</span>
           </summary>
           <div className="absolute left-0 top-full mt-2 w-[min(17rem,calc(100vw-2rem))] max-h-[calc(100dvh-15rem)] overflow-y-auto rounded-2xl bg-surface-container border border-white/15 p-2 shadow-xl text-on-surface">
-            <button onClick={() => { setIsDrawerCollapsed(false); controlsRef.current.open = false; }} className="w-full min-h-11 flex items-center gap-3 px-3 rounded-xl hover:bg-white/10 text-left text-sm">
+            <button onClick={() => { if (members[0]) selectMember(selectedMember || members[0]); controlsRef.current.open = false; }} className="w-full min-h-11 flex items-center gap-3 px-3 rounded-xl hover:bg-white/10 text-left text-sm">
               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: statusColor }} />{statusText}
             </button>
             <button onClick={handleLocatePhone} disabled={!mapReady} className="w-full min-h-11 flex items-center gap-3 px-3 rounded-xl hover:bg-white/10 text-left text-sm disabled:opacity-50">
@@ -1345,32 +1352,31 @@ function LiveFamilyMapContent() {
         </div>
       )}
 
-      {/* Selected Device Drawer with Pull Tab */}
+      {/* Selected device details. Closing it returns the full map area. */}
       {selectedMember && (
-        <div className={`absolute ${isFullScreen ? 'bottom-0' : 'bottom-20'} left-0 right-0 z-30 max-w-2xl mx-auto pointer-events-auto ${isDrawerCollapsed ? 'px-0' : 'p-gutter'}`}>
-          <div className={`glass-panel shadow-2xl border border-white/15 backdrop-blur-xl bg-surface-container-high/90 transition-all duration-300 ${isDrawerCollapsed ? 'w-fit mx-auto rounded-t-xl px-2 py-0' : 'rounded-2xl p-sm sm:p-md max-h-[55dvh] overflow-y-auto'}`}>
-            {/* Pull Tab / Collapse Handle at Top */}
-            <div
-              onClick={() => setIsDrawerCollapsed(!isDrawerCollapsed)}
-              role="button" tabIndex={0} aria-label={isDrawerCollapsed ? "Expand device list" : "Collapse device list"} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setIsDrawerCollapsed(v => !v); } }} className="w-full flex justify-center items-center py-1 cursor-pointer group select-none"
-              title={isDrawerCollapsed ? 'Expand tracker details' : 'Collapse tracker details'}
+        <div className={`absolute ${isFullScreen ? 'bottom-0' : 'bottom-20'} left-0 right-0 z-30 max-w-2xl mx-auto pointer-events-auto p-gutter`}>
+          <div className="glass-panel shadow-2xl border border-white/15 backdrop-blur-xl bg-surface-container-high/90 rounded-2xl p-sm sm:p-md max-h-[55dvh] overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => setSelectedMember(null)}
+              aria-label="Close tracker details"
+              title="Close tracker details"
+              className="w-full flex justify-center items-center py-1 cursor-pointer group select-none"
             >
               <div className="flex items-center gap-1 px-3 py-0.5 rounded-full bg-white/10 group-hover:bg-secondary/30 transition-all border border-white/10 shadow-sm">
                 <span className="material-symbols-outlined text-[16px] text-on-surface-variant group-hover:text-secondary transition-transform duration-200">
-                  {isDrawerCollapsed ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}
+                  keyboard_arrow_down
                 </span>
                 <span className="text-[10px] font-bold text-on-surface-variant group-hover:text-on-surface uppercase tracking-wider">
-                  {isDrawerCollapsed ? '' : 'Minimize'}
+                  Minimize
                 </span>
               </div>
-            </div>
+            </button>
 
-            {!isDrawerCollapsed && <>
             {/* Header info */}
             <div className="flex items-start justify-between">
               <div
                 className="flex items-center gap-sm cursor-pointer"
-                onClick={() => setIsDrawerCollapsed(!isDrawerCollapsed)}
               >
                 <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-secondary p-0.5 relative shrink-0 bg-surface-container-low flex items-center justify-center">
                   {selectedMember.avatar ? (
@@ -1454,7 +1460,6 @@ function LiveFamilyMapContent() {
                   </button>
                 </div>
               </div>
-            </>}
           </div>
         </div>
       )}

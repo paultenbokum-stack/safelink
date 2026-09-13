@@ -1,180 +1,51 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '@/lib/auth-context';
+import React, { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { useAuth } from '@/lib/auth-context';
+import { useLocationSharing } from '@/lib/location-sharing';
+
+const GPS_ROUTES = ['/dashboard', '/map', '/devices', '/family'];
 
 export default function GpsConsentModal() {
   const { user } = useAuth();
   const pathname = usePathname();
+  const { isOptedIn, isSharing, error, optIn, optOut } = useLocationSharing();
   const [isOpen, setIsOpen] = useState(false);
-  const [consentStatus, setConsentStatus] = useState('pending');
-  const [trackingActive, setTrackingActive] = useState(false);
-  const watchIdRef = useRef(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const mayShare = user && !user.isPartnerSession && (user.isFamilyMember || user.emailVerified || user.isTestSession);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!user || (!user.isPartnerSession && !user.isFamilyMember && !user.emailVerified) || !['/dashboard', '/map', '/devices', '/family'].includes(pathname)) {
-      setIsOpen(false);
-      return;
-    }
+    if (!mayShare || !GPS_ROUTES.includes(pathname)) return;
 
     const handleReopen = () => setIsOpen(true);
     window.addEventListener('open_gps_consent_modal', handleReopen);
-    let timer;
     const savedConsent = localStorage.getItem('popia_gps_consent');
-    if (savedConsent === 'granted') {
-      setConsentStatus('granted');
-      startLocationWatcher();
-    } else if (savedConsent === 'denied') {
-      setConsentStatus('denied');
-    } else {
-      // First-time user, prompt after 1.5s
-      timer = setTimeout(() => setIsOpen(true), 1500);
-    }
+    const timer = !savedConsent ? setTimeout(() => setIsOpen(true), 1500) : null;
 
     return () => {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       window.removeEventListener('open_gps_consent_modal', handleReopen);
-      stopLocationWatcher();
     };
-  }, [user, pathname]);
-
-  const getAuthToken = async () => {
-    if (user && typeof user.getIdToken === 'function') {
-      try {
-        const t = await user.getIdToken();
-        if (t) return t;
-      } catch {}
-    }
-    if (user?.accessToken) return user.accessToken;
-    if (user?.uid) return `test_${user.uid}`;
-    return 'demo-test-token';
-  };
-
-  const startLocationWatcher = () => {
-    if (typeof window === 'undefined' || !navigator.geolocation) return;
-    if (watchIdRef.current) return; // Already watching
-
-    const sendCoords = async (position) => {
-      const { latitude, longitude, accuracy, speed, heading, altitude } = position.coords;
-      const payload = {
-        timestamp: position.timestamp,
-        lat: latitude,
-        lng: longitude,
-        accuracy,
-        speed,
-        heading,
-        altitude,
-        nickname: user?.displayName || 'My Phone',
-      };
-
-      // Broadcast to local storage for instant map view
-      localStorage.setItem('last_known_pwa_gps', JSON.stringify({
-        ...payload,
-        name: user?.displayName || 'Phone GPS',
-        updatedAt: new Date().toISOString(),
-      }));
-
-      // Broadcast event
-      window.dispatchEvent(new CustomEvent('safelink_phone_location_updated', { detail: payload }));
-
-      try {
-        const token = await getAuthToken();
-        const headers = {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        };
-
-        await fetch('/api/location/share', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(payload),
-        });
-      } catch (err) {
-        console.warn('GPS telemetry push error:', err);
-      }
-    };
-
-    try {
-      watchIdRef.current = navigator.geolocation.watchPosition(
-        (pos) => {
-          setTrackingActive(true);
-          sendCoords(pos);
-        },
-        (err) => {
-          console.warn('Geolocation watch error:', err.message);
-          setTrackingActive(false);
-        },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
-      );
-    } catch (e) {
-      console.warn('Geolocation could not start:', e);
-    }
-  };
-
-  const stopLocationWatcher = () => {
-    if (watchIdRef.current !== null && typeof window !== 'undefined' && navigator.geolocation) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
-      setTrackingActive(false);
-    }
-  };
+  }, [mayShare, pathname]);
 
   const handleAccept = async () => {
-    localStorage.setItem('popia_gps_consent', 'granted');
-    localStorage.setItem('safelink_location_sharing_consent', 'granted');
-    setConsentStatus('granted');
-    setIsOpen(false);
-
-    try {
-      const token = await getAuthToken();
-      const headers = {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
-      await fetch('/api/location/share', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          action: 'opt_in',
-          nickname: user?.displayName || 'My Phone',
-          consentTimestamp: new Date().toISOString(),
-        }),
-      });
-    } catch (e) {
-      console.warn('Failed to post opt_in to backend:', e);
-    }
-
-    startLocationWatcher();
+    setIsSaving(true);
+    const enabled = await optIn();
+    setIsSaving(false);
+    if (enabled) setIsOpen(false);
   };
 
   const handleDecline = async () => {
+    setIsSaving(true);
+    await optOut();
     localStorage.setItem('popia_gps_consent', 'denied');
-    localStorage.removeItem('safelink_location_sharing_consent');
-    setConsentStatus('denied');
+    setIsSaving(false);
     setIsOpen(false);
-    stopLocationWatcher();
-
-    try {
-      const token = await getAuthToken();
-      const headers = {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
-      await fetch('/api/location/share', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          action: 'opt_out',
-        }),
-      });
-    } catch (e) {
-      console.warn('Failed to post opt_out to backend:', e);
-    }
   };
 
-  if (!isOpen) return null;
+  if (!mayShare || !GPS_ROUTES.includes(pathname) || !isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
@@ -200,7 +71,7 @@ export default function GpsConsentModal() {
           </div>
           <div className="flex items-start gap-2.5 text-xs text-on-surface">
             <span className="material-symbols-outlined text-secondary text-sm shrink-0 mt-0.5">lock</span>
-            <span>Your shared coordinates are sent to your Safelink account.</span>
+            <span>Your shared coordinates are available only to your account and an authorised linked guardian.</span>
           </div>
           <div className="flex items-start gap-2.5 text-xs text-on-surface">
             <span className="material-symbols-outlined text-secondary text-sm shrink-0 mt-0.5">toggle_on</span>
@@ -208,18 +79,15 @@ export default function GpsConsentModal() {
           </div>
         </div>
 
+        {error && <p role="alert" className="text-xs text-error">{error}</p>}
+        {isOptedIn && isSharing && <p className="text-xs text-[#38a169]">Phone location sharing is active.</p>}
+
         <div className="pt-2 flex flex-col sm:flex-row gap-2">
-          <button
-            onClick={handleAccept}
-            className="flex-1 bg-secondary hover:bg-secondary/90 text-on-secondary font-label-md text-xs uppercase tracking-wider font-bold py-3.5 px-4 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
+          <button onClick={handleAccept} disabled={isSaving} className="flex-1 bg-secondary hover:bg-secondary/90 text-on-secondary font-label-md text-xs uppercase tracking-wider font-bold py-3.5 px-4 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60">
             <span className="material-symbols-outlined text-base">check_circle</span>
-            Accept & Enable GPS
+            {isSaving ? 'Enabling…' : 'Accept & Enable GPS'}
           </button>
-          <button
-            onClick={handleDecline}
-            className="px-4 py-3 rounded-xl border border-white/10 hover:bg-white/5 text-on-surface-variant font-label-md text-xs font-semibold active:scale-95 transition-all cursor-pointer"
-          >
+          <button onClick={handleDecline} disabled={isSaving} className="px-4 py-3 rounded-xl border border-white/10 hover:bg-white/5 text-on-surface-variant font-label-md text-xs font-semibold active:scale-95 transition-all cursor-pointer disabled:opacity-60">
             Decline / Later
           </button>
         </div>

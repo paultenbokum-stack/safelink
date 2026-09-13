@@ -15,7 +15,7 @@
  * - Consent status persisted in localStorage + Firestore
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from './auth-context';
 
 const LOCATION_UPDATE_INTERVAL = 15000; // 15 seconds for responsive live tracking
@@ -34,7 +34,9 @@ const STORAGE_KEY_LAST_GPS = 'last_known_pwa_gps';
  *     optIn, optOut, setNickname,
  *   } = useLocationSharing();
  */
-export function useLocationSharing() {
+const LocationSharingContext = createContext(null);
+
+function useLocationSharingController() {
   const { user } = useAuth();
   const [isOptedIn, setIsOptedIn] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
@@ -88,14 +90,17 @@ export function useLocationSharing() {
   /**
    * Helper to build auth token
    */
-  const getAuthToken = useCallback(() => {
-    return (
-      user?.accessToken ||
-      user?.stsTokenManager?.accessToken ||
-      (user?.isTestSession ? `test_${user.uid}` : null) ||
-      (user?.isPartnerSession ? `test_${user.uid}` : null) ||
-      (user?.uid ? `test_${user.uid}` : 'demo-test-token')
-    );
+  const getAuthToken = useCallback(async () => {
+    if (!user || user.isPartnerSession) return null;
+    if (typeof user.getIdToken === 'function') {
+      try {
+        const token = await user.getIdToken();
+        if (token) return token;
+      } catch {}
+    }
+    if (user.accessToken) return user.accessToken;
+    if (user.isTestSession && user.uid) return `test_${user.uid}`;
+    return null;
   }, [user]);
 
   /**
@@ -107,7 +112,8 @@ export function useLocationSharing() {
     lastSentRef.current = Date.now();
 
     try {
-      const token = getAuthToken();
+      const token = await getAuthToken();
+      if (!token) throw new Error('No authenticated location-sharing session');
 
       const response = await fetch('/api/location/share', {
         method: 'POST',
@@ -236,7 +242,7 @@ export function useLocationSharing() {
 
     return new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
-        (position) => {
+        async (position) => {
           const pos = {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
@@ -247,25 +253,14 @@ export function useLocationSharing() {
             timestamp: position.timestamp,
           };
 
-          // Store consent in all local keys
-          localStorage.setItem(STORAGE_KEY_CONSENT, 'granted');
-          localStorage.setItem(STORAGE_KEY_POPIA, 'granted');
-          localStorage.setItem(STORAGE_KEY_LAST_GPS, JSON.stringify({
-            ...pos,
-            name: user?.displayName || nickname,
-            updatedAt: new Date().toISOString(),
-          }));
-
-          setLastPosition(pos);
-          setIsOptedIn(true);
-          setError(null);
-
-          // Dispatch event
-          window.dispatchEvent(new CustomEvent('safelink_phone_location_updated', { detail: pos }));
-
           // Notify backend
-          const token = getAuthToken();
-          fetch('/api/location/share', {
+          const token = await getAuthToken();
+          if (!token) {
+            setError('Please sign in again to share this phone.');
+            resolve(false);
+            return;
+          }
+          const response = await fetch('/api/location/share', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -279,7 +274,24 @@ export function useLocationSharing() {
               lng: pos.lng,
               accuracy: pos.accuracy,
             }),
-          }).catch(() => {});
+          });
+          if (!response.ok) {
+            setError('Could not enable location sharing. Please retry.');
+            resolve(false);
+            return;
+          }
+
+          localStorage.setItem(STORAGE_KEY_CONSENT, 'granted');
+          localStorage.setItem(STORAGE_KEY_POPIA, 'granted');
+          localStorage.setItem(STORAGE_KEY_LAST_GPS, JSON.stringify({
+            ...pos,
+            name: user?.displayName || nickname,
+            updatedAt: new Date().toISOString(),
+          }));
+          setLastPosition(pos);
+          setIsOptedIn(true);
+          setError(null);
+          window.dispatchEvent(new CustomEvent('safelink_phone_location_updated', { detail: pos }));
 
           startSharing();
           resolve(true);
@@ -307,7 +319,8 @@ export function useLocationSharing() {
     setLastPosition(null);
 
     try {
-      const token = getAuthToken();
+      const token = await getAuthToken();
+      if (!token) return;
       await fetch('/api/location/share', {
         method: 'POST',
         headers: {
@@ -344,7 +357,7 @@ export function useLocationSharing() {
 
   // Auto-start sharing when opted in
   useEffect(() => {
-    const timer = setTimeout(() => { if (isOptedIn) startSharing(); }, 0);
+    const timer = setTimeout(() => { if (isOptedIn && user && !user.isPartnerSession) startSharing(); }, 0);
     return () => { clearTimeout(timer); stopSharing(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOptedIn, user]);
@@ -358,7 +371,7 @@ export function useLocationSharing() {
           watchIdRef.current = null;
         }
       } else {
-        if (isOptedIn && isSharing) {
+        if (isOptedIn && isSharing && user && !user.isPartnerSession) {
           startWatching();
         }
       }
@@ -366,8 +379,7 @@ export function useLocationSharing() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOptedIn, isSharing]);
+  }, [isOptedIn, isSharing, startWatching, user]);
 
 
   return {
@@ -381,6 +393,17 @@ export function useLocationSharing() {
     optOut,
     setNickname,
   };
+}
+
+export function LocationSharingProvider({ children }) {
+  const value = useLocationSharingController();
+  return <LocationSharingContext.Provider value={value}>{children}</LocationSharingContext.Provider>;
+}
+
+export function useLocationSharing() {
+  const value = useContext(LocationSharingContext);
+  if (!value) throw new Error('useLocationSharing must be used within LocationSharingProvider');
+  return value;
 }
 
 /* ─── Helpers ──────────────────────────────────────────────────── */

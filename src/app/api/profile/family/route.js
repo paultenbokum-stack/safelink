@@ -6,12 +6,44 @@ function failure(error) {
   return NextResponse.json({ error: error.message === 'UNAUTHENTICATED' ? 'Please sign in again.' : 'Family members could not be saved or loaded. Please retry.' }, { status: error.message === 'UNAUTHENTICATED' ? 401 : 503 });
 }
 
+function isoTime(value) {
+  return value?.toDate?.()?.toISOString?.() || value || null;
+}
+
+async function addSharingStatus(firestore, guardianUid, members) {
+  return Promise.all(members.map(async member => {
+    const sharingUid = member.isSelf ? guardianUid : member.linkedUid;
+    if (!sharingUid) return { ...member, sharingEnabled: false, lastReportedAt: null };
+
+    if (!member.isSelf) {
+      const membership = await firestore.collection('familyMemberships').doc(sharingUid).get();
+      const linked = membership.data();
+      if (!membership.exists || linked?.guardianUid !== guardianUid || linked?.memberId !== member.id) {
+        return { ...member, sharingEnabled: false, lastReportedAt: null };
+      }
+    }
+
+    const [consent, location] = await Promise.all([
+      firestore.collection('phone_sharing_consent').doc(sharingUid).get(),
+      firestore.collection('device_locations').doc(`phone_${sharingUid}`).get(),
+    ]);
+    return {
+      ...member,
+      sharingEnabled: consent.exists && consent.data()?.consentGranted === true,
+      lastReportedAt: location.exists ? isoTime(location.data()?.updatedAt || location.data()?.gpsTime) : null,
+    };
+  }));
+}
+
 export async function GET(request) {
   try {
     const { uid } = await authenticateFirebaseRequest(request, { allowUnverified: true });
-    const snapshot = await getAdminFirestore().collection('households').doc(uid).get();
+    const firestore = getAdminFirestore();
+    const snapshot = await firestore.collection('households').doc(uid).get();
     // null distinguishes legacy device-only lists from an explicitly empty saved list.
-    return NextResponse.json({ members: snapshot.data()?.members ?? null }, { headers: { 'Cache-Control': 'private, no-store' } });
+    const savedMembers = snapshot.data()?.members;
+    const members = Array.isArray(savedMembers) ? await addSharingStatus(firestore, uid, savedMembers) : null;
+    return NextResponse.json({ members }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) { return failure(error); }
 }
 

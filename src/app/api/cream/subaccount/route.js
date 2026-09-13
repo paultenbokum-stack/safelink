@@ -3,8 +3,7 @@ import { getAdminFirestore, authenticateFirebaseRequest } from '@/lib/firebase-a
 import { createSubaccount, updateSubaccount, verifyBankAccount, listBanks, getSubaccount } from '@/lib/paystack-subaccounts';
 import { FieldValue } from 'firebase-admin/firestore';
 
-const CREAM_ADMINS = (process.env.CREAM_ADMIN_UIDS || '').split(',').map(s => s.trim()).filter(Boolean);
-function isCreamAdmin(uid) { return CREAM_ADMINS.includes(uid); }
+import { isManagementAdmin } from '@/lib/management-auth';
 
 /**
  * POST /api/cream/subaccount
@@ -13,7 +12,7 @@ function isCreamAdmin(uid) { return CREAM_ADMINS.includes(uid); }
 export async function POST(request) {
   try {
     const user = await authenticateFirebaseRequest(request);
-    if (!isCreamAdmin(user.uid)) return NextResponse.json({ error: 'Unauthorised.' }, { status: 403 });
+    if (!isManagementAdmin(user)) return NextResponse.json({ error: 'Unauthorised.' }, { status: 403 });
 
     const body = await request.json();
     const { action } = body;

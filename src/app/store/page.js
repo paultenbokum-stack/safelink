@@ -321,9 +321,16 @@ function ProductCard({ product, onViewDetail }) {
 }
 
 function CartDrawer({ cart, onClose, onUpdateQty, subtotalExVat, vat, totalInclVat, totalCount, onCheckout }) {
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const dismiss = event => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', dismiss);
+    return () => { document.body.style.overflow = previous; window.removeEventListener('keydown', dismiss); };
+  }, [onClose]);
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex justify-end" onClick={onClose}>
-      <div className="w-full max-w-md bg-surface-container-high h-full p-5 md:p-6 flex flex-col shadow-2xl border-l border-white/10" onClick={(event) => event.stopPropagation()}>
+    <div role="dialog" aria-modal="true" aria-label="Shopping basket" className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex justify-end" style={{ height: '100dvh' }} onClick={onClose}>
+      <div className="w-full max-w-md bg-surface-container-high h-full min-h-0 p-4 flex flex-col shadow-2xl border-l border-white/10" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }} onClick={(event) => event.stopPropagation()}>
         <div className="flex justify-between items-center pb-4 border-b border-white/10 mb-4">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-secondary">shopping_bag</span>
@@ -334,7 +341,7 @@ function CartDrawer({ cart, onClose, onUpdateQty, subtotalExVat, vat, totalInclV
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-3 pr-1">
           {cart.length === 0 ? (
             <div className="text-center py-12">
               <span className="material-symbols-outlined text-on-surface-variant text-5xl">shopping_cart</span>
@@ -342,34 +349,27 @@ function CartDrawer({ cart, onClose, onUpdateQty, subtotalExVat, vat, totalInclV
             </div>
           ) : cart.map((item) => {
             const pricing = getLinePriceBreakdown(item, item.qty);
-            const nextTier = getNextPriceTier(item, item.qty);
             return (
-              <div key={item.id} className="glass-panel p-3 rounded-xl">
+              <div key={item.id} className="border-b border-outline-variant/20 py-3">
                 <div className="flex items-center gap-3">
                   <div className="product-stage group relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg">
                     <ProductVisual product={item} compact />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-on-surface truncate">{item.name}</p>
+                    <p className="text-sm font-semibold text-on-surface">{item.name}</p>
                     <p className="text-xs text-secondary font-bold">{formatZAR(pricing.unitPriceExVat)} <span className="font-normal text-on-surface-variant">ex VAT / unit</span></p>
                     <p className="text-[10px] text-primary">{pricing.tier.label} unit tier</p>
                   </div>
                   <p className="text-sm font-bold text-on-surface text-right">{formatZAR(pricing.totalInclVat)}<span className="block text-[9px] font-normal text-on-surface-variant">incl. VAT</span></p>
                 </div>
                 <div className="mt-3">
-                  <QuantityPriceControl product={item} value={item.qty} onChange={(quantity) => onUpdateQty(item.id, quantity)} label={`${item.name} cart quantity`} compact />
-                  <div className="mt-2 flex justify-between gap-3 px-1">
-                    <span className="text-[10px] text-primary">{pricing.tier.label} unit price applied</span>
-                    {nextTier ? (
-                      <button type="button" onClick={() => onUpdateQty(item.id, nextTier.minQty)} className="text-[10px] text-primary text-right hover:text-secondary">
-                        Jump to {nextTier.minQty.toLocaleString('en-ZA')} for {formatZAR(nextTier.unitPriceExVat)} each
-                      </button>
-                    ) : (
-                      <span className="text-[10px] text-primary text-right">Best rate applied</span>
-                    )}
+                  <div className="flex items-center gap-2">
+                    <button type="button" aria-label={`Decrease ${item.name} quantity`} disabled={item.qty <= 1} onClick={() => onUpdateQty(item.id, item.qty - 1)} className="size-11 border rounded-lg disabled:opacity-40">−</button>
+                    <input aria-label={`${item.name} cart quantity`} type="number" inputMode="numeric" min="1" max={MAX_ORDER_QUANTITY} value={item.qty} onChange={event => onUpdateQty(item.id, Math.max(1, Math.min(MAX_ORDER_QUANTITY, parseInt(event.target.value, 10) || 1)))} className="w-16 h-11 text-center rounded-lg bg-surface text-on-surface border" />
+                    <button type="button" aria-label={`Increase ${item.name} quantity`} disabled={item.qty >= MAX_ORDER_QUANTITY} onClick={() => onUpdateQty(item.id, item.qty + 1)} className="size-11 border rounded-lg disabled:opacity-40">+</button>
+                    <button type="button" onClick={() => onUpdateQty(item.id, 0)} className="ml-auto p-3 text-xs text-on-surface-variant hover:text-error">Remove</button>
                   </div>
                 </div>
-                <button type="button" onClick={() => onUpdateQty(item.id, 0)} className="mt-2 text-[10px] text-on-surface-variant hover:text-error">Remove</button>
               </div>
             );
           })}
@@ -406,6 +406,23 @@ export default function StorePage() {
 function StoreContent() {
   const router = useRouter();
   const [cart, setCart] = useState([]);
+  const [cartLoaded, setCartLoaded] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem('safelink_cart') || '[]');
+        if (Array.isArray(saved)) setCart(saved.flatMap(item => {
+          const product = SENTINEL_PRODUCTS.find(product => product.id === item.id);
+          return product && Number.isInteger(item.qty) && item.qty > 0 && item.qty <= MAX_ORDER_QUANTITY ? [{ ...product, qty: item.qty }] : [];
+        }));
+      } catch { /* A malformed saved basket starts empty. */ }
+      setCartLoaded(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+  useEffect(() => {
+    if (cartLoaded) sessionStorage.setItem('safelink_cart', JSON.stringify(cart.map(({ id, qty }) => ({ id, qty }))));
+  }, [cart, cartLoaded]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [cartOpen, setCartOpen] = useState(false);
   const [modalProduct, setModalProduct] = useState(null);

@@ -14,12 +14,6 @@ import { NextResponse, after } from 'next/server';
 import { authenticateFirebaseRequest, getAdminFirestore } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 
-// In-memory fallback cache to ensure real-time tracking operates seamlessly across invocations
-const globalPhoneLocations = global._safelinkPhoneLocations || new Map();
-if (!global._safelinkPhoneLocations) {
-  global._safelinkPhoneLocations = globalPhoneLocations;
-}
-
 export async function POST(request) {
   try {
     const decoded = await authenticateFirebaseRequest(request);
@@ -30,7 +24,8 @@ export async function POST(request) {
     if (body.action === 'opt_in') {
       try {
         const firestore = getAdminFirestore();
-        await firestore.collection('phone_sharing_consent').doc(decoded.uid).set({
+        const batch = firestore.batch();
+        batch.set(firestore.collection('phone_sharing_consent').doc(decoded.uid), {
           uid: decoded.uid,
           email: decoded.email || '',
           nickname: body.nickname || 'My Phone',
@@ -39,7 +34,7 @@ export async function POST(request) {
           updatedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
 
-        await firestore.collection('devices').doc(phoneDocId).set({
+        batch.set(firestore.collection('devices').doc(phoneDocId), {
           uid: decoded.uid,
           deviceType: 'phone',
           nickname: body.nickname || 'My Phone',
@@ -48,8 +43,11 @@ export async function POST(request) {
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
+        batch.delete(firestore.collection('device_locations').doc(phoneDocId));
+        await batch.commit();
       } catch (fsErr) {
-        console.warn('[api/location/share] Firestore opt_in note:', fsErr.message);
+        console.warn('[api/location/share] Consent write failed:', fsErr.message);
+        return NextResponse.json({ error: 'Could not save consent. Please retry.' }, { status: 503 });
       }
 
       return NextResponse.json({ success: true, message: 'Location sharing enabled' });
@@ -57,24 +55,26 @@ export async function POST(request) {
 
     // ── Opt-out: revoke consent and mark inactive ──
     if (body.action === 'opt_out') {
-      globalPhoneLocations.delete(decoded.uid);
 
       try {
         const firestore = getAdminFirestore();
-        await firestore.collection('phone_sharing_consent').doc(decoded.uid).set({
+        const batch = firestore.batch();
+        batch.set(firestore.collection('phone_sharing_consent').doc(decoded.uid), {
           consentGranted: false,
           revokedAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
 
-        await firestore.collection('devices').doc(phoneDocId).set({
+        batch.set(firestore.collection('devices').doc(phoneDocId), {
           status: 'inactive',
           updatedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
 
-        await firestore.collection('device_locations').doc(phoneDocId).delete();
+        batch.delete(firestore.collection('device_locations').doc(phoneDocId));
+        await batch.commit();
       } catch (fsErr) {
-        console.warn('[api/location/share] Firestore opt_out note:', fsErr.message);
+        console.warn('[api/location/share] Consent revocation failed:', fsErr.message);
+        return NextResponse.json({ error: 'Could not revoke sharing. Please retry.' }, { status: 503 });
       }
 
       return NextResponse.json({ success: true, message: 'Location sharing disabled' });
@@ -90,7 +90,7 @@ export async function POST(request) {
     const numericLat = parseFloat(lat);
     const numericLng = parseFloat(lng);
 
-    if (isNaN(numericLat) || isNaN(numericLng)) {
+    if (!Number.isFinite(numericLat) || !Number.isFinite(numericLng) || Math.abs(numericLat) > 90 || Math.abs(numericLng) > 180) {
       return NextResponse.json({ error: 'Invalid lat/lng numbers' }, { status: 400 });
     }
 
@@ -123,21 +123,19 @@ export async function POST(request) {
       battery: batteryPercent(body.battery),
     };
 
-    // 1. Immediately store in high-speed memory cache
-    globalPhoneLocations.set(decoded.uid, locationRecord);
-
-    // 2. Persist to Firestore asynchronously / gracefully
+    // Serialize consent checks with writes so a concurrent revocation cannot leave a new report.
     try {
-      await firestore.collection('device_locations').doc(phoneDocId).set({
-        ...locationRecord,
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-
-      // Check geofences for this phone location
-      await checkPhoneGeofences(firestore, decoded.uid, numericLat, numericLng);
-    } catch (fsErr) {
-      console.warn('[api/location/share] Firestore persist non-blocking note:', fsErr.message);
+      await firestore.runTransaction(async transaction => {
+        const consent = await transaction.get(firestore.collection('phone_sharing_consent').doc(decoded.uid));
+        if (consent.data()?.consentGranted !== true) throw new Error('CONSENT_REQUIRED');
+        transaction.set(firestore.collection('device_locations').doc(phoneDocId), {
+          ...locationRecord, updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+      });
+    } catch (error) {
+      return NextResponse.json({ error: 'Could not save the phone report.' }, { status: error.message === 'CONSENT_REQUIRED' ? 403 : 503 });
     }
+    await checkPhoneGeofences(firestore, decoded.uid, numericLat, numericLng);
 
     return NextResponse.json({ success: true, location: locationRecord });
   } catch (err) {
@@ -178,11 +176,6 @@ export async function GET(request) {
         if (!consent.exists || consent.data()?.consentGranted !== true) continue;
 
         const phoneDocId = `phone_${candidate.uid}`;
-        const cached = globalPhoneLocations.get(candidate.uid);
-        if (cached?.uid === candidate.uid && cached.id === phoneDocId) {
-          phoneLocationsMap.set(phoneDocId, { ...cached, nickname: candidate.nickname || cached.nickname, isOwn: candidate.isOwn, memberId: candidate.memberId || null });
-        }
-
         const phoneLocation = await firestore.collection('device_locations').doc(phoneDocId).get();
         if (!phoneLocation.exists) continue;
         const data = phoneLocation.data();

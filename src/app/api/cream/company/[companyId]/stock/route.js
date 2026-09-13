@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAdminFirestore, authenticateFirebaseRequest } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 
-const CREAM_ADMINS = (process.env.CREAM_ADMIN_UIDS || '').split(',').map(s => s.trim()).filter(Boolean);
-function isCreamAdmin(uid) { return CREAM_ADMINS.includes(uid); }
+import { isManagementAdmin } from '@/lib/management-auth';
 
 /**
  * GET /api/cream/company/[companyId]/stock
@@ -12,7 +11,7 @@ function isCreamAdmin(uid) { return CREAM_ADMINS.includes(uid); }
 export async function GET(request, { params }) {
   try {
     const user = await authenticateFirebaseRequest(request);
-    if (!isCreamAdmin(user.uid)) return NextResponse.json({ error: 'Unauthorised.' }, { status: 403 });
+    if (!isManagementAdmin(user)) return NextResponse.json({ error: 'Unauthorised.' }, { status: 403 });
 
     const { companyId } = await params;
     const db = getAdminFirestore();
@@ -88,7 +87,7 @@ export async function GET(request, { params }) {
 export async function POST(request, { params }) {
   try {
     const user = await authenticateFirebaseRequest(request);
-    if (!isCreamAdmin(user.uid)) return NextResponse.json({ error: 'Unauthorised.' }, { status: 403 });
+    if (!isManagementAdmin(user)) return NextResponse.json({ error: 'Unauthorised.' }, { status: 403 });
 
     const { companyId } = await params;
     const body = await request.json();

@@ -3,8 +3,7 @@ import { getAdminFirestore, authenticateFirebaseRequest } from '@/lib/firebase-a
 import { FieldValue } from 'firebase-admin/firestore';
 import { SENTINEL_PRODUCTS } from '@/lib/products';
 
-const CREAM_ADMINS = (process.env.CREAM_ADMIN_UIDS || '').split(',').map(s => s.trim()).filter(Boolean);
-function isCreamAdmin(uid) { return CREAM_ADMINS.includes(uid); }
+import { isManagementAdmin } from '@/lib/management-auth';
 
 /**
  * GET /api/cream/products
@@ -54,7 +53,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const user = await authenticateFirebaseRequest(request);
-    if (!isCreamAdmin(user.uid)) return NextResponse.json({ error: 'Only CREAM administrators can manage the master catalogue.' }, { status: 403 });
+    if (!isManagementAdmin(user)) return NextResponse.json({ error: 'Only CREAM administrators can manage the master catalogue.' }, { status: 403 });
 
     const body = await request.json();
     const { action } = body;

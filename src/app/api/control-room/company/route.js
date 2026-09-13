@@ -1,5 +1,6 @@
+import { managementAccessError } from '@/lib/management-auth';
 import { NextResponse } from 'next/server';
-import { authenticateFirebaseRequest, getAdminFirestore } from '@/lib/firebase-admin';
+import { getAdminFirestore } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 
 /**
@@ -7,6 +8,8 @@ import { FieldValue } from 'firebase-admin/firestore';
  * Fetch security company profile, camera feeds, and Aura config.
  */
 export async function GET(request) {
+  const accessError = await managementAccessError(request);
+  if (accessError) return accessError;
   try {
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get('companyId') || 'safelink_default';
@@ -15,19 +18,20 @@ export async function GET(request) {
     const doc = await firestore.collection('security_companies').doc(companyId).get();
 
     if (!doc.exists) {
-      // Seed a neutral platform profile until a security company is assigned.
+      // Return an unconfigured neutral profile without creating a tenant on read.
+      if (companyId !== 'safelink_default') return NextResponse.json({ error: 'Company not found.' }, { status: 404 });
       const defaultCompany = {
         id: companyId,
         name: companyId === 'safelink_default' ? 'SafeLink Default Network' : 'Security Company',
         registrationNumber: '',
         dispatchPhone: '',
         contactEmail: '',
-        status: 'active',
+        status: 'not_configured',
         aura: {
           enabled: false,
           environment: 'staging',
-          clientId: process.env.AURA_CLIENT_ID || '',
-          clientSecret: process.env.AURA_CLIENT_SECRET ? '••••••••••••' : '',
+          clientId: '',
+          clientSecret: '',
           defaultCustomerId: '1',
         },
         accounting: {
@@ -52,7 +56,7 @@ export async function GET(request) {
         updatedAt: FieldValue.serverTimestamp(),
       };
 
-      await firestore.collection('security_companies').doc(companyId).set(defaultCompany);
+
       return NextResponse.json({ company: defaultCompany });
     }
 
@@ -83,6 +87,8 @@ export async function GET(request) {
  * Create or update security company settings, camera list, accounting, and Aura integration.
  */
 export async function POST(request) {
+  const accessError = await managementAccessError(request);
+  if (accessError) return accessError;
   try {
     const body = await request.json();
     const companyId = body.id || body.companyId || 'safelink_default';

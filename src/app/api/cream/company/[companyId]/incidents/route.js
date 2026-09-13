@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAdminFirestore, authenticateFirebaseRequest } from '@/lib/firebase-admin';
 
-const CREAM_ADMINS = (process.env.CREAM_ADMIN_UIDS || '').split(',').map(s => s.trim()).filter(Boolean);
-function isCreamAdmin(uid) { return CREAM_ADMINS.includes(uid); }
+import { isManagementAdmin } from '@/lib/management-auth';
 
 export const INCIDENT_TYPES = [
   { id: 'armed_robbery', label: 'Armed Robbery', icon: 'dangerous', color: '#e53e3e' },
@@ -22,7 +21,7 @@ export const INCIDENT_TYPES = [
 export async function GET(request, { params }) {
   try {
     const user = await authenticateFirebaseRequest(request);
-    if (!isCreamAdmin(user.uid)) return NextResponse.json({ error: 'Unauthorised.' }, { status: 403 });
+    if (!isManagementAdmin(user)) return NextResponse.json({ error: 'Unauthorised.' }, { status: 403 });
 
     const { companyId } = await params;
     const db = getAdminFirestore();

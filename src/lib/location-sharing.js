@@ -38,6 +38,10 @@ const LocationSharingContext = createContext(null);
 
 function useLocationSharingController() {
   const { user } = useAuth();
+  const alive = useRef(true);
+  const sharingAllowed = useRef(false);
+  const consentVersion = useRef(0);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; sharingAllowed.current = false; }; }, []);
   const [isOptedIn, setIsOptedIn] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [lastPosition, setLastPosition] = useState(null);
@@ -61,13 +65,14 @@ function useLocationSharingController() {
 
   // Load consent status and cached GPS from localStorage on mount
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !user?.uid || localStorage.getItem('safelink_account_uid') !== user.uid) return;
     const timer = setTimeout(() => {
     const consent = localStorage.getItem(STORAGE_KEY_CONSENT) || localStorage.getItem(STORAGE_KEY_POPIA);
     const savedNickname = localStorage.getItem(STORAGE_KEY_NICKNAME);
     const cachedGpsRaw = localStorage.getItem(STORAGE_KEY_LAST_GPS);
 
     if (consent === 'granted') {
+      sharingAllowed.current = true;
       setIsOptedIn(true);
       localStorage.setItem(STORAGE_KEY_CONSENT, 'granted');
       localStorage.setItem(STORAGE_KEY_POPIA, 'granted');
@@ -85,7 +90,7 @@ function useLocationSharingController() {
     }
     }, 0);
     return () => clearTimeout(timer);
-  }, []);
+  }, [user?.uid]);
 
   /**
    * Helper to build auth token
@@ -107,16 +112,18 @@ function useLocationSharingController() {
    * Send location update to server.
    */
   const sendLocationUpdate = useCallback(async (pos) => {
-    if (!pos || pos.lat == null || pos.lng == null) return;
+    if (!alive.current || !sharingAllowed.current || !pos || pos.lat == null || pos.lng == null) return false;
 
     lastSentRef.current = Date.now();
 
     try {
       const token = await getAuthToken();
       if (!token) throw new Error('No authenticated location-sharing session');
+      if (!alive.current || !sharingAllowed.current) return false;
 
       const response = await fetch('/api/location/share', {
         method: 'POST',
+        signal: AbortSignal.timeout(15000),
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -136,6 +143,7 @@ function useLocationSharingController() {
         }),
       });
       if (!response.ok) throw new Error('Location upload failed');
+      if (!alive.current || !sharingAllowed.current) return false;
       setCheckedAt(Date.now());
       return true;
     } catch (err) {
@@ -154,6 +162,7 @@ function useLocationSharingController() {
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
+        if (!alive.current || !sharingAllowed.current) return;
         const pos = {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
@@ -197,6 +206,7 @@ function useLocationSharingController() {
    * Start GPS watch + periodic upload.
    */
   const startSharing = useCallback(() => {
+    if (!alive.current || !sharingAllowed.current || document.hidden) return;
     if (!navigator.geolocation) {
       setError('Geolocation is not supported by your browser');
       return;
@@ -240,75 +250,44 @@ function useLocationSharingController() {
       return false;
     }
 
-    return new Promise((resolve) => {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const pos = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-            altitude: position.coords.altitude,
-            speed: position.coords.speed,
-            heading: position.coords.heading,
-            timestamp: position.timestamp,
-          };
-
-          // Notify backend
-          const token = await getAuthToken();
-          if (!token) {
-            setError('Please sign in again to share this phone.');
-            resolve(false);
-            return;
-          }
-          const response = await fetch('/api/location/share', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({
-              action: 'opt_in',
-              nickname: user?.displayName || nickname,
-              consentTimestamp: new Date().toISOString(),
-              lat: pos.lat,
-              lng: pos.lng,
-              accuracy: pos.accuracy,
-            }),
-          });
-          if (!response.ok) {
-            setError('Could not enable location sharing. Please retry.');
-            resolve(false);
-            return;
-          }
-
-          localStorage.setItem(STORAGE_KEY_CONSENT, 'granted');
-          localStorage.setItem(STORAGE_KEY_POPIA, 'granted');
-          localStorage.setItem(STORAGE_KEY_LAST_GPS, JSON.stringify({
-            ...pos,
-            name: user?.displayName || nickname,
-            updatedAt: new Date().toISOString(),
-          }));
-          setLastPosition(pos);
-          setIsOptedIn(true);
-          setError(null);
-          window.dispatchEvent(new CustomEvent('safelink_phone_location_updated', { detail: pos }));
-
-          startSharing();
-          resolve(true);
-        },
-        (err) => {
-          setError(getLocationErrorMessage(err));
-          resolve(false);
-        },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
-      );
-    });
-  }, [getAuthToken, nickname, startSharing, user]);
+    const version = ++consentVersion.current;
+    try {
+      const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }));
+      const token = await getAuthToken();
+      if (!token) throw new Error('Please sign in again to share this phone.');
+      if (!alive.current || consentVersion.current !== version) return false;
+      const response = await fetch('/api/location/share', {
+        method: 'POST', signal: AbortSignal.timeout(15000),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'opt_in', nickname: user?.displayName || nickname, consentTimestamp: new Date().toISOString() }),
+      });
+      if (!response.ok) throw new Error('Could not enable location sharing. Please retry.');
+      if (!alive.current || consentVersion.current !== version) return false;
+      const pos = { lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy, altitude: position.coords.altitude, speed: position.coords.speed, heading: position.coords.heading, timestamp: position.timestamp };
+      localStorage.setItem(STORAGE_KEY_CONSENT, 'granted');
+      localStorage.setItem(STORAGE_KEY_POPIA, 'granted');
+      localStorage.setItem(STORAGE_KEY_LAST_GPS, JSON.stringify(pos));
+      sharingAllowed.current = true;
+      positionRef.current = pos;
+      setLastPosition(pos);
+      setIsOptedIn(true);
+      setError(null);
+      window.dispatchEvent(new CustomEvent('safelink_phone_location_updated', { detail: pos }));
+      // The shared provider owns the single watcher; its effect starts it.
+      return true;
+    } catch (err) {
+      if (alive.current) setError(err.code ? getLocationErrorMessage(err) : err.message || 'Could not enable location sharing. Please retry.');
+      return false;
+    }
+  }, [getAuthToken, nickname, user]);
 
   /**
    * Opt out — stop sharing and revoke consent.
    */
   const optOut = useCallback(async () => {
+    consentVersion.current++;
+    sharingAllowed.current = false;
+    positionRef.current = null;
     stopSharing();
     if (typeof window !== 'undefined') {
       localStorage.removeItem(STORAGE_KEY_CONSENT);
@@ -320,17 +299,23 @@ function useLocationSharingController() {
 
     try {
       const token = await getAuthToken();
-      if (!token) return;
-      await fetch('/api/location/share', {
+      if (!token) throw new Error('Please sign in again to revoke sharing.');
+      const response = await fetch('/api/location/share', {
         method: 'POST',
+        signal: AbortSignal.timeout(15000),
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ action: 'opt_out' }),
       });
+      if (!response.ok) throw new Error('Could not revoke sharing on the server.');
+      setError(null);
+      return true;
     } catch (err) {
       console.warn('[location-sharing] Opt-out notification failed:', err);
+      if (alive.current) setError('Phone tracking stopped locally, but server revocation failed. Please retry Decline / Later in GPS consent.');
+      return false;
     }
   }, [getAuthToken, stopSharing]);
 
@@ -348,6 +333,7 @@ function useLocationSharingController() {
     if (!isOptedIn || !navigator.geolocation) throw new Error('Location sharing is off');
     const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }));
     const pos = { lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy, altitude: position.coords.altitude, speed: position.coords.speed, heading: position.coords.heading, timestamp: position.timestamp };
+    if (!alive.current || !sharingAllowed.current) throw new Error('Location sharing is off');
     setLastPosition(pos);
     localStorage.setItem(STORAGE_KEY_LAST_GPS, JSON.stringify(pos));
     window.dispatchEvent(new CustomEvent('safelink_phone_location_updated', { detail: pos }));
@@ -371,15 +357,15 @@ function useLocationSharingController() {
           watchIdRef.current = null;
         }
       } else {
-        if (isOptedIn && isSharing && user && !user.isPartnerSession) {
-          startWatching();
+        if (isOptedIn && user && !user.isPartnerSession) {
+          startSharing();
         }
       }
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isOptedIn, isSharing, startWatching, user]);
+  }, [isOptedIn, startSharing, user]);
 
 
   return {
@@ -395,9 +381,14 @@ function useLocationSharingController() {
   };
 }
 
-export function LocationSharingProvider({ children }) {
+function AccountLocationSharingProvider({ children }) {
   const value = useLocationSharingController();
   return <LocationSharingContext.Provider value={value}>{children}</LocationSharingContext.Provider>;
+}
+
+export function LocationSharingProvider({ children }) {
+  const { user } = useAuth();
+  return <AccountLocationSharingProvider key={user?.uid || 'signed-out'}>{children}</AccountLocationSharingProvider>;
 }
 
 export function useLocationSharing() {

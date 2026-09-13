@@ -52,42 +52,20 @@ export function getAuraResponseTypeId(type) {
  * Retrieve active Aura configuration for a security company, falling back to env vars.
  */
 export async function getAuraConfigForCompany(companyId = null) {
-  const firestore = getAdminFirestore();
-
-  if (companyId) {
-    try {
-      const companyDoc = await firestore.collection('security_companies').doc(companyId).get();
-      if (companyDoc.exists) {
-        const data = companyDoc.data();
-        const aura = data.aura || {};
-        return {
-          enabled: typeof aura.enabled === 'boolean' ? aura.enabled : true,
-          clientId: aura.clientId || process.env.AURA_CLIENT_ID || '',
-          clientSecret: aura.clientSecret || process.env.AURA_CLIENT_SECRET || '',
-          environment: aura.environment || process.env.AURA_ENVIRONMENT || 'staging',
-          baseUrl: (aura.environment || process.env.AURA_ENVIRONMENT) === 'production'
-            ? 'https://panic.aura.services'
-            : 'https://staging-panic.aura.services',
-          defaultCustomerId: aura.defaultCustomerId || process.env.AURA_DEFAULT_CUSTOMER_ID || null,
-        };
-      }
-    } catch (e) {
-      console.warn('[aura] Error fetching company config:', e);
-    }
-  }
-
-  // Fallback to environment variables
-  const env = process.env.AURA_ENVIRONMENT || 'staging';
+  const environment = 'staging';
+  const disabled = { enabled: false, clientId: '', clientSecret: '', environment, baseUrl: 'https://staging-panic.aura.services', defaultCustomerId: null };
+  if (!companyId || companyId === 'safelink_default') return disabled;
+  const companyDoc = await getAdminFirestore().collection('security_companies').doc(companyId).get();
+  if (!companyDoc.exists) return disabled;
+  const company = companyDoc.data();
+  const aura = company.aura || {};
   return {
-    enabled: process.env.AURA_ENABLED !== 'false' && !!(process.env.AURA_CLIENT_ID || process.env.AURA_API_KEY),
-    clientId: process.env.AURA_CLIENT_ID || '',
-    clientSecret: process.env.AURA_CLIENT_SECRET || '',
-    apiKey: process.env.AURA_API_KEY || '',
-    environment: env,
-    baseUrl: env === 'production'
-      ? 'https://panic.aura.services'
-      : 'https://staging-panic.aura.services',
-    defaultCustomerId: process.env.AURA_DEFAULT_CUSTOMER_ID || null,
+    enabled: company.status === 'active' && aura.enabled === true && !!aura.clientId && !!aura.clientSecret,
+    clientId: aura.clientId || '',
+    clientSecret: aura.clientSecret || '',
+    environment: aura.environment || environment,
+    baseUrl: aura.environment === 'production' ? 'https://panic.aura.services' : disabled.baseUrl,
+    defaultCustomerId: aura.defaultCustomerId || null,
   };
 }
 
@@ -263,32 +241,10 @@ export async function dispatchEmergency({
 
   const config = await getAuraConfigForCompany(companyId);
 
-  // If Aura is disabled for this company, route to internal control room fleet
+  // An unconfigured company has no dispatch integration. Never fabricate a responder or ETA.
   if (!config.enabled) {
-    console.log(`[control-room] Aura disabled for company ${companyId}. Routing to internal fleet.`);
-    await incidentRef.update({
-      status: 'dispatched_internal',
-      dispatchMethod: 'control_room_internal',
-      eta: '5-9 minutes',
-      responder: {
-        company: partnerCode || 'Internal Response Fleet',
-        vehicle: 'PATROL-ALPHA',
-        officer: 'On-Duty Dispatch Officer',
-      },
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
-    return {
-      incidentId,
-      status: 'dispatched_internal',
-      eta: '5-9 minutes',
-      responder: {
-        company: partnerCode || 'Internal Response Fleet',
-        vehicle: 'PATROL-ALPHA',
-      },
-      message: 'Local armed response patrol dispatched from Control Room.',
-      isAura: false,
-    };
+    await incidentRef.update({ status: 'dispatch_unavailable', updatedAt: FieldValue.serverTimestamp() });
+    throw new Error('No response provider is configured for this account. Contact your emergency service directly.');
   }
 
   // ── LIVE: Call Aura Panic API v2 ──

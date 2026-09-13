@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useManagementFetch } from '@/lib/use-management-fetch';
 
 export const SA_ACCOUNTING_PACKAGES = [
   {
@@ -88,6 +89,8 @@ export const SA_CAMERA_BRANDS = [
 ];
 
 export default function ControlRoomPage() {
+  const [managementError, setManagementError] = useState('');
+  const managementFetch = useManagementFetch(setManagementError);
   const [activeTab, setActiveTab] = useState('incidents'); // 'incidents' | 'cameras' | 'aura' | 'fleet' | 'accounting'
   const [companyId, setCompanyId] = useState('safelink_default');
   const [company, setCompany] = useState(null);
@@ -122,8 +125,8 @@ export default function ControlRoomPage() {
   const fetchData = useCallback(async () => {
     try {
       const [compRes, incRes] = await Promise.all([
-        fetch(`/api/control-room/company?companyId=${companyId}`),
-        fetch(`/api/control-room/incidents?companyId=${companyId}`),
+        managementFetch(`/api/control-room/company?companyId=${companyId}`),
+        managementFetch(`/api/control-room/incidents?companyId=${companyId}`),
       ]);
       const compData = await compRes.json();
       const incData = await incRes.json();
@@ -134,7 +137,7 @@ export default function ControlRoomPage() {
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, managementFetch]);
 
   useEffect(() => {
     const initial = setTimeout(fetchData, 0);
@@ -156,7 +159,7 @@ export default function ControlRoomPage() {
     setCompany(updatedCompany);
 
     try {
-      await fetch('/api/control-room/company', {
+      await managementFetch('/api/control-room/company', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -174,7 +177,7 @@ export default function ControlRoomPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch('/api/control-room/company', {
+      const res = await managementFetch('/api/control-room/company', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -198,7 +201,7 @@ export default function ControlRoomPage() {
     setTestingAura(true);
     setTestResult(null);
     try {
-      const res = await fetch('/api/control-room/aura-test', {
+      const res = await managementFetch('/api/control-room/aura-test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -240,7 +243,7 @@ export default function ControlRoomPage() {
     setNewCam({ name: '', brand: 'Hikvision', ipOrHost: '', port: 554, channel: 1, streamUrl: '', apiKey: '' });
 
     try {
-      await fetch('/api/control-room/company', {
+      await managementFetch('/api/control-room/company', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -260,7 +263,7 @@ export default function ControlRoomPage() {
     setCompany({ ...company, cameras: updatedCameras });
 
     try {
-      await fetch('/api/control-room/company', {
+      await managementFetch('/api/control-room/company', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -278,7 +281,7 @@ export default function ControlRoomPage() {
     e.preventDefault();
     setSavingAccounting(true);
     try {
-      const res = await fetch('/api/control-room/company', {
+      const res = await managementFetch('/api/control-room/company', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -302,7 +305,7 @@ export default function ControlRoomPage() {
     setTestingAccounting(true);
     setAccountingTestResult(null);
     try {
-      const res = await fetch('/api/control-room/accounting-test', {
+      const res = await managementFetch('/api/control-room/accounting-test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -329,7 +332,7 @@ export default function ControlRoomPage() {
     e.preventDefault();
     setSavingCameraSystem(true);
     try {
-      const res = await fetch('/api/control-room/company', {
+      const res = await managementFetch('/api/control-room/company', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -351,7 +354,7 @@ export default function ControlRoomPage() {
   // Update Incident Status
   const handleUpdateIncident = async (incidentId, status) => {
     try {
-      await fetch('/api/control-room/incidents', {
+      await managementFetch('/api/control-room/incidents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ incidentId, status }),
@@ -364,6 +367,7 @@ export default function ControlRoomPage() {
 
   return (
     <div className="bg-[#040d16] text-on-background min-h-screen flex flex-col font-sans selection:bg-secondary/30 selection:text-secondary">
+      {managementError && <p role="alert" className="p-4 text-error">{managementError}</p>}
       {/* Control Room Top Banner */}
       <header className="bg-[#07131f] border-b border-white/10 px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-30 shadow-md">
         <div className="flex items-center gap-4">

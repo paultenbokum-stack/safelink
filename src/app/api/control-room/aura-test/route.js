@@ -1,7 +1,10 @@
+import { managementAccessError } from '@/lib/management-auth';
 import { NextResponse } from 'next/server';
 import { getAuraConfigForCompany, getAuraBearerToken } from '@/lib/aura';
 
 export async function POST(request) {
+  const accessError = await managementAccessError(request);
+  if (accessError) return accessError;
   try {
     const body = await request.json();
     const companyId = body.companyId;

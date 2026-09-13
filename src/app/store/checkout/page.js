@@ -40,7 +40,12 @@ function CheckoutContent() {
   useEffect(() => {
     const stored = sessionStorage.getItem('safelink_cart');
     if (!stored) { router.replace('/store'); return; }
-    const timer = window.setTimeout(() => setCart(JSON.parse(stored)), 0);
+    let restored;
+    try {
+      restored = JSON.parse(stored);
+      if (!Array.isArray(restored) || !restored.length || restored.some(item => !SENTINEL_PRODUCTS.some(product => product.id === item.id) || !Number.isInteger(item.qty) || item.qty < 1 || item.qty > 1000)) throw new Error('Invalid cart');
+    } catch { sessionStorage.removeItem('safelink_cart'); router.replace('/store'); return; }
+    const timer = window.setTimeout(() => setCart(restored), 0);
     return () => window.clearTimeout(timer);
   }, [router]);
 
@@ -59,12 +64,12 @@ function CheckoutContent() {
           postalCode:   h.address?.postalCode || '',
         });
       }
-    });
+    }).catch(() => { /* Delivery details can be entered manually. */ });
   }, [user]);
 
   const pricedCart = cart.map((item) => {
     const product = SENTINEL_PRODUCTS.find((candidate) => candidate.id === item.id) ?? item;
-    return { ...item, ...getLinePriceBreakdown(product, item.qty) };
+    return { ...product, ...item, ...getLinePriceBreakdown(product, item.qty) };
   });
   const subtotal = roundCurrency(pricedCart.reduce((sum, item) => sum + item.subtotalExVat, 0));
   const vat      = roundCurrency(subtotal * VAT_RATE);
@@ -183,7 +188,7 @@ function CheckoutContent() {
         ))}
       </div>
 
-      {error && <div className="checkout-error">{error}</div>}
+      {error && <div role="alert" className="checkout-error">{error}</div>}
 
       {/* Step 1: Review cart */}
       {step === 1 && (
@@ -296,6 +301,7 @@ function CField({ label, value, onChange, type = 'text', pattern }) {
       <label className="field-label">{label}</label>
       <input
         type={type}
+        aria-label={label}
         className="field-input"
         value={value}
         onChange={onChange}
@@ -310,7 +316,8 @@ function CheckoutStyles() {
   return (
     <style dangerouslySetInnerHTML={{ __html: `
       .checkout-page {
-        min-height: 100vh;
+        min-height: 100dvh;
+        padding-bottom: calc(96px + env(safe-area-inset-bottom));
         background: var(--bg-dark, #0f1923);
         color: var(--text-primary, #fff);
         display: flex; flex-direction: column;

@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { useLocationSharing } from '@/lib/location-sharing';
 
-const GPS_ROUTES = ['/dashboard', '/map', '/devices', '/family'];
+const GPS_ROUTES = ['/dashboard', '/map', '/devices', '/family', '/profile', '/profile/family'];
 
 export default function GpsConsentModal() {
   const { user } = useAuth();
@@ -39,10 +39,10 @@ export default function GpsConsentModal() {
 
   const handleDecline = async () => {
     setIsSaving(true);
-    await optOut();
-    localStorage.setItem('popia_gps_consent', 'denied');
+    const revoked = await optOut();
+    if (revoked) localStorage.setItem('popia_gps_consent', 'denied');
     setIsSaving(false);
-    setIsOpen(false);
+    if (revoked) setIsOpen(false);
   };
 
   if (!mayShare || !GPS_ROUTES.includes(pathname) || !isOpen) return null;

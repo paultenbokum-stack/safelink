@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useManagementFetch } from '@/lib/use-management-fetch';
 import PartnerIntegrations from '@/app/components/PartnerIntegrations';
 import { DEMO_COMPANIES } from '@/lib/demo-companies';
 import { SA_BANKS } from '@/lib/banks';
@@ -9,6 +10,8 @@ import { formatZAR } from '@/lib/products';
 import { useAuth } from '@/lib/auth-context';
 
 export default function CreamMasterPage() {
+  const [managementError, setManagementError] = useState('');
+  const managementFetch = useManagementFetch(setManagementError);
   const { user } = useAuth();
   const [metrics, setMetrics] = useState(null);
   const [companies, setCompanies] = useState(DEMO_COMPANIES);
@@ -55,7 +58,7 @@ export default function CreamMasterPage() {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
       // 1. Fetch metrics
-      const metricsRes = await fetch('/api/cream/metrics', { headers }).catch(() => null);
+      const metricsRes = await managementFetch('/api/cream/metrics', { headers }).catch(() => null);
       if (metricsRes && metricsRes.ok) {
         const metricsData = await metricsRes.json();
         setMetrics(metricsData);
@@ -64,7 +67,7 @@ export default function CreamMasterPage() {
         }
       } else {
         // Fallback to legacy companies list
-        const compRes = await fetch('/api/cream/companies').catch(() => null);
+        const compRes = await managementFetch('/api/cream/companies').catch(() => null);
         if (compRes && compRes.ok) {
           const compData = await compRes.json();
           setCompanies(compData.companies?.length ? compData.companies : DEMO_COMPANIES);
@@ -75,10 +78,11 @@ export default function CreamMasterPage() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, managementFetch]);
 
   useEffect(() => {
-    fetchDashboardData();
+    const timer = setTimeout(fetchDashboardData, 0);
+    return () => clearTimeout(timer);
   }, [fetchDashboardData]);
 
   const handleToggleStatus = async (companyId, currentStatus) => {
@@ -88,7 +92,7 @@ export default function CreamMasterPage() {
     }
     const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
     try {
-      await fetch('/api/cream/companies', {
+      await managementFetch('/api/cream/companies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -109,7 +113,7 @@ export default function CreamMasterPage() {
     setSavingCompany(true);
 
     try {
-      const res = await fetch('/api/cream/companies', {
+      const res = await managementFetch('/api/cream/companies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -175,7 +179,7 @@ export default function CreamMasterPage() {
       let token = null;
       if (user) token = await user.getIdToken().catch(() => null);
 
-      const res = await fetch('/api/cream/invites', {
+      const res = await managementFetch('/api/cream/invites', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -211,6 +215,7 @@ export default function CreamMasterPage() {
 
   return (
     <div className="bg-[#03070f] text-on-background min-h-screen flex flex-col font-sans selection:bg-purple-500/30 selection:text-purple-300">
+      {managementError && <p role="alert" className="p-4 text-error">{managementError}</p>}
       {/* Executive Top Banner */}
       <header className="bg-gradient-to-r from-[#0d091a] via-[#100c24] to-[#0d091a] border-b border-purple-500/20 px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-30 shadow-2xl">
         <div className="flex items-center gap-4">

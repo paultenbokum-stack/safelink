@@ -34,6 +34,7 @@ const notification = { id: 'family:fixture', title: 'Family safety alert', body:
     const version = await fetch(base + '/api/app-version').then(response => response.json());
     await context.route(base + '/api/**', async route => {
       const request = route.request(); const path = new URL(request.url()).pathname;
+      if (path === '/api/paystack/initialize') return route.fulfill({ status: 502, json: { error: 'Mock gateway unavailable. Please retry.' } });
       if (path === '/api/app-version') { versionRequests++; return route.fulfill({ json: version }); }
       if (path === '/api/profile/setup') return route.fulfill({ json: { household: { adminFirstName: 'Kyle', adminLastName: 'Fixture', householdName: 'Saffy Home', members: [], subscription: { tier: 'premium' } } } });
       if (path === '/api/profile/avatar') return route.fulfill({ json: { avatarUrl: null } });
@@ -91,6 +92,10 @@ const notification = { id: 'family:fixture', title: 'Family safety alert', body:
     await page.getByRole('button', { name: 'Close tracker details' }).click();
     await page.getByText('Battery 0%', { exact: true }).waitFor({ state: 'detached' });
     assert.equal(await page.getByRole('button', { name: 'Close tracker details' }).count(), 0);
+    const beforePoll = requests;
+    await page.waitForTimeout(16000);
+    assert.ok(requests > beforePoll, 'A real map poll occurred');
+    assert.equal(await page.getByRole('button', { name: 'Close tracker details' }).count(), 0, 'Polling must not reopen minimized details');
     await page.locator('summary').filter({ hasText: 'Map tools' }).click();
     await page.getByRole('button', { name: 'Live · 1 device' }).click();
     await page.getByText('Battery 0%', { exact: true }).waitFor();
@@ -99,6 +104,9 @@ const notification = { id: 'family:fixture', title: 'Family safety alert', body:
     await page.getByText('Phone sharing on', { exact: true }).waitFor();
     await page.getByText('Shown on map', { exact: true }).waitFor();
     await page.getByText('Sharing enabled · last report just now', { exact: true }).first().waitFor();
+    await page.getByRole('button', { name: /Review Consent/i }).click();
+    await page.getByText('POPIA GPS Consent', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Decline / Later' }).click();
     await page.goto(base + '/notifications');
     await page.getByText('Family safety alert', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Acknowledge alert' }).click();
@@ -117,6 +125,33 @@ const notification = { id: 'family:fixture', title: 'Family safety alert', body:
     await page.locator('summary').filter({ hasText: 'Map tools' }).waitFor();
     await page.waitForFunction(() => window.__gpsWatchStarts > 0);
     assert.equal(await page.evaluate(() => window.__gpsWatchStarts), 1, 'Only one shared GPS watcher starts for the app');
+    // Exercise a real basket and delivery review with all backend traffic mocked.
+    await page.evaluate(() => { localStorage.setItem('popia_gps_consent', 'denied'); localStorage.removeItem('safelink_location_sharing_consent'); });
+    await page.goto(base + '/store');
+    await page.getByRole('button', { name: 'Add to Cart', exact: true }).first().click();
+    const basket = page.getByRole('dialog', { name: 'Shopping basket' });
+    await basket.waitFor();
+    assert.equal(await basket.locator('input[type=range]').count(), 0);
+    for (const [width, height] of [[320,568],[375,734],[390,844]]) {
+      await page.setViewportSize({ width, height });
+      const checkout = basket.getByRole('button', { name: /Secure checkout/ });
+      const box = await checkout.boundingBox();
+      assert.ok(box.y >= 0 && box.y + box.height <= height, 'Checkout stays in viewport');
+      assert.equal(await checkout.evaluate(el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); }), true, 'Checkout is not covered by navigation');
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    }
+    await page.screenshot({ path: '.vercel/qa-refresh/basket-compact.png' });
+    await basket.getByRole('button', { name: /Secure checkout/ }).click();
+    await page.waitForURL('**/store/checkout');
+    await page.getByRole('button', { name: 'Confirm Order →' }).click();
+    await page.getByRole('button', { name: 'Proceed to Payment →' }).waitFor();
+    await page.screenshot({ path: '.vercel/qa-refresh/checkout-delivery.png' });
+    for (const [label,value] of Object.entries({'Full Name':'Kyle Fixture','Phone':'0820000000','Street Address':'1 Test Road','Suburb':'Test','City':'Durban','Province':'KwaZulu-Natal','Postal Code':'4001'})) await page.getByRole('textbox', {name: label, exact: true}).fill(value);
+    await page.getByRole('button', { name: 'Proceed to Payment →' }).click();
+    await page.getByRole('button', { name: /Pay .* Securely/ }).click();
+    await page.getByRole('alert').filter({ hasText: 'Mock gateway unavailable' }).waitFor();
+    assert.equal(await page.getByRole('button', { name: /Pay .* Securely/ }).isEnabled(), true);
+    console.log('PASS: compact basket, unobscured checkout at 320/375/390px, delivery to payment, failed gateway message and retry without a charge.');
     assert.deepEqual(errors, []);
     console.log('PASS: isolated mocked sign-in, compact header, themes, global/device refresh, zero battery, stale report, 320/360/390px layout, one-finger map touch policy, fully hidden/reopened map telemetry, one shared GPS watcher, acknowledgement and saved preferences.');
   } finally { await browser.close(); }

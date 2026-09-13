@@ -3,8 +3,7 @@ import { NextResponse } from 'next/server';
 import { getAdminFirestore, authenticateFirebaseRequest } from '@/lib/firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
-const CREAM_ADMINS = (process.env.CREAM_ADMIN_UIDS || '').split(',').map(s => s.trim()).filter(Boolean);
-function isCreamAdmin(uid) { return CREAM_ADMINS.includes(uid); }
+import { isManagementAdmin } from '@/lib/management-auth';
 
 /**
  * GET /api/cream/invites
@@ -13,7 +12,7 @@ function isCreamAdmin(uid) { return CREAM_ADMINS.includes(uid); }
 export async function GET(request) {
   try {
     const user = await authenticateFirebaseRequest(request);
-    if (!isCreamAdmin(user.uid)) return NextResponse.json({ error: 'Unauthorised.' }, { status: 403 });
+    if (!isManagementAdmin(user)) return NextResponse.json({ error: 'Unauthorised.' }, { status: 403 });
 
     const db = getAdminFirestore();
     const snap = await db.collection('companyInvites').orderBy('createdAt', 'desc').limit(50).get();
@@ -34,7 +33,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const user = await authenticateFirebaseRequest(request);
-    if (!isCreamAdmin(user.uid)) return NextResponse.json({ error: 'Unauthorised.' }, { status: 403 });
+    if (!isManagementAdmin(user)) return NextResponse.json({ error: 'Unauthorised.' }, { status: 403 });
 
     const body = await request.json();
     const { companyName, contactEmail, notes } = body;

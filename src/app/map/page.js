@@ -286,6 +286,7 @@ function LiveFamilyMapContent() {
   const [members, setMembers] = useState([]);
   const [geofences, setGeofences] = useState([]);
   const [selectedMember, setSelectedMember] = useState(null);
+  const detailsDismissed = useRef(false);
   const [showGeofences, setShowGeofences] = useState(true);
   const [mapReady, setMapReady] = useState(false);
   const [mapProvider, setMapProvider] = useState('leaflet'); // 'google' | 'mapbox' | 'leaflet'
@@ -416,7 +417,7 @@ function LiveFamilyMapContent() {
 
             setMembers(partnerMembers);
             setSelectedMember((prev) => {
-              if (!prev) return partnerMembers.find(m => m.id === new URLSearchParams(window.location.search).get('device')) || partnerMembers[0];
+              if (!prev) return detailsDismissed.current ? null : partnerMembers.find(m => m.id === new URLSearchParams(window.location.search).get('device')) || partnerMembers[0];
               const match = partnerMembers.find((m) => m.id === prev.id);
               return match || partnerMembers[0];
             });
@@ -590,7 +591,7 @@ function LiveFamilyMapContent() {
       if (allMembers.length > 0) {
         setMembers(allMembers);
         setSelectedMember((prev) => {
-          if (!prev) return allMembers.find(m => m.id === new URLSearchParams(window.location.search).get('device')) || allMembers[0];
+          if (!prev) return detailsDismissed.current ? null : allMembers.find(m => m.id === new URLSearchParams(window.location.search).get('device')) || allMembers[0];
           const match = allMembers.find((m) => m.id === prev.id);
           return match || allMembers[0];
         });
@@ -1246,17 +1247,8 @@ function LiveFamilyMapContent() {
     setPhoneToggling(true);
     if (isBroadcasting) {
       await optOutPhoneSharing();
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('popia_gps_consent');
-        localStorage.removeItem('safelink_location_sharing_consent');
-        localStorage.removeItem('last_known_pwa_gps');
-      }
     } else {
       await optInPhoneSharing();
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('popia_gps_consent', 'granted');
-        localStorage.setItem('safelink_location_sharing_consent', 'granted');
-      }
     }
     // Immediate refresh
     setTimeout(() => {
@@ -1358,7 +1350,7 @@ function LiveFamilyMapContent() {
           <div className="glass-panel shadow-2xl border border-white/15 backdrop-blur-xl bg-surface-container-high/90 rounded-2xl p-sm sm:p-md max-h-[55dvh] overflow-y-auto">
             <button
               type="button"
-              onClick={() => setSelectedMember(null)}
+              onClick={() => { detailsDismissed.current = true; setSelectedMember(null); }}
               aria-label="Close tracker details"
               title="Close tracker details"
               className="w-full flex justify-center items-center py-1 cursor-pointer group select-none"

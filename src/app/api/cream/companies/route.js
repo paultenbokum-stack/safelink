@@ -1,3 +1,4 @@
+import { managementAccessError } from '@/lib/management-auth';
 import { NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { DEMO_COMPANIES } from '@/lib/demo-companies';
@@ -7,7 +8,9 @@ import { FieldValue } from 'firebase-admin/firestore';
  * GET /api/cream/companies
  * CREAM Master Route: List all security companies and their operational status.
  */
-export async function GET() {
+export async function GET(request) {
+  const accessError = await managementAccessError(request);
+  if (accessError) return accessError;
   try {
     const firestore = getAdminFirestore();
     const snap = await firestore.collection('security_companies').get();
@@ -33,6 +36,8 @@ export async function GET() {
  * CREAM Master Route: Onboard new security company or toggle status (active / suspended).
  */
 export async function POST(request) {
+  const accessError = await managementAccessError(request);
+  if (accessError) return accessError;
   try {
     const body = await request.json();
     const { action, companyId, status, newCompany } = body;

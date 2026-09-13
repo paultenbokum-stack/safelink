@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { NextResponse } from 'next/server';
-import { authenticateFirebaseRequest, savePaymentIntent } from '@/lib/firebase-admin';
+import { authenticateFirebaseRequest, savePaymentIntent, getAdminFirestore } from '@/lib/firebase-admin';
 import {
   CheckoutInputError,
   buildCanonicalCheckout,
@@ -22,7 +22,7 @@ export async function POST(request) {
     const customer = await authenticateFirebaseRequest(request);
     const email = normaliseEmail(customer.email);
     const body = await request.json();
-    const { cart, delivery, companyId } = body;
+    const { cart, delivery } = body;
     const checkout = buildCanonicalCheckout(cart);
     const safeDelivery = normaliseDelivery(delivery);
     const secret = getPaystackSecret();
@@ -30,7 +30,7 @@ export async function POST(request) {
 
     // Check if customer is linked to a security company with a Paystack subaccount
     const db = getAdminFirestore();
-    let effectiveCompanyId = companyId || null;
+    let effectiveCompanyId = null;
     if (!effectiveCompanyId) {
       const householdDoc = await db.collection('households').doc(customer.uid).get();
       if (householdDoc.exists) {

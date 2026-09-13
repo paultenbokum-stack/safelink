@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAdminFirestore, authenticateFirebaseRequest } from '@/lib/firebase-admin';
 
-const CREAM_ADMINS = (process.env.CREAM_ADMIN_UIDS || '').split(',').map(s => s.trim()).filter(Boolean);
-function isCreamAdmin(uid) { return CREAM_ADMINS.includes(uid); }
+import { isManagementAdmin } from '@/lib/management-auth';
 
 function classifyArrears(household) {
   const sub = household.subscription;
@@ -22,7 +21,7 @@ function classifyArrears(household) {
 export async function GET(request, { params }) {
   try {
     const user = await authenticateFirebaseRequest(request);
-    if (!isCreamAdmin(user.uid)) return NextResponse.json({ error: 'Unauthorised.' }, { status: 403 });
+    if (!isManagementAdmin(user)) return NextResponse.json({ error: 'Unauthorised.' }, { status: 403 });
 
     const { companyId } = await params;
     const db = getAdminFirestore();

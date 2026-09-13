@@ -1,14 +1,18 @@
+import { managementAccessError } from '@/lib/management-auth';
 import { NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 
 export async function GET(request) {
+  const accessError = await managementAccessError(request);
+  if (accessError) return accessError;
   try {
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get('companyId');
     const firestore = getAdminFirestore();
 
-    let query = firestore.collection('incidents').orderBy('createdAt', 'desc').limit(25);
+    if (!companyId) return NextResponse.json({ error: 'Company is required.' }, { status: 400 });
+    const query = firestore.collection('incidents').where('companyId', '==', companyId).orderBy('createdAt', 'desc').limit(25);
     const snap = await query.get();
 
     const incidents = [];
@@ -30,6 +34,8 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  const accessError = await managementAccessError(request);
+  if (accessError) return accessError;
   try {
     const body = await request.json();
     const { incidentId, status, notes } = body;

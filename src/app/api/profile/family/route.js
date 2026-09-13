@@ -30,7 +30,7 @@ async function addSharingStatus(firestore, guardianUid, members) {
     return {
       ...member,
       sharingEnabled: consent.exists && consent.data()?.consentGranted === true,
-      lastReportedAt: location.exists ? isoTime(location.data()?.updatedAt || location.data()?.gpsTime) : null,
+      lastReportedAt: location.exists ? isoTime(location.data()?.gpsTime || location.data()?.updatedAt) : null,
     };
   }));
 }
@@ -77,6 +77,6 @@ export async function PUT(request) {
       tx.set(ref, { members: list, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       return list;
     });
-    return NextResponse.json({ members: saved });
+    return NextResponse.json({ members: await addSharingStatus(firestore, uid, saved) });
   } catch (error) { return failure(error); }
 }

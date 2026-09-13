@@ -1,7 +1,10 @@
+import { managementAccessError } from '@/lib/management-auth';
 import { NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 
 export async function POST(request) {
+  const accessError = await managementAccessError(request);
+  if (accessError) return accessError;
   try {
     const body = await request.json();
     const { companyId, provider, apiKey, clientId, companyIdParam, environment, endpoint } = body;
@@ -44,14 +47,9 @@ export async function POST(request) {
     }
 
     return NextResponse.json({
-      success: true,
-      provider: friendlyName,
-      environment: environment || 'production',
-      latencyMs,
-      clientCount: Math.floor(Math.random() * 80) + 120, // realistic active security clients
-      lastSync: new Date().toISOString(),
-      message: `Handshake successful with ${friendlyName} (${environment || 'production'}). Ready to sync client accounts and auto-generate subscription invoices.`,
-    });
+      success: false,
+      error: `A live ${friendlyName} connector has not been configured. Credentials have not been verified and no accounts have been synced.`,
+    }, { status: 501 });
   } catch (err) {
     return NextResponse.json({
       success: false,

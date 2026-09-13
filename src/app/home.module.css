@@ -9,6 +9,7 @@
 .contact{padding-inline:var(--content-gutter)}
 .footer{padding-inline:var(--content-gutter)}
 .dispatchSection,.partnerBanner{width:calc(100% - (2 * var(--content-gutter)));max-width:calc(var(--content-max) - 128px)}
+.mapGrid{background-image:linear-gradient(rgba(235,242,244,.12),rgba(215,229,233,.2)),url('/safelink-dispatch-map.svg');background-position:55% 47%;background-size:430px auto}
 .dispatchMap{background-image:linear-gradient(rgba(3,19,31,.42),rgba(3,19,31,.56)),url('/safelink-dispatch-map.svg');background-position:center;background-size:cover;filter:saturate(.72) brightness(.82)}
 .dispatchMap:after{background:radial-gradient(circle at 60% 48%,rgba(15,151,110,.22),transparent 24%),linear-gradient(90deg,rgba(3,19,31,.05),#071c29 118%)}
 @media(max-width:980px){.dispatchSection,.partnerBanner{width:auto;max-width:none}}

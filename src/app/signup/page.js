@@ -20,6 +20,26 @@ const SA_PROVINCES = [
   'Northern Cape',
 ];
 
+const PASSWORD_LEVELS = [
+  { label: 'Too short', color: '#ffb4ab', segments: 1 },
+  { label: 'Weak', color: '#ffb4ab', segments: 1 },
+  { label: 'Fair', color: '#f59e0b', segments: 2 },
+  { label: 'Good', color: '#60a5fa', segments: 3 },
+  { label: 'Strong', color: '#34d399', segments: 4 },
+];
+
+function getPasswordStrength(password) {
+  if (!password) return { label: 'Enter a password', color: 'var(--on-surface-variant)', segments: 0 };
+  if (password.length < 8) return PASSWORD_LEVELS[0];
+
+  let score = 1;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1;
+  if (/\d/.test(password)) score += 1;
+  if (/[^A-Za-z0-9]/.test(password)) score += 1;
+  if (password.length >= 12) score += 1;
+  return PASSWORD_LEVELS[Math.min(4, score)];
+}
+
 export default function SignUpPage() {
   const router = useRouter();
   const { register, verifyEmail } = useAuth();
@@ -55,6 +75,7 @@ export default function SignUpPage() {
   });
 
   const passwordsMismatch = confirmPassword.length > 0 && confirmPassword !== formData.password;
+  const passwordStrength = getPasswordStrength(formData.password);
 
   const updateField = (field) => (e) => {
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));
@@ -76,8 +97,8 @@ export default function SignUpPage() {
     setError('');
 
     if (step === 1) {
-      if (formData.password.length < 12 || formData.password !== confirmPassword) {
-        setError('Use a password of at least 12 characters and make sure both passwords match.');
+      if (formData.password.length < 8 || formData.password !== confirmPassword) {
+        setError('Use a password of at least 8 characters and make sure both passwords match.');
         return;
       }
       const cleanPhone = formData.phone.replace(/\s/g, '');
@@ -103,8 +124,8 @@ export default function SignUpPage() {
     e.preventDefault();
     setError('');
 
-    if (formData.password.length < 12 || formData.password !== confirmPassword) {
-      setError('Your passwords must match and contain at least 12 characters.');
+    if (formData.password.length < 8 || formData.password !== confirmPassword) {
+      setError('Your passwords must match and contain at least 8 characters.');
       setStep(1);
       return;
     }
@@ -286,11 +307,21 @@ export default function SignUpPage() {
               />
             </div>
 
-            <label className="text-sm text-on-surface-variant" htmlFor="signup-password">Account password (at least 12 characters)
-              <input id="signup-password" required type="password" autoComplete="new-password" minLength={12} value={formData.password} onChange={updateField('password')} className="block w-full bg-surface-container-low border border-white/10 rounded-xl px-3 py-3 mt-2 text-on-surface" />
+            <label className="text-sm text-on-surface-variant" htmlFor="signup-password">Account password (at least 8 characters)
+              <input id="signup-password" required type="password" autoComplete="new-password" minLength={8} value={formData.password} onChange={updateField('password')} aria-describedby="password-strength signup-password-help" className="block w-full bg-surface-container-low border border-white/10 rounded-xl px-3 py-3 mt-2 text-on-surface" />
+              <span className="block mt-2 space-y-1.5">
+                <span id="password-strength" aria-live="polite" className="flex items-center justify-between text-xs">
+                  <span>Password strength</span>
+                  <strong style={{ color: passwordStrength.color }}>{passwordStrength.label}</strong>
+                </span>
+                <span className="grid grid-cols-4 gap-1.5" aria-hidden="true">
+                  {[0, 1, 2, 3].map((segment) => <span key={segment} className="h-1.5 rounded-full transition-colors" style={{ backgroundColor: segment < passwordStrength.segments ? passwordStrength.color : 'rgba(255,255,255,0.1)' }} />)}
+                </span>
+                <span id="signup-password-help" className="block text-xs text-on-surface-variant">Use uppercase and lowercase letters, numbers and symbols for a stronger password.</span>
+              </span>
             </label>
             <label className="text-sm text-on-surface-variant" htmlFor="confirm-password">Confirm password
-              <input id="confirm-password" required type="password" autoComplete="new-password" minLength={12} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} aria-invalid={passwordsMismatch} aria-describedby={passwordsMismatch ? 'password-match-error' : undefined} className="block w-full bg-surface-container-low border border-white/10 rounded-xl px-3 py-3 mt-2 text-on-surface" />
+              <input id="confirm-password" required type="password" autoComplete="new-password" minLength={8} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} aria-invalid={passwordsMismatch} aria-describedby={passwordsMismatch ? 'password-match-error' : undefined} className="block w-full bg-surface-container-low border border-white/10 rounded-xl px-3 py-3 mt-2 text-on-surface" />
             </label>
             {passwordsMismatch && <p id="password-match-error" role="status" className="text-sm text-error">Passwords do not match. Please enter the same password in both fields.</p>}
             <div role="note" className="p-3 rounded-xl bg-secondary/10 border border-secondary/25 flex items-start gap-2.5 text-sm text-on-surface-variant">

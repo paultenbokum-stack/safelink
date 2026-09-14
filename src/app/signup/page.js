@@ -365,18 +365,21 @@ export default function SignUpPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-on-surface-variant">Your Role in Circle</label>
+                <label htmlFor="circle-role" className="text-xs font-semibold text-on-surface-variant">Your role in this household</label>
                 <select
+                  id="circle-role"
                   value={formData.circleRole}
                   onChange={updateField('circleRole')}
+                  aria-describedby="circle-role-help"
                   className="bg-surface-container-low border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-on-surface outline-none focus:border-secondary transition-colors"
                 >
-                  <option value="Primary Guardian">Primary Guardian / Admin</option>
-                  <option value="Co-Guardian">Co-Guardian / Partner</option>
-                  <option value="Family Member">Family Member</option>
-                  <option value="Teen/Child">Teen / Student</option>
-                  <option value="Senior">Senior / Elder</option>
+                  <option value="Primary Guardian">Primary account holder / guardian</option>
+                  <option value="Co-Guardian">Co-guardian / partner</option>
+                  <option value="Family Member">Household member</option>
+                  <option value="Teen/Child">Teen / child</option>
+                  <option value="Senior">Senior member</option>
                 </select>
+                <p id="circle-role-help" className="text-xs text-on-surface-variant">Describes your place in the household profile. As the person creating it, you remain the account administrator.</p>
               </div>
             </div>
 
@@ -488,10 +491,12 @@ export default function SignUpPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-on-surface-variant">Relationship *</label>
+                <label htmlFor="emergency-relationship" className="text-xs font-semibold text-on-surface-variant">Emergency contact’s relationship to you *</label>
                 <select
+                  id="emergency-relationship"
                   value={formData.emergencyRelation}
                   onChange={updateField('emergencyRelation')}
+                  aria-describedby="emergency-relationship-help"
                   className="bg-surface-container-low border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-on-surface outline-none focus:border-secondary transition-colors"
                 >
                   <option value="Spouse">Spouse / Partner</option>
@@ -501,6 +506,7 @@ export default function SignUpPage() {
                   <option value="Close Friend">Close Friend</option>
                   <option value="Estate Security">Estate Security Officer</option>
                 </select>
+                <p id="emergency-relationship-help" className="text-xs text-on-surface-variant">Describes the person SafeLink should contact during an SOS. It does not give them access to your account or location.</p>
               </div>
             </div>
 

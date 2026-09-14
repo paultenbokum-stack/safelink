@@ -43,6 +43,20 @@ const assert = require('node:assert/strict');
    await page.getByText('Emergency contact’s relationship to you *',{exact:true}).waitFor();
    await page.getByText(/does not give them access to your account or location/i).waitFor();
    await page.screenshot({path:'.vercel/qa/signup-emergency-relationship.png',fullPage:true});
+   const submit=page.getByRole('button',{name:/Create Account & Verify Email/i});
+   const submitIcon=submit.locator('.material-symbols-outlined');
+   for(const width of [320,390,768]) {
+    await page.setViewportSize({width,height:844});
+    const [buttonBox,iconBox]=await Promise.all([submit.boundingBox(),submitIcon.boundingBox()]);
+    assert.ok(buttonBox && iconBox,`Signup action geometry is available at ${width}px`);
+    const rightInset=(buttonBox.x+buttonBox.width)-(iconBox.x+iconBox.width);
+    assert.ok(rightInset>=14 && rightInset<=18,`Rocket right inset is 16px at ${width}px (received ${rightInset}px)`);
+    assert.ok(iconBox.y>=buttonBox.y && iconBox.y+iconBox.height<=buttonBox.y+buttonBox.height,`Rocket stays vertically inside the action at ${width}px`);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false,`No signup overflow at ${width}px`);
+    await submit.scrollIntoViewIfNeeded();
+    await page.screenshot({path:`.vercel/qa/signup-action-${width}.png`,fullPage:true});
+   }
+   await page.setViewportSize({width:390,height:844});
   }
   if(route==='/login/verify') await page.getByText(/mark it as Not spam before opening the verification link/i).waitFor();
   await page.screenshot({path:'.vercel/qa/'+route.slice(1)+'.png',fullPage:true});

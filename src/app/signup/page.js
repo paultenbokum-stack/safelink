@@ -542,18 +542,18 @@ export default function SignUpPage() {
               </span>
             </div>
 
-            <div className="flex items-center gap-3 mt-2">
+            <div className="grid grid-cols-1 min-[360px]:grid-cols-3 gap-3 mt-2">
               <button
                 type="button"
                 onClick={() => setStep(2)}
-                className="w-1/3 bg-white/5 hover:bg-white/10 text-on-surface py-3.5 rounded-xl text-sm font-semibold transition-all"
+                className="w-full min-[360px]:col-span-1 bg-white/5 hover:bg-white/10 text-on-surface py-3.5 rounded-xl text-sm font-semibold transition-all"
               >
                 ← Back
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="w-2/3 bg-secondary hover:bg-secondary-fixed text-on-secondary py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(247,187,35,0.35)] active:scale-95 transition-all cursor-pointer"
+                className="relative w-full min-[360px]:col-span-2 min-h-[52px] bg-secondary hover:bg-secondary-fixed text-on-secondary px-4 py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(247,187,35,0.35)] active:scale-95 transition-all cursor-pointer"
               >
                 {loading ? (
                   <>
@@ -562,8 +562,8 @@ export default function SignUpPage() {
                   </>
                 ) : (
                   <>
-                    <span>Create Account & Verify Email</span>
-                    <span className="material-symbols-outlined text-base">rocket_launch</span>
+                    <span className="block w-full px-7 text-center leading-snug">Create Account & Verify Email</span>
+                    <span className="material-symbols-outlined absolute right-4 text-xl shrink-0" aria-hidden="true">rocket_launch</span>
                   </>
                 )}
               </button>

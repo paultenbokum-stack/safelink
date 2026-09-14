@@ -28,6 +28,12 @@ const assert = require('node:assert/strict');
    await page.locator('#confirm-password').fill('Abcdef1!');
    await page.getByRole('button',{name:/Continue to Circle & Home/i}).click();
    await page.getByRole('heading',{name:'Family Circle & Home'}).waitFor();
+   const city=page.getByPlaceholder('e.g. Johannesburg');
+   assert.equal(await city.inputValue(),'');
+   assert.equal(await city.getAttribute('placeholder'),'e.g. Johannesburg');
+   await page.screenshot({path:'.vercel/qa/signup-city-placeholder.png',fullPage:true});
+   await city.fill('Ballito');
+   assert.equal(await city.inputValue(),'Ballito');
   }
   if(route==='/login/verify') await page.getByText(/mark it as Not spam before opening the verification link/i).waitFor();
   await page.screenshot({path:'.vercel/qa/'+route.slice(1)+'.png',fullPage:true});

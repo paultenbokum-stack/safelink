@@ -63,7 +63,7 @@ export default function SignUpPage() {
     memberCount: '3',
     addressLine1: '',
     suburb: '',
-    city: 'Johannesburg',
+    city: '',
     province: 'Gauteng',
     postalCode: '',
     // Step 3: Emergency Dispatch & Duress PIN
@@ -112,8 +112,8 @@ export default function SignUpPage() {
       }
       setStep(2);
     } else if (step === 2) {
-      if (!formData.addressLine1 || !formData.suburb) {
-        setError('Please enter your primary home address.');
+      if (!formData.addressLine1 || !formData.suburb || !formData.city) {
+        setError('Please enter your primary street address, suburb and city.');
         return;
       }
       setStep(3);

@@ -46,7 +46,7 @@ export default function EmailVerification() {
   }
 
   const status = message || (delivery?.status === 'sent'
-    ? 'The email service accepted your verification request. Delivery can take a few minutes; please check your inbox and spam folder.'
+    ? 'The email service accepted your verification request. Delivery can take a few minutes; please check your inbox and your spam or junk folder.'
     : delivery?.status === 'error'
       ? delivery.message
       : delivery?.status === 'sending'
@@ -59,7 +59,10 @@ export default function EmailVerification() {
         <h1 className="text-2xl font-bold">Verify your email</h1>
         <p className="text-sm text-on-surface-variant break-words">{loading ? 'Loading your account…' : user?.email || 'Sign in to verify your account.'}</p>
         <p className="text-sm" role="status">{status}</p>
-        <p className="text-sm text-on-surface-variant">Look for an email with “Verify your email” in the subject. If it hasn’t arrived after a few minutes, check the email address above and request another link.</p>
+        <div role="note" className="p-3 rounded-xl bg-secondary/10 border border-secondary/25 flex items-start gap-2.5 text-sm text-on-surface-variant">
+          <span className="material-symbols-outlined text-secondary text-lg shrink-0">mark_email_read</span>
+          <span>Look for an email with “Verify your email” in the subject. Check your spam or junk folder too. If it is there, mark it as <strong className="text-on-surface">Not spam</strong> before opening the verification link so the link is enabled and opens correctly.</span>
+        </div>
         {user && !user.isPartnerSession && <>
           <button type="button" disabled={busy || secondsLeft > 0 || delivery?.status === 'sending'} onClick={send} className="w-full bg-secondary text-on-secondary p-3 rounded-xl font-bold disabled:opacity-60">
             {delivery?.status === 'sending' ? 'Requesting email…' : secondsLeft > 0 ? `Resend available in ${secondsLeft}s` : 'Send verification email'}

@@ -293,7 +293,13 @@ export default function SignUpPage() {
               <input id="confirm-password" required type="password" autoComplete="new-password" minLength={12} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} aria-invalid={passwordsMismatch} aria-describedby={passwordsMismatch ? 'password-match-error' : undefined} className="block w-full bg-surface-container-low border border-white/10 rounded-xl px-3 py-3 mt-2 text-on-surface" />
             </label>
             {passwordsMismatch && <p id="password-match-error" role="status" className="text-sm text-error">Passwords do not match. Please enter the same password in both fields.</p>}
-            <p className="text-sm text-on-surface-variant">We’ll email you a verification link after you create your account.</p>
+            <div role="note" className="p-3 rounded-xl bg-secondary/10 border border-secondary/25 flex items-start gap-2.5 text-sm text-on-surface-variant">
+              <span className="material-symbols-outlined text-secondary text-lg shrink-0 mt-0.5">mark_email_read</span>
+              <span>
+                <strong className="block text-on-surface mb-1">Watch for your verification email</strong>
+                After creating your account, check both your inbox and your spam or junk folder. If the email is filtered, mark it as <strong>Not spam</strong> before opening the verification link so the link is enabled and opens correctly.
+              </span>
+            </div>
             <button
               type="submit"
               className="mt-2 w-full bg-secondary hover:bg-secondary-fixed text-on-secondary py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(247,187,35,0.25)] active:scale-95 transition-all cursor-pointer"
@@ -495,7 +501,7 @@ export default function SignUpPage() {
             <div className="p-3 rounded-xl bg-secondary/10 border border-secondary/20 flex items-start gap-2.5 text-xs text-on-surface-variant">
               <span className="material-symbols-outlined text-secondary text-base shrink-0 mt-0.5">verified_user</span>
               <span>
-                <strong>Secure account registration:</strong> Next, verify your email before opening your dashboard. Your phone number remains an unverified contact detail. SMS verification and MFA are not enabled.
+                <strong>Secure account registration:</strong> Next, verify your email before opening your dashboard. Remember to check your spam or junk folder and mark the message as <strong>Not spam</strong> before opening its link. Your phone number remains an unverified contact detail. SMS verification and MFA are not enabled.
               </span>
             </div>
 

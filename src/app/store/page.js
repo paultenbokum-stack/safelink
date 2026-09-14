@@ -331,12 +331,22 @@ function CartDrawer({ cart, onClose, onUpdateQty, subtotalExVat, vat, totalInclV
   return (
     <div role="dialog" aria-modal="true" aria-label="Shopping basket" className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex justify-end" style={{ height: '100dvh' }} onClick={onClose}>
       <div className="w-full max-w-md bg-surface-container-high h-full min-h-0 p-4 flex flex-col shadow-2xl border-l border-white/10" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }} onClick={(event) => event.stopPropagation()}>
-        <div className="flex justify-between items-center pb-4 border-b border-white/10 mb-4">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-secondary">shopping_bag</span>
-            <h2 className="text-lg font-bold text-on-surface">Your cart ({totalCount.toLocaleString('en-ZA')})</h2>
+        <div className="flex justify-between items-center gap-2 pb-4 border-b border-white/10 mb-4">
+          <div className="flex items-center min-w-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="size-11 -ml-2 mr-1 shrink-0 rounded-full flex items-center justify-center text-secondary hover:bg-white/10 transition-colors cursor-pointer"
+              aria-label="Back to store"
+            >
+              <span className="material-symbols-outlined">arrow_back</span>
+            </button>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="material-symbols-outlined text-secondary shrink-0">shopping_bag</span>
+              <h2 className="text-base min-[360px]:text-lg font-bold text-on-surface truncate">Your cart ({totalCount.toLocaleString('en-ZA')})</h2>
+            </div>
           </div>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-full hover:bg-white/10 text-on-surface-variant hover:text-white transition-colors cursor-pointer" aria-label="Close cart">
+          <button type="button" onClick={onClose} className="size-11 shrink-0 rounded-full flex items-center justify-center hover:bg-white/10 text-on-surface-variant hover:text-white transition-colors cursor-pointer" aria-label="Close cart">
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>

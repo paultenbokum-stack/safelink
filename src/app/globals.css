@@ -6,6 +6,9 @@
 :root,
 html.dark,
 [data-theme="dark"] {
+  --app-bottom-nav-inset: env(safe-area-inset-bottom, 0px);
+  --app-bottom-nav-height: calc(80px + var(--app-bottom-nav-inset));
+
   /* Core palette — Dark Mode */
   --background:                #041522;
   --background-rgb:            4 21 34;
@@ -179,6 +182,22 @@ html { color-scheme: dark; }
 html.light { color-scheme: light; }
 :root { --bg-dark: var(--background); --text-primary: var(--on-surface); --text-secondary: var(--on-surface-variant); --accent: var(--secondary); }
 button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* Keep the primary navigation clear of device and mobile-browser controls. */
+.app-bottom-nav {
+  min-height: var(--app-bottom-nav-height);
+  padding-bottom: var(--app-bottom-nav-inset);
+}
+
+@media (display-mode: browser) and (max-width: 767px) {
+  :root,
+  html.dark,
+  html.light,
+  [data-theme="dark"],
+  [data-theme="light"] {
+    --app-bottom-nav-inset: max(28px, env(safe-area-inset-bottom, 0px));
+  }
+}
 
 /* Glassmorphism Classes */
 .glass-panel {

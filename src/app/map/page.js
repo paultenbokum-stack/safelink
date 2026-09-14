@@ -1345,7 +1345,7 @@ function LiveFamilyMapContent() {
         </button>
       </div>
 
-      <div role="group" aria-label="Map zoom" className="absolute right-4 z-30 rounded-xl overflow-hidden bg-surface-container text-on-surface border border-white/20 shadow-lg" style={{ bottom: `calc(${isFullScreen ? '24px' : '104px'} + env(safe-area-inset-bottom))` }}>
+      <div role="group" aria-label="Map zoom" className="absolute right-4 z-30 rounded-xl overflow-hidden bg-surface-container text-on-surface border border-white/20 shadow-lg" style={{ bottom: isFullScreen ? 'calc(24px + env(safe-area-inset-bottom, 0px))' : 'calc(var(--app-bottom-nav-height) + 24px)' }}>
         <button type="button" aria-label="Zoom in" disabled={!mapReady} onClick={() => changeZoom(1)} className="w-11 h-11 flex items-center justify-center hover:bg-white/10 disabled:opacity-50 border-b border-white/15"><span className="material-symbols-outlined text-2xl" aria-hidden="true">add</span></button>
         <button type="button" aria-label="Zoom out" disabled={!mapReady} onClick={() => changeZoom(-1)} className="w-11 h-11 flex items-center justify-center hover:bg-white/10 disabled:opacity-50"><span className="material-symbols-outlined text-2xl" aria-hidden="true">remove</span></button>
       </div>
@@ -1360,7 +1360,7 @@ function LiveFamilyMapContent() {
 
       {/* Radar Scanning Empty State Banner when no members/devices are active */}
       {members.length === 0 && connectionStatus !== 'connecting' && (
-        <div className={`absolute ${isFullScreen ? 'bottom-6' : 'bottom-24'} left-4 right-20 z-20 max-w-md mx-auto pointer-events-auto animate-fadeIn`}>
+        <div className="absolute left-4 right-20 z-20 max-w-md mx-auto pointer-events-auto animate-fadeIn" style={{ bottom: isFullScreen ? '24px' : 'calc(var(--app-bottom-nav-height) + 16px)' }}>
           <div className="glass-panel p-4 rounded-2xl border border-secondary/40 bg-surface-container-high/95 backdrop-blur-xl shadow-2xl text-center space-y-2">
             <div className="flex items-center justify-center gap-2 text-secondary">
               <span className="material-symbols-outlined text-2xl animate-pulse">radar</span>
@@ -1375,7 +1375,7 @@ function LiveFamilyMapContent() {
 
       {/* Selected tracker details can minimize to a small reopen tab. */}
       {selectedMember && (
-        <div className={`absolute ${isFullScreen ? 'bottom-0' : 'bottom-20'} left-0 right-0 z-30 max-w-2xl mx-auto pointer-events-auto p-gutter`}>
+        <div className="absolute left-0 right-0 z-30 max-w-2xl mx-auto pointer-events-auto p-gutter" style={{ bottom: isFullScreen ? 0 : 'var(--app-bottom-nav-height)' }}>
           <div className="glass-panel shadow-2xl border border-white/15 backdrop-blur-xl bg-surface-container-high/90 rounded-2xl p-sm sm:p-md max-h-[55dvh] overflow-y-auto">
             <button
               type="button"
@@ -1492,7 +1492,7 @@ function LiveFamilyMapContent() {
       )}
 
       {minimizedMember && !selectedMember && (
-        <div className={`absolute ${isFullScreen ? 'bottom-5' : 'bottom-24'} left-1/2 -translate-x-1/2 z-30 pointer-events-auto`}>
+        <div className="absolute left-1/2 -translate-x-1/2 z-30 pointer-events-auto" style={{ bottom: isFullScreen ? '20px' : 'calc(var(--app-bottom-nav-height) + 16px)' }}>
           <button
             type="button"
             onClick={() => { detailsDismissed.current = false; setSelectedMember(minimizedMember); setMinimizedMember(null); }}

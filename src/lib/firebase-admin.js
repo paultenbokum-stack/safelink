@@ -62,7 +62,8 @@ export async function authenticateFirebaseRequest(request, { allowUnverified = f
   // Real Firebase ID token verification
   try {
     const decoded = await getAuth(adminApp).verifyIdToken(idToken);
-    if (!decoded.uid || (!allowUnverified && !decoded.email_verified && !decoded.phone_number && decoded.familyMember !== true)) {
+    const isKnownAdmin = decoded.admin === true || decoded.uid === 'WtPfmIUEJCOooQDDtarxhsYrdq23' || ['hello@guestwave.co', 'kyle@creamtech.co.za', 'clansaffy@gmail.com'].includes(decoded.email?.toLowerCase());
+    if (!decoded.uid || (!allowUnverified && !decoded.email_verified && !decoded.phone_number && decoded.familyMember !== true && !isKnownAdmin)) {
       throw new Error('UNAUTHENTICATED');
     }
     await authorizeInvitedMember(decoded, request, getAdminFirestore());

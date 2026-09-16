@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useManagementFetch } from '@/lib/use-management-fetch';
+import { useAuth } from '@/lib/auth-context';
 
 export const SA_ACCOUNTING_PACKAGES = [
   {
@@ -89,6 +90,7 @@ export const SA_CAMERA_BRANDS = [
 ];
 
 export default function ControlRoomPage() {
+  const { user } = useAuth();
   const [managementError, setManagementError] = useState('');
   const managementFetch = useManagementFetch(setManagementError);
   const [activeTab, setActiveTab] = useState('incidents'); // 'incidents' | 'cameras' | 'aura' | 'fleet' | 'accounting'
@@ -395,7 +397,17 @@ export default function ControlRoomPage() {
 
   return (
     <div className="bg-[#040d16] text-on-background min-h-screen flex flex-col font-sans selection:bg-secondary/30 selection:text-secondary">
-      {managementError && <p role="alert" className="p-4 text-error">{managementError}</p>}
+      {managementError && (
+        <div role="alert" className="p-3.5 bg-amber-500/10 border-b border-amber-500/20 text-amber-300 text-xs flex items-center justify-between px-6">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-base">lock</span>
+            <span>{managementError}</span>
+          </div>
+          <Link href="/login" className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-bold transition-all">
+            Sign In to Management
+          </Link>
+        </div>
+      )}
       {/* Control Room Top Banner */}
       <header className="bg-[#07131f] border-b border-white/10 px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-30 shadow-md">
         <div className="flex items-center gap-4">
@@ -455,6 +467,16 @@ export default function ControlRoomPage() {
             <span className="material-symbols-outlined text-sm">home</span>
             App
           </Link>
+
+          {!user && (
+            <Link
+              href="/login"
+              className="px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-200 hover:bg-amber-500/30 text-xs font-bold transition-all flex items-center gap-1"
+            >
+              <span className="material-symbols-outlined text-sm">login</span>
+              Sign In
+            </Link>
+          )}
         </div>
       </header>
 

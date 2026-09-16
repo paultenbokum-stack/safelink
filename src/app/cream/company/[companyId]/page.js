@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { useBrandTheme } from '@/lib/brand-context';
 import BrandCustomizer from '@/app/components/BrandCustomizer';
+import GodsEyeSurveillance from '@/app/components/GodsEyeSurveillance';
 
 const PAYMENT_COLORS = { current: '#38a169', '30day': '#d69e2e', '60day': '#dd6b20', '90day': '#e53e3e', inactive: '#718096' };
 const PAYMENT_LABELS = { current: 'Current', '30day': '30 Days', '60day': '60 Days', '90day': '90+ Days', inactive: 'Inactive' };
@@ -82,6 +83,17 @@ export default function CompanyDashboard({ params: paramsPromise }) {
   const { user } = useAuth();
   const { brand } = useBrandTheme();
 
+  // Allow direct deep-linking like ?tab=cctv
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryTab = urlParams.get('tab');
+      if (queryTab && ['customers', 'incidents', 'revenue', 'cctv', 'branding'].includes(queryTab)) {
+        setTab(queryTab);
+      }
+    }
+  }, []);
+
   // Dynamic CI tokens from Look & Feel Branding Portal
   const partnerName = brand?.partnerName || 'Sovereign Intervention';
   const logoUrl = brand?.logoUrl || '/sovereign-intervention-logo.png';
@@ -93,7 +105,7 @@ export default function CompanyDashboard({ params: paramsPromise }) {
 
   const fetchTab = useCallback(async (tabName) => {
     if (!companyId) return;
-    if (tabName === 'branding') {
+    if (tabName === 'branding' || tabName === 'cctv') {
       setLoading(false);
       return;
     }
@@ -234,6 +246,7 @@ export default function CompanyDashboard({ params: paramsPromise }) {
             ['customers', 'people', 'Customers'],
             ['incidents', 'warning', 'Incidents'],
             ['revenue', 'payments', 'Revenue'],
+            ['cctv', 'videocam', 'Live CCTV & Feeds'],
             ['branding', 'palette', 'Look & Feel'],
           ].map(([id, icon, label]) => {
             const isActive = tab === id;
@@ -686,6 +699,11 @@ export default function CompanyDashboard({ params: paramsPromise }) {
         {/* ── LOOK & FEEL / BRANDING TAB ── */}
         {tab === 'branding' && (
           <BrandCustomizer companyId={companyId} />
+        )}
+
+        {/* ── LIVE CCTV & GOD'S EYE SURVEILLANCE TAB ── */}
+        {tab === 'cctv' && (
+          <GodsEyeSurveillance companyId={companyId} brand={brand} />
         )}
       </main>
     </div>

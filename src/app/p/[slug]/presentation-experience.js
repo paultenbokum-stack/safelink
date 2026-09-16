@@ -182,6 +182,12 @@ export default function PresentationExperience({ profile }) {
 
   return <main className={styles.presentation} style={profileStyle} onTouchStart={(e)=>{touchStart.current=e.changedTouches[0].clientX;}} onTouchEnd={(e)=>{if(touchStart.current===null)return; const delta=e.changedTouches[0].clientX-touchStart.current; if(Math.abs(delta)>60)goTo(active+(delta<0?1:-1)); touchStart.current=null;}}>
     <div className={styles.ambient} /><div className={styles.grid} />
+    {activeSlide.type === 'hero' && (
+      <div className={styles.heroFullBackground} aria-hidden="true">
+        <img src="/presentation/globe-network.jpeg" alt="" className={styles.heroFullBackgroundImage} />
+        <div className={styles.heroBackgroundGradient} />
+      </div>
+    )}
     <header className={styles.topbar}><div className={styles.brandMark}><span className={styles.cream}>CREAM</span><span>TECHNOLOGIES</span></div><div className={styles.partnerBadge}>{profile.logoUrl ? <img src={profile.logoUrl} alt="" width={80} height={24} /> : profile.shortName}<em>×</em>SafeLink</div><button className={styles.menuButton} onClick={()=>setMenuOpen(!menuOpen)} aria-expanded={menuOpen}>INDEX <span>0{active + 1}/0{slides.length}</span></button></header>
     <nav className={`${styles.slideMenu} ${menuOpen ? styles.slideMenuOpen : ''}`} aria-label="Presentation slides">{slides.map((slide,index)=><button key={slide.id} className={index===active?styles.activeMenuItem:''} onClick={()=>{goTo(index);setMenuOpen(false);}}><span>0{index+1}</span>{slide.kicker ? slide.kicker.replace(/^\d+ \/ /,'') : 'OVERVIEW'}</button>)}</nav>
     <section className={styles.stage}><div className={styles.copyHeader}>{activeSlide.kicker ? <span>{activeSlide.kicker}</span> : null}{activeSlide.type !== 'hero' && <><h2>{activeSlide.title}</h2><p>{activeSlide.body}</p></>}</div><div className={`${styles.slideBody} ${styles[`body${activeSlide.type[0].toUpperCase()}${activeSlide.type.slice(1)}`]}`} key={activeSlide.id}><SlideContent slide={activeSlide} profile={profile} households={households} setHouseholds={setHouseholds} goTo={goTo} /></div></section>

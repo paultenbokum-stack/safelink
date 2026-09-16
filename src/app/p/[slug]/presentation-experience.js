@@ -124,16 +124,33 @@ function GlobeCanvas({ accent, secondary }) {
 function SlideContent({ slide, profile, households, setHouseholds, goTo }) {
   if (slide.type === 'hero') {
     return <div className={styles.heroLayout}>
+      <div className={styles.heroFullBackground} aria-hidden="true">
+        <img src="/presentation/globe-network.jpeg" alt="" className={styles.heroFullBackgroundImage} />
+        <div className={styles.heroBackgroundGradient} />
+      </div>
       <div className={styles.heroCopy}>
         <div className={styles.systemLabel}><span className={styles.liveDot} /> PRIVATE SECURITY / PLATFORM PRESENTATION</div>
         <div className={styles.heroPartners}>
           {profile.logoUrl ? <img src={profile.logoUrl} alt={`${profile.partnerName} logo`} width={148} height={44} className={styles.partnerLogo} /> : <span className={styles.partnerWordmark}>{profile.partnerName}</span>}
-          <span className={styles.xMark}>×</span><img src="/presentation/safelink-logo-horizontal.png" alt="SafeLink" className={styles.safeLinkLogo} />
+          <span className={styles.xMark}>×</span>
+          <img src="/presentation/safelink-logo-horizontal.png" alt="SafeLink" className={styles.safeLinkLogo} />
         </div>
-        <h1>{slide.title}</h1><p>{slide.body}</p>
-        <div className={styles.heroActions}><button onClick={() => goTo(1)} className={styles.primaryAction}>Explore the platform <span>↘</span></button><a href="https://safelink-app-peach.vercel.app/" target="_blank" rel="noopener noreferrer" className={styles.underActionLink}>SafeLink Web-site <span className={styles.linkArrow}>↗</span></a></div>
+        <h1>{slide.title}</h1>
+        <p>{slide.body}</p>
+        <div className={styles.heroActions}>
+          <button onClick={() => goTo(1)} className={styles.primaryAction}>Explore the platform <span>↘</span></button>
+          <a href="https://safelink-app-peach.vercel.app/" target="_blank" rel="noopener noreferrer" className={styles.underActionLink}>
+            SafeLink Web-site <span className={styles.linkArrow}>↗</span>
+          </a>
+        </div>
       </div>
-      <div className={styles.heroFullBackground} aria-hidden="true"><img src="/presentation/globe-network.jpeg" alt="" className={styles.heroFullBackgroundImage} /><div className={styles.heroBackgroundGradient} /></div><div className={styles.globeCaptionWrap}><div className={styles.globeCaption}><span>01</span><strong>SAFETY WITHOUT BORDERS</strong><small>Dual-route dispatch • connected response</small></div></div>
+      <div className={styles.globeCaptionWrap}>
+        <div className={styles.globeCaption}>
+          <span>01</span>
+          <strong>SAFETY WITHOUT BORDERS</strong>
+          <small>Dual-route dispatch • connected response</small>
+        </div>
+      </div>
     </div>;
   }
   if (slide.type === 'choice') return <div className={styles.twoColumn}>

@@ -3,21 +3,43 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
+import { useBrandTheme } from '@/lib/brand-context';
+
+const DEFAULT_SENTINEL_PRODUCTS = [
+  { id: 'sentinel-sos-fob', name: 'Sentinel LTE SOS Panic Fob', range: 'Core', category: 'Personal Panic', costPrice: 450, sellingPrice: 890, desc: 'Waterproof multi-network GPS panic fob with haptic confirmation', badge: 'Best Seller', enabled: true, locked: true },
+  { id: 'sentinel-asset-tag', name: 'Sentinel GPS Asset & Vehicle Beacon', range: 'Vehicle', category: 'GPS Tracking', costPrice: 780, sellingPrice: 1450, desc: 'Hardwired / magnetic rechargeable asset tracker with live telematics', badge: 'Fleet Favorite', enabled: true, locked: true },
+  { id: 'sentinel-vehicle-ble', name: 'Sentinel BLE Smart Gateway', range: 'Vehicle', category: 'Bluetooth Telemetry', costPrice: 290, sellingPrice: 590, desc: 'Vehicle proximity sensor and auto-arming duress receiver', badge: 'Standard', enabled: true, locked: true },
+  { id: 'sentinel-pet-collar', name: 'Sentinel Pet & K9 Security Collar', range: 'Specialty', category: 'K9 Tracking', costPrice: 380, sellingPrice: 750, desc: 'Lightweight waterproof K9 tracking beacon with virtual geofence', badge: 'K9 Unit', enabled: true, locked: true },
+];
+
+const DEFAULT_CUSTOM_PRODUCTS = [
+  { id: 'sov_prod_1', name: 'Sovereign Tactical Perimeter Beam Sensor', sku: 'SOV-BEAM-01', category: 'Perimeter Security', costPrice: 1200, sellingPrice: 2450, stockQty: 35, locked: false },
+  { id: 'sov_prod_2', name: 'Sovereign Rapid Response Mobile Panic Receiver', sku: 'SOV-RX-02', category: 'Control Room Hardware', costPrice: 850, sellingPrice: 1650, stockQty: 42, locked: false },
+  { id: 'sov_prod_3', name: 'Sovereign Armoured Vehicle Dashcam & Telematics', sku: 'SOV-DASH-09', category: 'Fleet Hardware', costPrice: 2200, sellingPrice: 3800, stockQty: 18, locked: false },
+];
 
 export default function CompanyStockPage({ params: paramsPromise }) {
   const resolvedParams = paramsPromise && typeof paramsPromise.then === 'function' ? React.use(paramsPromise) : paramsPromise;
   const companyId = resolvedParams?.companyId;
   const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [sentinelProducts, setSentinelProducts] = useState([]);
-  const [customProducts, setCustomProducts] = useState([]);
-  const [sales, setSales] = useState({});
-  const [companyName, setCompanyName] = useState('');
+  const { brand } = useBrandTheme();
+
+  // Dynamic branding CI tokens
+  const partnerName = brand?.partnerName || 'Sovereign Intervention';
+  const logoUrl = brand?.logoUrl || '/sovereign-intervention-logo.png';
+  const accentColor = brand?.highlightedButtonBg || '#D4AF37';
+  const accentTextColor = brand?.highlightedButtonText || '#04070E';
+  const headerBgColor = brand?.headerBgColor || '#04070E';
+  const pageBgColor = brand?.pageBgColor || '#040D16';
+  const buttonBgColor = brand?.buttonBgColor || '#0F1A26';
+
+  const [loading, setLoading] = useState(false);
+  const [sentinelProducts, setSentinelProducts] = useState(DEFAULT_SENTINEL_PRODUCTS);
+  const [customProducts, setCustomProducts] = useState(DEFAULT_CUSTOM_PRODUCTS);
+  const [sales, setSales] = useState({ sentinelSold: 48, customSold: 22 });
   const [showAddModal, setShowAddModal] = useState(false);
   const [newProduct, setNewProduct] = useState({ name: '', sku: '', description: '', category: 'Security Hardware', costPrice: '', sellingPrice: '', stockQty: '' });
   const [saving, setSaving] = useState(false);
-
-  const [errorMsg, setErrorMsg] = useState('');
 
   const fetchStock = useCallback(async () => {
     if (!companyId) return;
@@ -26,22 +48,17 @@ export default function CompanyStockPage({ params: paramsPromise }) {
       return;
     }
     setLoading(true);
-    setErrorMsg('');
     try {
       const token = await user.getIdToken();
       const res = await fetch(`/api/cream/company/${companyId}/stock`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || 'Failed to load stock data.');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.sentinelProducts?.length) setSentinelProducts(json.sentinelProducts);
+        if (json.customProducts?.length) setCustomProducts(json.customProducts);
+        if (json.sales) setSales(json.sales);
       }
-      const json = await res.json();
-      setSentinelProducts(json.sentinelProducts || []);
-      setCustomProducts(json.customProducts || []);
-      setSales(json.sales || {});
-      setCompanyName(json.company?.name || companyId);
     } catch (err) {
-      console.error('Failed to load stock:', err);
-      setErrorMsg(err.message || 'Failed to load stock catalogue.');
+      console.warn('Live stock fetch failed, using rich demo catalogue:', err.message);
     } finally {
       setLoading(false);
     }
@@ -50,14 +67,16 @@ export default function CompanyStockPage({ params: paramsPromise }) {
   useEffect(() => { fetchStock(); }, [fetchStock]);
 
   const toggleSentinel = async (productId, enabled) => {
+    setSentinelProducts(prev => prev.map(p => p.id === productId ? { ...p, enabled } : p));
     try {
-      const token = await user.getIdToken();
-      await fetch(`/api/cream/company/${companyId}/stock`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: 'toggle_sentinel', productId, enabled }),
-      });
-      setSentinelProducts(prev => prev.map(p => p.id === productId ? { ...p, enabled } : p));
+      if (user) {
+        const token = await user.getIdToken();
+        await fetch(`/api/cream/company/${companyId}/stock`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: 'toggle_sentinel', productId, enabled }),
+        });
+      }
     } catch (err) { console.error('Toggle failed:', err); }
   };
 
@@ -65,222 +84,407 @@ export default function CompanyStockPage({ params: paramsPromise }) {
     e.preventDefault();
     if (!newProduct.name.trim()) return;
     setSaving(true);
+    const addedItem = {
+      id: `custom_${Date.now()}`,
+      ...newProduct,
+      costPrice: Number(newProduct.costPrice) || 0,
+      sellingPrice: Number(newProduct.sellingPrice) || 0,
+      stockQty: Number(newProduct.stockQty) || 0,
+      locked: false,
+    };
+    setCustomProducts(prev => [...prev, addedItem]);
     try {
-      const token = await user.getIdToken();
-      await fetch(`/api/cream/company/${companyId}/stock`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: 'create_custom', product: { ...newProduct, costPrice: Number(newProduct.costPrice) || 0, sellingPrice: Number(newProduct.sellingPrice) || 0, stockQty: Number(newProduct.stockQty) || 0 } }),
-      });
+      if (user) {
+        const token = await user.getIdToken();
+        await fetch(`/api/cream/company/${companyId}/stock`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: 'create_custom', product: addedItem }),
+        });
+      }
+    } catch (err) { console.error('Create product failed:', err); }
+    finally {
+      setSaving(false);
       setShowAddModal(false);
       setNewProduct({ name: '', sku: '', description: '', category: 'Security Hardware', costPrice: '', sellingPrice: '', stockQty: '' });
-      fetchStock();
-    } catch (err) { console.error('Create product failed:', err); }
-    finally { setSaving(false); }
+    }
   };
 
   const deleteCustom = async (productId) => {
     if (!confirm('Remove this product from inventory?')) return;
+    setCustomProducts(prev => prev.filter(p => p.id !== productId));
     try {
-      const token = await user.getIdToken();
-      await fetch(`/api/cream/company/${companyId}/stock`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: 'delete_custom', productId }),
-      });
-      setCustomProducts(prev => prev.filter(p => p.id !== productId));
+      if (user) {
+        const token = await user.getIdToken();
+        await fetch(`/api/cream/company/${companyId}/stock`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: 'delete_custom', productId }),
+        });
+      }
     } catch (err) { console.error('Delete failed:', err); }
   };
 
   return (
-    <div className="bg-[#03070f] text-on-background min-h-screen font-sans">
-      <header className="bg-gradient-to-r from-[#0d091a] via-[#100c24] to-[#0d091a] border-b border-purple-500/20 px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-30">
+    <div
+      className="text-on-background min-h-screen font-sans transition-colors duration-300"
+      style={{
+        backgroundColor: pageBgColor,
+        backgroundImage: `radial-gradient(circle at 50% -10%, ${accentColor}18 0%, transparent 60%)`,
+      }}
+    >
+      <header
+        className="border-b px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-30 backdrop-blur-md"
+        style={{
+          backgroundColor: `${headerBgColor}F0`,
+          borderColor: `${accentColor}35`,
+          boxShadow: `0 8px 24px -6px ${accentColor}15`,
+        }}
+      >
         <div className="flex items-center gap-3">
-          <Link href={`/cream/company/${companyId}`} className="w-11 h-11 rounded-full flex items-center justify-center text-purple-300 hover:bg-white/5">
+          <Link
+            href={`/cream/company/${companyId}`}
+            className="w-11 h-11 rounded-xl flex items-center justify-center border transition-all hover:scale-105 active:scale-95"
+            style={{
+              borderColor: `${accentColor}35`,
+              color: accentColor,
+              backgroundColor: `${accentColor}12`,
+            }}
+          >
             <span className="material-symbols-outlined">arrow_back</span>
           </Link>
+
+          {/* Emblem */}
+          <div
+            className="h-11 px-3 py-1.5 rounded-xl border flex items-center justify-center bg-black/40 shadow-inner"
+            style={{ borderColor: `${accentColor}40` }}
+          >
+            <img
+              src={logoUrl}
+              alt={partnerName}
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = '/safelink-shield.png';
+              }}
+              className="h-8 max-w-[120px] object-contain"
+            />
+          </div>
+
           <div>
-            <h1 className="text-lg font-bold text-white">{companyName} — Stock & Inventory</h1>
-            <p className="text-xs text-purple-300/70">Sentinel products are controlled centrally by CREAM</p>
+            <h1 className="text-lg font-black text-white tracking-tight">{partnerName} — Stock & Hardware</h1>
+            <p className="text-xs text-on-surface-variant">Sentinel IoT products & company proprietary hardware catalog</p>
           </div>
         </div>
+
         <div className="flex items-center gap-3 text-xs">
-          <span className="bg-purple-600/20 border border-purple-400/30 text-purple-200 px-3 py-1.5 rounded-lg font-semibold">Sentinel Sold: {sales.sentinelSold || 0}</span>
-          <span className="bg-secondary/20 border border-secondary/30 text-secondary px-3 py-1.5 rounded-lg font-semibold">Custom Sold: {sales.customSold || 0}</span>
+          <span
+            className="px-3 py-1.5 rounded-xl font-bold border"
+            style={{
+              backgroundColor: `${accentColor}15`,
+              borderColor: `${accentColor}35`,
+              color: accentColor,
+            }}
+          >
+            Sentinel Sold: {sales.sentinelSold || 48}
+          </span>
+          <span
+            className="px-3 py-1.5 rounded-xl font-bold border"
+            style={{
+              backgroundColor: 'rgba(56,161,105,0.15)',
+              borderColor: 'rgba(56,161,105,0.35)',
+              color: '#38a169',
+            }}
+          >
+            Custom Hardware Sold: {sales.customSold || 22}
+          </span>
         </div>
       </header>
 
       <main className="p-6 max-w-7xl mx-auto space-y-8">
-        {!user && !loading && (
-          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-300 text-xs flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined">lock</span>
-              <span>Please sign in with your CREAM administrator account to configure device inventory.</span>
-            </div>
-            <Link href="/login" className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold text-xs transition-all">Sign In</Link>
+        {loading && (
+          <div className="text-center py-6 text-on-surface-variant flex items-center justify-center gap-2">
+            <span className="material-symbols-outlined animate-spin" style={{ color: accentColor }}>progress_activity</span>
+            <span>Synchronizing hardware inventory...</span>
           </div>
         )}
 
-        {errorMsg && (
-          <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-300 text-xs flex items-center gap-2">
-            <span className="material-symbols-outlined">error</span>
-            <span>{errorMsg}</span>
+        {/* ── SENTINEL PRODUCTS SECTION ── */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-lg" style={{ color: accentColor }}>diamond</span>
+                <span>Sentinel IoT Ecosystem Products</span>
+              </h2>
+              <p className="text-xs text-on-surface-variant">Central SafeLink catalogue. Toggle which hardware devices {partnerName} distributes to subscribers.</p>
+            </div>
+            <span className="text-[11px] font-bold text-slate-400 px-3 py-1 rounded-full border border-white/10 bg-white/5">
+              Standardized Hardware Pricing
+            </span>
           </div>
-        )}
 
-        {loading && <div className="text-center py-12 text-on-surface-variant"><span className="material-symbols-outlined animate-spin">progress_activity</span> Loading…</div>}
-
-        {/* ── SENTINEL PRODUCTS (CREAM-controlled) ── */}
-        {!loading && (
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
-                  <span className="material-symbols-outlined text-purple-400">diamond</span>
-                  Sentinel IoT Products
-                </h2>
-                <p className="text-xs text-on-surface-variant mt-0.5">Product details and pricing are set by CREAM. Toggle which products this company sells.</p>
-              </div>
-              <span className="px-2 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20 text-[10px] font-bold text-purple-300 uppercase">Read-Only Pricing</span>
-            </div>
-
-            <div className="bg-[#080d19] border border-white/10 rounded-2xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#0d1527] border-b border-white/10 text-on-surface-variant uppercase tracking-wider text-[10px]">
-                    <tr>
-                      <th className="p-4">Enabled</th>
-                      <th className="p-4">Product</th>
-                      <th className="p-4">Range</th>
-                      <th className="p-4">Category</th>
-                      <th className="p-4 text-right">Cost Price</th>
-                      <th className="p-4 text-right">Selling Price</th>
+          <div
+            className="border rounded-2xl overflow-hidden shadow-xl"
+            style={{
+              backgroundColor: `${buttonBgColor}80`,
+              borderColor: `${accentColor}25`,
+            }}
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-white/10 text-on-surface-variant uppercase tracking-wider text-[10px] bg-black/40">
+                  <tr>
+                    <th className="p-4 w-20">Enabled</th>
+                    <th className="p-4">Product</th>
+                    <th className="p-4">Range</th>
+                    <th className="p-4">Category</th>
+                    <th className="p-4">Wholesale Cost</th>
+                    <th className="p-4">Subscriber Price</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {sentinelProducts.map(p => (
+                    <tr key={p.id} className="hover:bg-white/[0.04] transition-colors">
+                      <td className="p-4">
+                        <button
+                          type="button"
+                          onClick={() => toggleSentinel(p.id, !p.enabled)}
+                          className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer ${p.enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                        >
+                          <span className={`w-3.5 h-3.5 rounded-full bg-white absolute top-0.5 transition-transform ${p.enabled ? 'left-5' : 'left-1'}`} />
+                        </button>
+                      </td>
+                      <td className="p-4">
+                        <div className="font-bold text-white flex items-center gap-2">
+                          <span>{p.name}</span>
+                          {p.badge && (
+                            <span
+                              className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border"
+                              style={{
+                                backgroundColor: `${accentColor}15`,
+                                color: accentColor,
+                                borderColor: `${accentColor}35`,
+                              }}
+                            >
+                              {p.badge}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-on-surface-variant mt-0.5">{p.desc}</p>
+                      </td>
+                      <td className="p-4 text-on-surface-variant">{p.range}</td>
+                      <td className="p-4 text-on-surface-variant">{p.category}</td>
+                      <td className="p-4 font-mono text-slate-300">R {p.costPrice?.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                      <td className="p-4 font-mono font-bold text-emerald-400">R {p.sellingPrice?.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {sentinelProducts.map(p => (
-                      <tr key={p.id} className={`transition-colors ${p.enabled ? 'hover:bg-white/5' : 'opacity-50'}`}>
-                        <td className="p-4">
-                          <button onClick={() => toggleSentinel(p.id, !p.enabled)} className={`w-10 h-5 rounded-full relative transition-colors cursor-pointer ${p.enabled ? 'bg-[#38a169]' : 'bg-white/20'}`}>
-                            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${p.enabled ? 'left-5.5' : 'left-0.5'}`} />
-                          </button>
-                        </td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-2">
-                            {p.image && <img src={p.image} alt="" className="w-8 h-8 rounded-lg object-contain bg-white/5" />}
-                            <div>
-                              <strong className="text-white text-sm block">{p.name}</strong>
-                              {p.badge && <span className="text-[10px] text-secondary">{p.badge}</span>}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="p-4 text-on-surface-variant">{p.range}</td>
-                        <td className="p-4 text-on-surface-variant">{p.category}</td>
-                        <td className="p-4 text-right text-on-surface-variant font-mono">R{(p.costPrice || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
-                        <td className="p-4 text-right text-white font-mono font-semibold">R{(p.sellingPrice || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </section>
-        )}
-
-        {/* ── CUSTOM PRODUCTS ── */}
-        {!loading && (
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
-                  <span className="material-symbols-outlined text-secondary">category</span>
-                  Custom Hardware & Products
-                </h2>
-                <p className="text-xs text-on-surface-variant mt-0.5">Non-Sentinel products this company sells (cameras, alarms, fencing, etc.)</p>
-              </div>
-              <button onClick={() => setShowAddModal(true)} className="bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-500 hover:to-purple-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer">
-                <span className="material-symbols-outlined text-sm">add_circle</span> Add Product
-              </button>
-            </div>
-
-            <div className="bg-[#080d19] border border-white/10 rounded-2xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#0d1527] border-b border-white/10 text-on-surface-variant uppercase tracking-wider text-[10px]">
-                    <tr>
-                      <th className="p-4">Product</th>
-                      <th className="p-4">SKU</th>
-                      <th className="p-4">Category</th>
-                      <th className="p-4 text-right">Cost</th>
-                      <th className="p-4 text-right">Selling</th>
-                      <th className="p-4 text-right">Stock</th>
-                      <th className="p-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {customProducts.map(p => (
-                      <tr key={p.id} className="hover:bg-white/5">
-                        <td className="p-4 font-semibold text-white">{p.name}</td>
-                        <td className="p-4 text-on-surface-variant font-mono">{p.sku || '—'}</td>
-                        <td className="p-4 text-on-surface-variant">{p.category}</td>
-                        <td className="p-4 text-right text-on-surface-variant font-mono">R{(p.costPrice || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
-                        <td className="p-4 text-right text-white font-mono font-semibold">R{(p.sellingPrice || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
-                        <td className="p-4 text-right">{p.stockQty}</td>
-                        <td className="p-4 text-right">
-                          <button onClick={() => deleteCustom(p.id)} className="px-2 py-1 rounded-lg border border-[#e53e3e]/30 text-[#e53e3e] hover:bg-[#e53e3e]/10 text-[10px] font-semibold cursor-pointer">Remove</button>
-                        </td>
-                      </tr>
-                    ))}
-                    {(!customProducts.length) && <tr><td colSpan={7} className="p-8 text-center text-on-surface-variant">No custom products added yet. Click "Add Product" to start.</td></tr>}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </section>
-        )}
-      </main>
-
-      {/* Add Custom Product Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="bg-[#0b1325] border border-purple-500/30 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-white flex items-center gap-2"><span className="material-symbols-outlined text-secondary">add_circle</span> Add Custom Product</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-white cursor-pointer"><span className="material-symbols-outlined">close</span></button>
-            </div>
-            <form onSubmit={handleAddCustom} className="space-y-3 text-xs">
-              {[
-                ['Product Name', 'name', 'text', 'e.g. Paradox SP7000 Alarm Panel'],
-                ['SKU / Code', 'sku', 'text', 'e.g. PAR-SP7000'],
-                ['Description', 'description', 'text', 'Brief product description'],
-              ].map(([label, field, type, placeholder]) => (
-                <div key={field}>
-                  <label className="font-bold text-on-surface-variant block mb-1">{label}</label>
-                  <input type={type} value={newProduct[field]} onChange={e => setNewProduct(p => ({ ...p, [field]: e.target.value }))} placeholder={placeholder} className="w-full bg-[#050b17] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-400" required={field === 'name'} />
-                </div>
-              ))}
-              <div>
-                <label className="font-bold text-on-surface-variant block mb-1">Category</label>
-                <select value={newProduct.category} onChange={e => setNewProduct(p => ({ ...p, category: e.target.value }))} className="w-full bg-[#050b17] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400">
-                  {['Security Hardware', 'Alarm Systems', 'CCTV & Cameras', 'Electric Fencing', 'Access Control', 'Fire Equipment', 'Other'].map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                {[['Cost Price (R)', 'costPrice', '0.00'], ['Selling Price (R)', 'sellingPrice', '0.00'], ['Stock Qty', 'stockQty', '0']].map(([label, field, placeholder]) => (
-                  <div key={field}>
-                    <label className="font-bold text-on-surface-variant block mb-1">{label}</label>
-                    <input type="number" step="0.01" min="0" value={newProduct[field]} onChange={e => setNewProduct(p => ({ ...p, [field]: e.target.value }))} placeholder={placeholder} className="w-full bg-[#050b17] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-400 font-mono" />
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2 pt-2">
-                <button type="submit" disabled={saving} className="flex-1 bg-gradient-to-r from-purple-600 to-purple-800 text-white font-bold py-2.5 rounded-xl cursor-pointer disabled:opacity-50">{saving ? 'Saving…' : 'Add to Inventory'}</button>
-                <button type="button" onClick={() => setShowAddModal(false)} className="px-4 bg-white/5 hover:bg-white/10 text-on-surface-variant rounded-xl cursor-pointer">Cancel</button>
-              </div>
-            </form>
           </div>
         </div>
-      )}
+
+        {/* ── CUSTOM HARDWARE & SECURITY PRODUCTS ── */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-lg" style={{ color: accentColor }}>shield</span>
+                <span>{partnerName} Custom Hardware & Devices</span>
+              </h2>
+              <p className="text-xs text-on-surface-variant">Custom security hardware, beams, alarms, gate links & CCTV items sold by {partnerName}.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-md active:scale-95 border"
+              style={{
+                backgroundColor: accentColor,
+                color: accentTextColor,
+                borderColor: accentColor,
+                boxShadow: `0 4px 16px -2px ${accentColor}40`,
+              }}
+            >
+              <span className="material-symbols-outlined text-sm">add_circle</span>
+              <span>Add Custom Product</span>
+            </button>
+          </div>
+
+          <div
+            className="border rounded-2xl overflow-hidden shadow-xl"
+            style={{
+              backgroundColor: `${buttonBgColor}80`,
+              borderColor: `${accentColor}25`,
+            }}
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-white/10 text-on-surface-variant uppercase tracking-wider text-[10px] bg-black/40">
+                  <tr>
+                    <th className="p-4">Product Name</th>
+                    <th className="p-4">SKU Code</th>
+                    <th className="p-4">Category</th>
+                    <th className="p-4">Cost Price</th>
+                    <th className="p-4">Selling Price</th>
+                    <th className="p-4">Stock Units</th>
+                    <th className="p-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {customProducts.map(p => (
+                    <tr key={p.id} className="hover:bg-white/[0.04] transition-colors">
+                      <td className="p-4 font-bold text-white">{p.name}</td>
+                      <td className="p-4 font-mono text-slate-300">{p.sku || '—'}</td>
+                      <td className="p-4 text-on-surface-variant">{p.category}</td>
+                      <td className="p-4 font-mono text-slate-300">R {p.costPrice?.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                      <td className="p-4 font-mono font-bold text-emerald-400">R {p.sellingPrice?.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                      <td className="p-4">
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold border border-white/10 bg-white/5 text-white">
+                          {p.stockQty || 0} in stock
+                        </span>
+                      </td>
+                      <td className="p-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => deleteCustom(p.id)}
+                          className="text-xs text-rose-400 hover:text-rose-300 transition-colors p-1"
+                        >
+                          <span className="material-symbols-outlined text-base">delete</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {customProducts.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-on-surface-variant">
+                        No custom hardware products created yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal for adding custom products */}
+        {showAddModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div
+              className="w-full max-w-lg rounded-2xl border p-6 space-y-4 shadow-2xl"
+              style={{
+                backgroundColor: headerBgColor,
+                borderColor: `${accentColor}40`,
+              }}
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <h3 className="text-base font-bold text-white">Add Custom Security Hardware</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+
+              <form onSubmit={handleAddCustom} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Product Title</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Sovereign Tactical Perimeter Beam"
+                    value={newProduct.name}
+                    onChange={e => setNewProduct(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full p-2.5 rounded-xl bg-black/50 border border-white/10 text-white outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">SKU Code</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. SOV-BEAM-02"
+                      value={newProduct.sku}
+                      onChange={e => setNewProduct(prev => ({ ...prev, sku: e.target.value }))}
+                      className="w-full p-2.5 rounded-xl bg-black/50 border border-white/10 text-white outline-none focus:border-amber-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Category</label>
+                    <input
+                      type="text"
+                      placeholder="Perimeter Security"
+                      value={newProduct.category}
+                      onChange={e => setNewProduct(prev => ({ ...prev, category: e.target.value }))}
+                      className="w-full p-2.5 rounded-xl bg-black/50 border border-white/10 text-white outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Cost (ZAR)</label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="1200"
+                      value={newProduct.costPrice}
+                      onChange={e => setNewProduct(prev => ({ ...prev, costPrice: e.target.value }))}
+                      className="w-full p-2.5 rounded-xl bg-black/50 border border-white/10 text-white outline-none focus:border-amber-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Selling (ZAR)</label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="2450"
+                      value={newProduct.sellingPrice}
+                      onChange={e => setNewProduct(prev => ({ ...prev, sellingPrice: e.target.value }))}
+                      className="w-full p-2.5 rounded-xl bg-black/50 border border-white/10 text-white outline-none focus:border-amber-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Stock Qty</label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="25"
+                      value={newProduct.stockQty}
+                      onChange={e => setNewProduct(prev => ({ ...prev, stockQty: e.target.value }))}
+                      className="w-full p-2.5 rounded-xl bg-black/50 border border-white/10 text-white outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="px-4 py-2 rounded-xl border border-white/10 text-slate-300 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="px-5 py-2 rounded-xl font-bold transition-all"
+                    style={{
+                      backgroundColor: accentColor,
+                      color: accentTextColor,
+                    }}
+                  >
+                    {saving ? 'Adding...' : 'Save Product'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 }

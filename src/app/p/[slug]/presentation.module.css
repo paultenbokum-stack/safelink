@@ -199,3 +199,42 @@
   align-items: flex-end;
   justify-content: flex-end;
 }
+
+
+/* TOPBAR HEADER & BRANDING */
+.topbarLeft {
+  display: flex;
+  align-items: center;
+}
+.topbarPartners {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 42px;
+}
+.safeLinkBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.safeLinkShield {
+  height: 36px;
+  width: 36px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(247, 187, 35, 0.4);
+  box-shadow: 0 0 16px rgba(247, 187, 35, 0.25);
+}
+.safeLinkWordmark {
+  font-family: Inter, system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: 0.03em;
+  color: #FFFFFF;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+.xMark {
+  color: #FFD700;
+  font-size: 20px;
+  font-weight: 300;
+}

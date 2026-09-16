@@ -124,17 +124,7 @@ function GlobeCanvas({ accent, secondary }) {
 function SlideContent({ slide, profile, households, setHouseholds, goTo }) {
   if (slide.type === 'hero') {
     return <div className={styles.heroLayout}>
-      <div className={styles.heroFullBackground} aria-hidden="true">
-        <img src="/presentation/globe-network.jpeg" alt="" className={styles.heroFullBackgroundImage} />
-        <div className={styles.heroBackgroundGradient} />
-      </div>
       <div className={styles.heroCopy}>
-        <div className={styles.systemLabel}><span className={styles.liveDot} /> PRIVATE SECURITY / PLATFORM PRESENTATION</div>
-        <div className={styles.heroPartners}>
-          {profile.logoUrl ? <img src={profile.logoUrl} alt={`${profile.partnerName} logo`} width={148} height={44} className={styles.partnerLogo} /> : <span className={styles.partnerWordmark}>{profile.partnerName}</span>}
-          <span className={styles.xMark}>×</span>
-          <img src="/presentation/safelink-logo-horizontal.png" alt="SafeLink" className={styles.safeLinkLogo} />
-        </div>
         <h1>{slide.title}</h1>
         <p>{slide.body}</p>
         <div className={styles.heroActions}>
@@ -188,7 +178,28 @@ export default function PresentationExperience({ profile }) {
         <div className={styles.heroBackgroundGradient} />
       </div>
     )}
-    <header className={styles.topbar}><div className={styles.brandMark}><span className={styles.cream}>CREAM</span><span>TECHNOLOGIES</span></div><div className={styles.partnerBadge}>{profile.logoUrl ? <img src={profile.logoUrl} alt="" width={80} height={24} /> : profile.shortName}<em>×</em>SafeLink</div><button className={styles.menuButton} onClick={()=>setMenuOpen(!menuOpen)} aria-expanded={menuOpen}>INDEX <span>0{active + 1}/0{slides.length}</span></button></header>
+    <header className={styles.topbar}>
+      <div className={styles.topbarLeft}>
+        <div className={styles.systemLabel}>
+          <span className={styles.liveDot} /> PRIVATE SECURITY / PLATFORM PRESENTATION
+        </div>
+      </div>
+      <div className={styles.topbarPartners}>
+        {profile.logoUrl ? (
+          <img src={profile.logoUrl} alt={`${profile.partnerName} logo`} height={36} className={styles.partnerLogo} />
+        ) : (
+          <span className={styles.partnerWordmark}>{profile.partnerName}</span>
+        )}
+        <span className={styles.xMark}>×</span>
+        <div className={styles.safeLinkBrand}>
+          <img src="/logo.jpeg" alt="SafeLink Logo" width={36} height={36} className={styles.safeLinkShield} />
+          <span className={styles.safeLinkWordmark}>SafeLink</span>
+        </div>
+      </div>
+      <button className={styles.menuButton} onClick={() => setMenuOpen(!menuOpen)} aria-expanded={menuOpen}>
+        INDEX <span>0{active + 1}/0{slides.length}</span>
+      </button>
+    </header>
     <nav className={`${styles.slideMenu} ${menuOpen ? styles.slideMenuOpen : ''}`} aria-label="Presentation slides">{slides.map((slide,index)=><button key={slide.id} className={index===active?styles.activeMenuItem:''} onClick={()=>{goTo(index);setMenuOpen(false);}}><span>0{index+1}</span>{slide.kicker ? slide.kicker.replace(/^\d+ \/ /,'') : 'OVERVIEW'}</button>)}</nav>
     <section className={styles.stage}><div className={styles.copyHeader}>{activeSlide.kicker ? <span>{activeSlide.kicker}</span> : null}{activeSlide.type !== 'hero' && <><h2>{activeSlide.title}</h2><p>{activeSlide.body}</p></>}</div><div className={`${styles.slideBody} ${styles[`body${activeSlide.type[0].toUpperCase()}${activeSlide.type.slice(1)}`]}`} key={activeSlide.id}><SlideContent slide={activeSlide} profile={profile} households={households} setHouseholds={setHouseholds} goTo={goTo} /></div></section>
     <footer className={styles.controls}><div className={styles.controlHint}>← → <span>KEYBOARD NAVIGATION</span></div><div className={styles.progress}>{slides.map((slide,index)=><button aria-label={`Go to slide ${index+1}`} key={slide.id} onClick={()=>goTo(index)} className={index===active?styles.activeProgress:''} />)}</div><div className={styles.controlHint}>{profile.contactWebsite}</div></footer>

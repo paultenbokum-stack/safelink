@@ -277,7 +277,7 @@ export default function CompanyDashboard({ params: paramsPromise }) {
         </nav>
       </div>
 
-      <main className="p-6 max-w-7xl mx-auto space-y-6">
+      <main className={`p-4 sm:p-6 mx-auto space-y-6 ${tab === 'cctv' ? 'max-w-[1680px]' : 'max-w-7xl'}`}>
         {loading && (
           <div className="text-center py-12 text-on-surface-variant flex items-center justify-center gap-2">
             <span className="material-symbols-outlined animate-spin" style={{ color: accentColor }}>progress_activity</span>

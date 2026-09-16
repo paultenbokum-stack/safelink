@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { useBrandTheme } from '@/lib/brand-context';
+import { useTheme } from '@/lib/theme-context';
 
 const DEFAULT_SENTINEL_PRODUCTS = [
   { id: 'sentinel-sos-fob', name: 'Sentinel LTE SOS Panic Fob', range: 'Core', category: 'Personal Panic', costPrice: 450, sellingPrice: 890, desc: 'Waterproof multi-network GPS panic fob with haptic confirmation', badge: 'Best Seller', enabled: true, locked: true },
@@ -23,15 +24,17 @@ export default function CompanyStockPage({ params: paramsPromise }) {
   const companyId = resolvedParams?.companyId;
   const { user } = useAuth();
   const { brand } = useBrandTheme();
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme !== 'light';
 
-  // Dynamic branding CI tokens
+  // Dynamic branding CI tokens + Theme-aware palettes
   const partnerName = brand?.partnerName || 'Sovereign Intervention';
   const logoUrl = brand?.logoUrl || '/sovereign-intervention-logo.png';
   const accentColor = brand?.highlightedButtonBg || '#D4AF37';
   const accentTextColor = brand?.highlightedButtonText || '#04070E';
-  const headerBgColor = brand?.headerBgColor || '#04070E';
-  const pageBgColor = brand?.pageBgColor || '#040D16';
-  const buttonBgColor = brand?.buttonBgColor || '#0F1A26';
+  const headerBgColor = isDark ? (brand?.headerBgColor || '#04070E') : '#FFFFFF';
+  const pageBgColor = isDark ? (brand?.pageBgColor || '#040D16') : '#F8FAFC';
+  const buttonBgColor = isDark ? (brand?.buttonBgColor || '#0F1A26') : '#FFFFFF';
 
   const [loading, setLoading] = useState(false);
   const [sentinelProducts, setSentinelProducts] = useState(DEFAULT_SENTINEL_PRODUCTS);
@@ -127,18 +130,18 @@ export default function CompanyStockPage({ params: paramsPromise }) {
 
   return (
     <div
-      className="text-on-background min-h-screen font-sans transition-colors duration-300"
+      className={`min-h-screen font-sans transition-colors duration-300 ${isDark ? 'text-white' : 'text-slate-900'}`}
       style={{
         backgroundColor: pageBgColor,
-        backgroundImage: `radial-gradient(circle at 50% -10%, ${accentColor}18 0%, transparent 60%)`,
+        backgroundImage: `radial-gradient(circle at 50% -10%, ${accentColor}${isDark ? '18' : '10'} 0%, transparent 60%)`,
       }}
     >
       <header
-        className="border-b px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-30 backdrop-blur-md"
+        className="border-b px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-30 backdrop-blur-md transition-all"
         style={{
-          backgroundColor: `${headerBgColor}F0`,
-          borderColor: `${accentColor}35`,
-          boxShadow: `0 8px 24px -6px ${accentColor}15`,
+          backgroundColor: isDark ? `${headerBgColor}F0` : '#FFFFFFF0',
+          borderColor: isDark ? `${accentColor}35` : '#E2E8F0',
+          boxShadow: isDark ? `0 8px 24px -6px ${accentColor}15` : `0 4px 20px -2px rgba(0,0,0,0.06)`,
         }}
       >
         <div className="flex items-center gap-3">
@@ -146,9 +149,9 @@ export default function CompanyStockPage({ params: paramsPromise }) {
             href={`/cream/company/${companyId}`}
             className="w-11 h-11 rounded-xl flex items-center justify-center border transition-all hover:scale-105 active:scale-95"
             style={{
-              borderColor: `${accentColor}35`,
+              borderColor: isDark ? `${accentColor}35` : '#CBD5E1',
               color: accentColor,
-              backgroundColor: `${accentColor}12`,
+              backgroundColor: isDark ? `${accentColor}12` : `${accentColor}10`,
             }}
           >
             <span className="material-symbols-outlined">arrow_back</span>
@@ -156,8 +159,8 @@ export default function CompanyStockPage({ params: paramsPromise }) {
 
           {/* Emblem */}
           <div
-            className="h-11 px-3 py-1.5 rounded-xl border flex items-center justify-center bg-black/40 shadow-inner"
-            style={{ borderColor: `${accentColor}40` }}
+            className={`h-11 px-3 py-1.5 rounded-xl border flex items-center justify-center ${isDark ? 'bg-black/40 shadow-inner' : 'bg-white shadow-sm'}`}
+            style={{ borderColor: isDark ? `${accentColor}40` : '#CBD5E1' }}
           >
             <img
               src={logoUrl}
@@ -171,31 +174,54 @@ export default function CompanyStockPage({ params: paramsPromise }) {
           </div>
 
           <div>
-            <h1 className="text-lg font-black text-white tracking-tight">{partnerName} — Stock & Hardware</h1>
-            <p className="text-xs text-on-surface-variant">Sentinel IoT products & company proprietary hardware catalog</p>
+            <h1 className={`text-lg font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              {partnerName} — Stock & Hardware
+            </h1>
+            <p className={`text-xs ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>
+              Sentinel IoT products & company proprietary hardware catalog
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 text-xs">
+        <div className="flex items-center gap-2.5 text-xs">
+          {/* Light / Dark Mode Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            className="h-10 px-3 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition-all active:scale-95 shadow-sm cursor-pointer"
+            style={{
+              borderColor: isDark ? `${accentColor}35` : '#CBD5E1',
+              backgroundColor: isDark ? `${buttonBgColor}CC` : '#FFFFFF',
+              color: isDark ? accentColor : '#0F172A',
+            }}
+          >
+            <span className="material-symbols-outlined text-base">
+              {isDark ? 'light_mode' : 'dark_mode'}
+            </span>
+            <span className="hidden sm:inline font-semibold">{isDark ? 'Light' : 'Dark'}</span>
+          </button>
+
           <span
-            className="px-3 py-1.5 rounded-xl font-bold border"
+            className="px-3 py-2 rounded-xl font-bold border"
             style={{
               backgroundColor: `${accentColor}15`,
               borderColor: `${accentColor}35`,
-              color: accentColor,
+              color: isDark ? accentColor : '#92400E',
             }}
           >
             Sentinel Sold: {sales.sentinelSold || 48}
           </span>
           <span
-            className="px-3 py-1.5 rounded-xl font-bold border"
+            className="px-3 py-2 rounded-xl font-bold border"
             style={{
               backgroundColor: 'rgba(56,161,105,0.15)',
               borderColor: 'rgba(56,161,105,0.35)',
               color: '#38a169',
             }}
           >
-            Custom Hardware Sold: {sales.customSold || 22}
+            Custom Sold: {sales.customSold || 22}
           </span>
         </div>
       </header>
@@ -212,13 +238,15 @@ export default function CompanyStockPage({ params: paramsPromise }) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <h2 className={`text-base font-bold flex items-center gap-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 <span className="material-symbols-outlined text-lg" style={{ color: accentColor }}>diamond</span>
                 <span>Sentinel IoT Ecosystem Products</span>
               </h2>
-              <p className="text-xs text-on-surface-variant">Central SafeLink catalogue. Toggle which hardware devices {partnerName} distributes to subscribers.</p>
+              <p className={`text-xs ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>
+                Central SafeLink catalogue. Toggle which hardware devices {partnerName} distributes to subscribers.
+              </p>
             </div>
-            <span className="text-[11px] font-bold text-slate-400 px-3 py-1 rounded-full border border-white/10 bg-white/5">
+            <span className={`text-[11px] font-bold px-3 py-1 rounded-full border ${isDark ? 'text-slate-400 border-white/10 bg-white/5' : 'text-slate-600 border-slate-200 bg-slate-100'}`}>
               Standardized Hardware Pricing
             </span>
           </div>
@@ -226,13 +254,14 @@ export default function CompanyStockPage({ params: paramsPromise }) {
           <div
             className="border rounded-2xl overflow-hidden shadow-xl"
             style={{
-              backgroundColor: `${buttonBgColor}80`,
-              borderColor: `${accentColor}25`,
+              backgroundColor: isDark ? `${buttonBgColor}80` : '#FFFFFF',
+              borderColor: isDark ? `${accentColor}25` : '#E2E8F0',
+              boxShadow: isDark ? undefined : '0 4px 20px -2px rgba(0,0,0,0.05)',
             }}
           >
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="border-b border-white/10 text-on-surface-variant uppercase tracking-wider text-[10px] bg-black/40">
+                <thead className={`border-b uppercase tracking-wider text-[10px] ${isDark ? 'border-white/10 text-on-surface-variant bg-black/40' : 'border-slate-200 text-slate-600 bg-slate-100/90'}`}>
                   <tr>
                     <th className="p-4 w-20">Enabled</th>
                     <th className="p-4">Product</th>
@@ -242,27 +271,27 @@ export default function CompanyStockPage({ params: paramsPromise }) {
                     <th className="p-4">Subscriber Price</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className={isDark ? 'divide-y divide-white/5' : 'divide-y divide-slate-100'}>
                   {sentinelProducts.map(p => (
-                    <tr key={p.id} className="hover:bg-white/[0.04] transition-colors">
+                    <tr key={p.id} className={`${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'} transition-colors`}>
                       <td className="p-4">
                         <button
                           type="button"
                           onClick={() => toggleSentinel(p.id, !p.enabled)}
-                          className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer ${p.enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                          className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer ${p.enabled ? 'bg-emerald-500' : 'bg-slate-400'}`}
                         >
                           <span className={`w-3.5 h-3.5 rounded-full bg-white absolute top-0.5 transition-transform ${p.enabled ? 'left-5' : 'left-1'}`} />
                         </button>
                       </td>
                       <td className="p-4">
-                        <div className="font-bold text-white flex items-center gap-2">
+                        <div className={`font-bold flex items-center gap-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                           <span>{p.name}</span>
                           {p.badge && (
                             <span
                               className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border"
                               style={{
                                 backgroundColor: `${accentColor}15`,
-                                color: accentColor,
+                                color: isDark ? accentColor : '#92400E',
                                 borderColor: `${accentColor}35`,
                               }}
                             >
@@ -270,12 +299,12 @@ export default function CompanyStockPage({ params: paramsPromise }) {
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] text-on-surface-variant mt-0.5">{p.desc}</p>
+                        <p className={`text-[11px] mt-0.5 ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>{p.desc}</p>
                       </td>
-                      <td className="p-4 text-on-surface-variant">{p.range}</td>
-                      <td className="p-4 text-on-surface-variant">{p.category}</td>
-                      <td className="p-4 font-mono text-slate-300">R {p.costPrice?.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-4 font-mono font-bold text-emerald-400">R {p.sellingPrice?.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                      <td className={`p-4 ${isDark ? 'text-on-surface-variant' : 'text-slate-600'}`}>{p.range}</td>
+                      <td className={`p-4 ${isDark ? 'text-on-surface-variant' : 'text-slate-600'}`}>{p.category}</td>
+                      <td className={`p-4 font-mono ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>R {p.costPrice?.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                      <td className="p-4 font-mono font-bold text-emerald-500">R {p.sellingPrice?.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -288,11 +317,13 @@ export default function CompanyStockPage({ params: paramsPromise }) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <h2 className={`text-base font-bold flex items-center gap-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 <span className="material-symbols-outlined text-lg" style={{ color: accentColor }}>shield</span>
                 <span>{partnerName} Custom Hardware & Devices</span>
               </h2>
-              <p className="text-xs text-on-surface-variant">Custom security hardware, beams, alarms, gate links & CCTV items sold by {partnerName}.</p>
+              <p className={`text-xs ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>
+                Custom security hardware, beams, alarms, gate links & CCTV items sold by {partnerName}.
+              </p>
             </div>
             <button
               type="button"
@@ -313,13 +344,14 @@ export default function CompanyStockPage({ params: paramsPromise }) {
           <div
             className="border rounded-2xl overflow-hidden shadow-xl"
             style={{
-              backgroundColor: `${buttonBgColor}80`,
-              borderColor: `${accentColor}25`,
+              backgroundColor: isDark ? `${buttonBgColor}80` : '#FFFFFF',
+              borderColor: isDark ? `${accentColor}25` : '#E2E8F0',
+              boxShadow: isDark ? undefined : '0 4px 20px -2px rgba(0,0,0,0.05)',
             }}
           >
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="border-b border-white/10 text-on-surface-variant uppercase tracking-wider text-[10px] bg-black/40">
+                <thead className={`border-b uppercase tracking-wider text-[10px] ${isDark ? 'border-white/10 text-on-surface-variant bg-black/40' : 'border-slate-200 text-slate-600 bg-slate-100/90'}`}>
                   <tr>
                     <th className="p-4">Product Name</th>
                     <th className="p-4">SKU Code</th>
@@ -330,16 +362,16 @@ export default function CompanyStockPage({ params: paramsPromise }) {
                     <th className="p-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className={isDark ? 'divide-y divide-white/5' : 'divide-y divide-slate-100'}>
                   {customProducts.map(p => (
-                    <tr key={p.id} className="hover:bg-white/[0.04] transition-colors">
-                      <td className="p-4 font-bold text-white">{p.name}</td>
-                      <td className="p-4 font-mono text-slate-300">{p.sku || '—'}</td>
-                      <td className="p-4 text-on-surface-variant">{p.category}</td>
-                      <td className="p-4 font-mono text-slate-300">R {p.costPrice?.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-4 font-mono font-bold text-emerald-400">R {p.sellingPrice?.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                    <tr key={p.id} className={`${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'} transition-colors`}>
+                      <td className={`p-4 font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{p.name}</td>
+                      <td className={`p-4 font-mono ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{p.sku || '—'}</td>
+                      <td className={`p-4 ${isDark ? 'text-on-surface-variant' : 'text-slate-600'}`}>{p.category}</td>
+                      <td className={`p-4 font-mono ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>R {p.costPrice?.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                      <td className="p-4 font-mono font-bold text-emerald-500">R {p.sellingPrice?.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
                       <td className="p-4">
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold border border-white/10 bg-white/5 text-white">
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${isDark ? 'border-white/10 bg-white/5 text-white' : 'border-slate-200 bg-slate-100 text-slate-800'}`}>
                           {p.stockQty || 0} in stock
                         </span>
                       </td>
@@ -347,7 +379,7 @@ export default function CompanyStockPage({ params: paramsPromise }) {
                         <button
                           type="button"
                           onClick={() => deleteCustom(p.id)}
-                          className="text-xs text-rose-400 hover:text-rose-300 transition-colors p-1"
+                          className="text-xs text-rose-400 hover:text-rose-500 transition-colors p-1"
                         >
                           <span className="material-symbols-outlined text-base">delete</span>
                         </button>
@@ -356,7 +388,7 @@ export default function CompanyStockPage({ params: paramsPromise }) {
                   ))}
                   {customProducts.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-on-surface-variant">
+                      <td colSpan={7} className={`p-8 text-center ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>
                         No custom hardware products created yet.
                       </td>
                     </tr>
@@ -371,18 +403,18 @@ export default function CompanyStockPage({ params: paramsPromise }) {
         {showAddModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div
-              className="w-full max-w-lg rounded-2xl border p-6 space-y-4 shadow-2xl"
+              className="w-full max-w-lg rounded-2xl border p-6 space-y-4 shadow-2xl transition-all"
               style={{
-                backgroundColor: headerBgColor,
-                borderColor: `${accentColor}40`,
+                backgroundColor: isDark ? headerBgColor : '#FFFFFF',
+                borderColor: isDark ? `${accentColor}40` : '#E2E8F0',
               }}
             >
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                <h3 className="text-base font-bold text-white">Add Custom Security Hardware</h3>
+              <div className={`flex items-center justify-between border-b pb-3 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
+                <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Add Custom Security Hardware</h3>
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="text-slate-400 hover:text-white"
+                  className={isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-800'}
                 >
                   <span className="material-symbols-outlined">close</span>
                 </button>
@@ -390,81 +422,81 @@ export default function CompanyStockPage({ params: paramsPromise }) {
 
               <form onSubmit={handleAddCustom} className="space-y-4 text-xs">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Product Title</label>
+                  <label className={`block font-semibold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Product Title</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. Sovereign Tactical Perimeter Beam"
                     value={newProduct.name}
                     onChange={e => setNewProduct(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full p-2.5 rounded-xl bg-black/50 border border-white/10 text-white outline-none focus:border-amber-400"
+                    className={`w-full p-2.5 rounded-xl border outline-none ${isDark ? 'bg-black/50 border-white/10 text-white focus:border-amber-400' : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-amber-500'}`}
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">SKU Code</label>
+                    <label className={`block font-semibold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>SKU Code</label>
                     <input
                       type="text"
                       placeholder="e.g. SOV-BEAM-02"
                       value={newProduct.sku}
                       onChange={e => setNewProduct(prev => ({ ...prev, sku: e.target.value }))}
-                      className="w-full p-2.5 rounded-xl bg-black/50 border border-white/10 text-white outline-none focus:border-amber-400"
+                      className={`w-full p-2.5 rounded-xl border outline-none ${isDark ? 'bg-black/50 border-white/10 text-white focus:border-amber-400' : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-amber-500'}`}
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Category</label>
+                    <label className={`block font-semibold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Category</label>
                     <input
                       type="text"
                       placeholder="Perimeter Security"
                       value={newProduct.category}
                       onChange={e => setNewProduct(prev => ({ ...prev, category: e.target.value }))}
-                      className="w-full p-2.5 rounded-xl bg-black/50 border border-white/10 text-white outline-none focus:border-amber-400"
+                      className={`w-full p-2.5 rounded-xl border outline-none ${isDark ? 'bg-black/50 border-white/10 text-white focus:border-amber-400' : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-amber-500'}`}
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Cost (ZAR)</label>
+                    <label className={`block font-semibold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Cost (ZAR)</label>
                     <input
                       type="number"
                       required
                       placeholder="1200"
                       value={newProduct.costPrice}
                       onChange={e => setNewProduct(prev => ({ ...prev, costPrice: e.target.value }))}
-                      className="w-full p-2.5 rounded-xl bg-black/50 border border-white/10 text-white outline-none focus:border-amber-400"
+                      className={`w-full p-2.5 rounded-xl border outline-none ${isDark ? 'bg-black/50 border-white/10 text-white focus:border-amber-400' : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-amber-500'}`}
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Selling (ZAR)</label>
+                    <label className={`block font-semibold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Selling (ZAR)</label>
                     <input
                       type="number"
                       required
                       placeholder="2450"
                       value={newProduct.sellingPrice}
                       onChange={e => setNewProduct(prev => ({ ...prev, sellingPrice: e.target.value }))}
-                      className="w-full p-2.5 rounded-xl bg-black/50 border border-white/10 text-white outline-none focus:border-amber-400"
+                      className={`w-full p-2.5 rounded-xl border outline-none ${isDark ? 'bg-black/50 border-white/10 text-white focus:border-amber-400' : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-amber-500'}`}
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Stock Qty</label>
+                    <label className={`block font-semibold mb-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Stock Qty</label>
                     <input
                       type="number"
                       required
                       placeholder="25"
                       value={newProduct.stockQty}
                       onChange={e => setNewProduct(prev => ({ ...prev, stockQty: e.target.value }))}
-                      className="w-full p-2.5 rounded-xl bg-black/50 border border-white/10 text-white outline-none focus:border-amber-400"
+                      className={`w-full p-2.5 rounded-xl border outline-none ${isDark ? 'bg-black/50 border-white/10 text-white focus:border-amber-400' : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-amber-500'}`}
                     />
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
+                <div className={`flex justify-end gap-2 pt-2 border-t ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
                   <button
                     type="button"
                     onClick={() => setShowAddModal(false)}
-                    className="px-4 py-2 rounded-xl border border-white/10 text-slate-300 hover:text-white"
+                    className={`px-4 py-2 rounded-xl border ${isDark ? 'border-white/10 text-slate-300 hover:text-white' : 'border-slate-200 text-slate-700 hover:bg-slate-100'}`}
                   >
                     Cancel
                   </button>

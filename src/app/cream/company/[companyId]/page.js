@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { useBrandTheme } from '@/lib/brand-context';
+import { useTheme } from '@/lib/theme-context';
 import BrandCustomizer from '@/app/components/BrandCustomizer';
 import GodsEyeSurveillance from '@/app/components/GodsEyeSurveillance';
 
@@ -82,6 +83,8 @@ export default function CompanyDashboard({ params: paramsPromise }) {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
   const { brand } = useBrandTheme();
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme !== 'light';
 
   // Allow direct deep-linking like ?tab=cctv
   useEffect(() => {
@@ -94,14 +97,14 @@ export default function CompanyDashboard({ params: paramsPromise }) {
     }
   }, []);
 
-  // Dynamic CI tokens from Look & Feel Branding Portal
+  // Dynamic CI tokens from Look & Feel Branding Portal + Theme-aware palettes
   const partnerName = brand?.partnerName || 'Sovereign Intervention';
   const logoUrl = brand?.logoUrl || '/sovereign-intervention-logo.png';
   const accentColor = brand?.highlightedButtonBg || '#D4AF37';
   const accentTextColor = brand?.highlightedButtonText || '#04070E';
-  const headerBgColor = brand?.headerBgColor || '#04070E';
-  const pageBgColor = brand?.pageBgColor || '#040D16';
-  const buttonBgColor = brand?.buttonBgColor || '#0F1A26';
+  const headerBgColor = isDark ? (brand?.headerBgColor || '#04070E') : '#FFFFFF';
+  const pageBgColor = isDark ? (brand?.pageBgColor || '#040D16') : '#F8FAFC';
+  const buttonBgColor = isDark ? (brand?.buttonBgColor || '#0F1A26') : '#FFFFFF';
 
   const fetchTab = useCallback(async (tabName) => {
     if (!companyId) return;
@@ -146,19 +149,19 @@ export default function CompanyDashboard({ params: paramsPromise }) {
 
   return (
     <div
-      className="text-on-background min-h-screen font-sans transition-colors duration-300"
+      className={`min-h-screen font-sans transition-colors duration-300 ${isDark ? 'text-white' : 'text-slate-900'}`}
       style={{
         backgroundColor: pageBgColor,
-        backgroundImage: `radial-gradient(circle at 50% -10%, ${accentColor}18 0%, transparent 60%)`,
+        backgroundImage: `radial-gradient(circle at 50% -10%, ${accentColor}${isDark ? '18' : '10'} 0%, transparent 60%)`,
       }}
     >
       {/* ── SECURITY COMPANY PORTAL HEADER ── */}
       <header
         className="border-b px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-30 backdrop-blur-md transition-all"
         style={{
-          backgroundColor: `${headerBgColor}F0`,
-          borderColor: `${accentColor}35`,
-          boxShadow: `0 8px 24px -6px ${accentColor}15`,
+          backgroundColor: isDark ? `${headerBgColor}F0` : '#FFFFFFF0',
+          borderColor: isDark ? `${accentColor}35` : '#E2E8F0',
+          boxShadow: isDark ? `0 8px 24px -6px ${accentColor}15` : `0 4px 20px -2px rgba(0,0,0,0.06)`,
         }}
       >
         <div className="flex items-center gap-3">
@@ -166,9 +169,9 @@ export default function CompanyDashboard({ params: paramsPromise }) {
             href="/cream"
             className="w-11 h-11 rounded-xl flex items-center justify-center border transition-all hover:scale-105 active:scale-95"
             style={{
-              borderColor: `${accentColor}35`,
+              borderColor: isDark ? `${accentColor}35` : '#CBD5E1',
               color: accentColor,
-              backgroundColor: `${accentColor}12`,
+              backgroundColor: isDark ? `${accentColor}12` : `${accentColor}10`,
             }}
           >
             <span className="material-symbols-outlined">arrow_back</span>
@@ -176,8 +179,8 @@ export default function CompanyDashboard({ params: paramsPromise }) {
 
           {/* Company Crest / Logo from Branding Studio */}
           <div
-            className="h-11 px-3 py-1.5 rounded-xl border flex items-center justify-center bg-black/40 shadow-inner"
-            style={{ borderColor: `${accentColor}40` }}
+            className={`h-11 px-3 py-1.5 rounded-xl border flex items-center justify-center ${isDark ? 'bg-black/40 shadow-inner' : 'bg-white shadow-sm'}`}
+            style={{ borderColor: isDark ? `${accentColor}40` : '#CBD5E1' }}
           >
             <img
               src={logoUrl}
@@ -192,7 +195,7 @@ export default function CompanyDashboard({ params: paramsPromise }) {
 
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-black text-white tracking-tight">{partnerName}</h1>
+              <h1 className={`text-lg font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{partnerName}</h1>
               <span
                 className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border"
                 style={{
@@ -204,7 +207,7 @@ export default function CompanyDashboard({ params: paramsPromise }) {
                 PSIRA Verified
               </span>
             </div>
-            <p className="text-xs text-on-surface-variant flex items-center gap-1.5">
+            <p className={`text-xs flex items-center gap-1.5 ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span>Security Partner Command Center & Fleet Operations</span>
             </p>
@@ -212,6 +215,25 @@ export default function CompanyDashboard({ params: paramsPromise }) {
         </div>
 
         <div className="flex items-center gap-2.5">
+          {/* Light / Dark Mode Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            className="h-10 px-3 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition-all active:scale-95 shadow-sm cursor-pointer"
+            style={{
+              borderColor: isDark ? `${accentColor}35` : '#CBD5E1',
+              backgroundColor: isDark ? `${buttonBgColor}CC` : '#FFFFFF',
+              color: isDark ? accentColor : '#0F172A',
+            }}
+          >
+            <span className="material-symbols-outlined text-base">
+              {isDark ? 'light_mode' : 'dark_mode'}
+            </span>
+            <span className="hidden sm:inline font-semibold">{isDark ? 'Light' : 'Dark'}</span>
+          </button>
+
           <Link
             href={`/cream/company/${companyId}/branding`}
             className="px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-md active:scale-95 border"
@@ -227,10 +249,10 @@ export default function CompanyDashboard({ params: paramsPromise }) {
           </Link>
           <Link
             href={`/cream/company/${companyId}/stock`}
-            className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border text-white hover:bg-white/5 active:scale-95"
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border active:scale-95 ${isDark ? 'text-white hover:bg-white/5' : 'text-slate-800 hover:bg-slate-100 bg-white shadow-sm'}`}
             style={{
-              borderColor: `${accentColor}40`,
-              backgroundColor: `${buttonBgColor}90`,
+              borderColor: isDark ? `${accentColor}40` : '#CBD5E1',
+              backgroundColor: isDark ? `${buttonBgColor}90` : '#FFFFFF',
             }}
           >
             <span className="material-symbols-outlined text-sm" style={{ color: accentColor }}>inventory_2</span>
@@ -240,8 +262,8 @@ export default function CompanyDashboard({ params: paramsPromise }) {
       </header>
 
       {/* Navigation Tabs with Dynamic Brand Styling */}
-      <div className="border-b border-white/10 px-6 backdrop-blur-sm bg-black/20">
-        <nav className="flex gap-2 max-w-7xl mx-auto">
+      <div className={`border-b px-6 backdrop-blur-sm ${isDark ? 'border-white/10 bg-black/20' : 'border-slate-200 bg-white/70'}`}>
+        <nav className="flex gap-2 max-w-7xl mx-auto overflow-x-auto scrollbar-none">
           {[
             ['customers', 'people', 'Customers'],
             ['incidents', 'warning', 'Incidents'],
@@ -254,15 +276,17 @@ export default function CompanyDashboard({ params: paramsPromise }) {
               <button
                 key={id}
                 onClick={() => setTab(id)}
-                className={`px-5 py-3.5 text-xs font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
-                  isActive ? 'text-white shadow-sm' : 'border-transparent text-on-surface-variant hover:text-white'
+                className={`px-5 py-3.5 text-xs font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+                  isActive
+                    ? isDark ? 'text-white shadow-sm' : 'text-slate-900 font-extrabold'
+                    : isDark ? 'border-transparent text-on-surface-variant hover:text-white' : 'border-transparent text-slate-600 hover:text-slate-950'
                 }`}
                 style={
                   isActive
                     ? {
                         borderBottomColor: accentColor,
-                        color: accentColor,
-                        background: `linear-gradient(180deg, transparent 60%, ${accentColor}10 100%)`,
+                        color: isDark ? accentColor : '#0F172A',
+                        background: `linear-gradient(180deg, transparent 60%, ${accentColor}${isDark ? '10' : '15'} 100%)`,
                       }
                     : {}
                 }
@@ -291,7 +315,7 @@ export default function CompanyDashboard({ params: paramsPromise }) {
             {/* Summary cards */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {[
-                ['Total Subscribers', data.customers.summary?.total || 184, '#fff'],
+                ['Total Subscribers', data.customers.summary?.total || 184, isDark ? '#fff' : '#0F172A'],
                 ['Active (Current)', data.customers.summary?.current || 168, '#38a169'],
                 ['30 Days Due', data.customers.summary?.['30day'] || 11, '#d69e2e'],
                 ['60 Days Due', data.customers.summary?.['60day'] || 4, '#dd6b20'],
@@ -301,11 +325,12 @@ export default function CompanyDashboard({ params: paramsPromise }) {
                   key={label}
                   className="rounded-2xl p-4 border transition-all"
                   style={{
-                    backgroundColor: `${buttonBgColor}CC`,
-                    borderColor: 'rgba(255,255,255,0.08)',
+                    backgroundColor: isDark ? `${buttonBgColor}CC` : '#FFFFFF',
+                    borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0',
+                    boxShadow: isDark ? 'none' : '0 2px 10px rgba(0,0,0,0.03)',
                   }}
                 >
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">{label}</p>
+                  <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>{label}</p>
                   <p className="text-2xl font-black mt-1" style={{ color }}>{count}</p>
                 </div>
               ))}
@@ -315,25 +340,30 @@ export default function CompanyDashboard({ params: paramsPromise }) {
             <div
               className="border rounded-2xl overflow-hidden shadow-xl"
               style={{
-                backgroundColor: `${buttonBgColor}80`,
-                borderColor: `${accentColor}25`,
+                backgroundColor: isDark ? `${buttonBgColor}80` : '#FFFFFF',
+                borderColor: isDark ? `${accentColor}25` : '#E2E8F0',
+                boxShadow: isDark ? undefined : '0 4px 20px -2px rgba(0,0,0,0.05)',
               }}
             >
-              <div className="p-4 border-b border-white/10 flex items-center justify-between">
+              <div className={`p-4 border-b flex items-center justify-between ${isDark ? 'border-white/10' : 'border-slate-200 bg-slate-50/70'}`}>
                 <div>
-                  <h3 className="text-sm font-bold text-white">Active Subscriber Roster</h3>
-                  <p className="text-xs text-on-surface-variant">Live accounts linked to {partnerName}</p>
+                  <h3 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Active Subscriber Roster</h3>
+                  <p className={`text-xs ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>Live accounts linked to {partnerName}</p>
                 </div>
                 <span
                   className="text-xs px-3 py-1 rounded-full font-bold border"
-                  style={{ backgroundColor: `${accentColor}15`, color: accentColor, borderColor: `${accentColor}30` }}
+                  style={{
+                    backgroundColor: `${accentColor}15`,
+                    color: isDark ? accentColor : '#92400E',
+                    borderColor: `${accentColor}30`,
+                  }}
                 >
                   {data.customers.customers?.length || 6} Verified Clients
                 </span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="border-b border-white/10 text-on-surface-variant uppercase tracking-wider text-[10px] bg-black/40">
+                  <thead className={`border-b uppercase tracking-wider text-[10px] ${isDark ? 'border-white/10 text-on-surface-variant bg-black/40' : 'border-slate-200 text-slate-600 bg-slate-100/90'}`}>
                     <tr>
                       <th className="p-4">Customer</th>
                       <th className="p-4">Email</th>
@@ -343,23 +373,23 @@ export default function CompanyDashboard({ params: paramsPromise }) {
                       <th className="p-4">Last Payment</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className={isDark ? 'divide-y divide-white/5' : 'divide-y divide-slate-100'}>
                     {(data.customers.customers || []).map(c => (
-                      <tr key={c.id} className="hover:bg-white/[0.04] transition-colors">
-                        <td className="p-4 font-bold text-white flex items-center gap-2">
-                          <span className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-xs text-slate-300 font-bold">
+                      <tr key={c.id} className={`${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'} transition-colors`}>
+                        <td className={`p-4 font-bold flex items-center gap-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                          <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${isDark ? 'bg-white/10 text-slate-300' : 'bg-slate-200 text-slate-700'}`}>
                             {c.name.charAt(0)}
                           </span>
                           <span>{c.name}</span>
                         </td>
-                        <td className="p-4 text-on-surface-variant">{c.email}</td>
-                        <td className="p-4 text-on-surface-variant font-mono">{c.phone}</td>
+                        <td className={`p-4 ${isDark ? 'text-on-surface-variant' : 'text-slate-600'}`}>{c.email}</td>
+                        <td className={`p-4 font-mono ${isDark ? 'text-on-surface-variant' : 'text-slate-600'}`}>{c.phone}</td>
                         <td className="p-4">
                           <span
                             className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border"
                             style={{
                               backgroundColor: `${accentColor}15`,
-                              color: accentColor,
+                              color: isDark ? accentColor : '#92400E',
                               borderColor: `${accentColor}35`,
                             }}
                           >
@@ -379,7 +409,7 @@ export default function CompanyDashboard({ params: paramsPromise }) {
                             {PAYMENT_LABELS[c.paymentStatus] || c.paymentStatus}
                           </span>
                         </td>
-                        <td className="p-4 text-on-surface-variant">{c.lastPaymentDate ? new Date(c.lastPaymentDate).toLocaleDateString('en-ZA') : '—'}</td>
+                        <td className={`p-4 ${isDark ? 'text-on-surface-variant' : 'text-slate-600'}`}>{c.lastPaymentDate ? new Date(c.lastPaymentDate).toLocaleDateString('en-ZA') : '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -396,50 +426,66 @@ export default function CompanyDashboard({ params: paramsPromise }) {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div
                 className="rounded-2xl p-4 border transition-all"
-                style={{ backgroundColor: `${buttonBgColor}CC`, borderColor: `${accentColor}35` }}
+                style={{
+                  backgroundColor: isDark ? `${buttonBgColor}CC` : '#FFFFFF',
+                  borderColor: isDark ? `${accentColor}35` : '#E2E8F0',
+                  boxShadow: isDark ? 'none' : '0 2px 10px rgba(0,0,0,0.03)',
+                }}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Total Incidents (30d)</span>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>Total Incidents (30d)</span>
                   <span className="material-symbols-outlined text-base" style={{ color: accentColor }}>emergency</span>
                 </div>
-                <p className="text-2xl font-black text-white mt-1">42</p>
-                <p className="text-[11px] text-emerald-400 mt-0.5">● 100% Armed units dispatched</p>
+                <p className={`text-2xl font-black mt-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>42</p>
+                <p className="text-[11px] text-emerald-500 mt-0.5 font-medium">● 100% Armed units dispatched</p>
               </div>
 
               <div
                 className="rounded-2xl p-4 border transition-all"
-                style={{ backgroundColor: `${buttonBgColor}CC`, borderColor: `${accentColor}35` }}
+                style={{
+                  backgroundColor: isDark ? `${buttonBgColor}CC` : '#FFFFFF',
+                  borderColor: isDark ? `${accentColor}35` : '#E2E8F0',
+                  boxShadow: isDark ? 'none' : '0 2px 10px rgba(0,0,0,0.03)',
+                }}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Avg Response Time</span>
-                  <span className="material-symbols-outlined text-base text-emerald-400">timer</span>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>Avg Response Time</span>
+                  <span className="material-symbols-outlined text-base text-emerald-500">timer</span>
                 </div>
-                <p className="text-2xl font-black text-emerald-400 mt-1">2m 48s</p>
-                <p className="text-[11px] text-on-surface-variant mt-0.5">Industry target: &lt; 5m 00s</p>
+                <p className="text-2xl font-black text-emerald-500 mt-1">2m 48s</p>
+                <p className={`text-[11px] mt-0.5 ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>Industry target: &lt; 5m 00s</p>
               </div>
 
               <div
                 className="rounded-2xl p-4 border transition-all"
-                style={{ backgroundColor: `${buttonBgColor}CC`, borderColor: `${accentColor}35` }}
+                style={{
+                  backgroundColor: isDark ? `${buttonBgColor}CC` : '#FFFFFF',
+                  borderColor: isDark ? `${accentColor}35` : '#E2E8F0',
+                  boxShadow: isDark ? 'none' : '0 2px 10px rgba(0,0,0,0.03)',
+                }}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Tactical Fleet On Duty</span>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>Tactical Fleet On Duty</span>
                   <span className="material-symbols-outlined text-base" style={{ color: accentColor }}>local_police</span>
                 </div>
-                <p className="text-2xl font-black text-white mt-1">8 Units</p>
-                <p className="text-[11px] text-emerald-400 mt-0.5">Sandton & Bryanston Grid</p>
+                <p className={`text-2xl font-black mt-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>8 Units</p>
+                <p className="text-[11px] text-emerald-500 mt-0.5 font-medium">Sandton & Bryanston Grid</p>
               </div>
 
               <div
                 className="rounded-2xl p-4 border transition-all"
-                style={{ backgroundColor: `${buttonBgColor}CC`, borderColor: `${accentColor}35` }}
+                style={{
+                  backgroundColor: isDark ? `${buttonBgColor}CC` : '#FFFFFF',
+                  borderColor: isDark ? `${accentColor}35` : '#E2E8F0',
+                  boxShadow: isDark ? 'none' : '0 2px 10px rgba(0,0,0,0.03)',
+                }}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Clearance Rate</span>
-                  <span className="material-symbols-outlined text-base text-emerald-400">verified</span>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>Clearance Rate</span>
+                  <span className="material-symbols-outlined text-base text-emerald-500">verified</span>
                 </div>
-                <p className="text-2xl font-black text-emerald-400 mt-1">97.6%</p>
-                <p className="text-[11px] text-on-surface-variant mt-0.5">Resolved with zero casualties</p>
+                <p className="text-2xl font-black text-emerald-500 mt-1">97.6%</p>
+                <p className={`text-[11px] mt-0.5 ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>Resolved with zero casualties</p>
               </div>
             </div>
 
@@ -448,13 +494,12 @@ export default function CompanyDashboard({ params: paramsPromise }) {
               {(data.incidents.summary?.byType || []).map(t => (
                 <div
                   key={t.id}
-                  className="border rounded-xl p-3 flex items-center gap-3 bg-black/30"
-                  style={{ borderColor: 'rgba(255,255,255,0.08)' }}
+                  className={`border rounded-xl p-3 flex items-center gap-3 ${isDark ? 'bg-black/30 border-white/10' : 'bg-white border-slate-200 shadow-sm'}`}
                 >
                   <span className="material-symbols-outlined text-2xl" style={{ color: t.color }}>{t.icon}</span>
                   <div>
-                    <p className="text-[11px] text-on-surface-variant">{t.label}</p>
-                    <p className="text-base font-bold text-white">{t.count} alerts</p>
+                    <p className={`text-[11px] ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>{t.label}</p>
+                    <p className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t.count} alerts</p>
                   </div>
                 </div>
               ))}
@@ -464,23 +509,24 @@ export default function CompanyDashboard({ params: paramsPromise }) {
             <div
               className="border rounded-2xl overflow-hidden shadow-xl"
               style={{
-                backgroundColor: `${buttonBgColor}80`,
-                borderColor: `${accentColor}25`,
+                backgroundColor: isDark ? `${buttonBgColor}80` : '#FFFFFF',
+                borderColor: isDark ? `${accentColor}25` : '#E2E8F0',
+                boxShadow: isDark ? undefined : '0 4px 20px -2px rgba(0,0,0,0.05)',
               }}
             >
-              <div className="p-4 border-b border-white/10 flex items-center justify-between">
+              <div className={`p-4 border-b flex items-center justify-between ${isDark ? 'border-white/10' : 'border-slate-200 bg-slate-50/70'}`}>
                 <div>
-                  <h3 className="text-sm font-bold text-white">{partnerName} Live Dispatch Log</h3>
-                  <p className="text-xs text-on-surface-variant">Real-time armed panic, vehicle intercept & duress logs</p>
+                  <h3 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{partnerName} Live Dispatch Log</h3>
+                  <p className={`text-xs ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>Real-time armed panic, vehicle intercept & duress logs</p>
                 </div>
-                <span className="flex items-center gap-1 text-xs text-emerald-400 font-bold">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span className="flex items-center gap-1 text-xs text-emerald-500 font-bold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
                   Live Dispatch Feed
                 </span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="border-b border-white/10 text-on-surface-variant uppercase tracking-wider text-[10px] bg-black/40">
+                  <thead className={`border-b uppercase tracking-wider text-[10px] ${isDark ? 'border-white/10 text-on-surface-variant bg-black/40' : 'border-slate-200 text-slate-600 bg-slate-100/90'}`}>
                     <tr>
                       <th className="p-4">Incident Type</th>
                       <th className="p-4">Status</th>
@@ -489,7 +535,7 @@ export default function CompanyDashboard({ params: paramsPromise }) {
                       <th className="p-4">Response Time</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className={isDark ? 'divide-y divide-white/5' : 'divide-y divide-slate-100'}>
                     {(data.incidents.incidents || []).map(i => {
                       const typeLabels = {
                         panic: { label: 'Armed SOS Panic', icon: 'emergency', color: accentColor },
@@ -501,29 +547,34 @@ export default function CompanyDashboard({ params: paramsPromise }) {
                       const meta = typeLabels[i.type] || { label: i.type.replace(/_/g, ' '), icon: 'report', color: '#a0aec0' };
 
                       return (
-                        <tr key={i.id} className="hover:bg-white/[0.04] transition-colors">
-                          <td className="p-4 font-bold text-white flex items-center gap-2">
+                        <tr key={i.id} className={`${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'} transition-colors`}>
+                          <td className={`p-4 font-bold flex items-center gap-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                             <span className="material-symbols-outlined text-base" style={{ color: meta.color }}>
                               {meta.icon}
                             </span>
                             <span>{meta.label}</span>
                           </td>
                           <td className="p-4">
-                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border bg-emerald-500/15 text-emerald-400 border-emerald-500/30 inline-flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border bg-emerald-500/15 text-emerald-500 border-emerald-500/30 inline-flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                               {i.status}
                             </span>
                           </td>
                           <td className="p-4">
-                            <div className="font-semibold text-white">{i.customerName}</div>
-                            {i.location && <div className="text-[11px] text-on-surface-variant flex items-center gap-1 mt-0.5"><span className="material-symbols-outlined text-xs">location_on</span>{i.location}</div>}
+                            <div className={`font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{i.customerName}</div>
+                            {i.location && (
+                              <div className={`text-[11px] flex items-center gap-1 mt-0.5 ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>
+                                <span className="material-symbols-outlined text-xs">location_on</span>
+                                {i.location}
+                              </div>
+                            )}
                           </td>
-                          <td className="p-4 text-on-surface-variant">{new Date(i.createdAt).toLocaleString('en-ZA')}</td>
+                          <td className={`p-4 ${isDark ? 'text-on-surface-variant' : 'text-slate-600'}`}>{new Date(i.createdAt).toLocaleString('en-ZA')}</td>
                           <td className="p-4">
                             <span
                               className="px-2 py-0.5 rounded-md font-mono text-xs font-extrabold border"
                               style={{
-                                color: accentColor,
+                                color: isDark ? accentColor : '#92400E',
                                 backgroundColor: `${accentColor}12`,
                                 borderColor: `${accentColor}30`,
                               }}
@@ -548,56 +599,68 @@ export default function CompanyDashboard({ params: paramsPromise }) {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <div
                 className="rounded-2xl p-4 border transition-all"
-                style={{ backgroundColor: `${buttonBgColor}CC`, borderColor: `${accentColor}35` }}
+                style={{
+                  backgroundColor: isDark ? `${buttonBgColor}CC` : '#FFFFFF',
+                  borderColor: isDark ? `${accentColor}35` : '#E2E8F0',
+                  boxShadow: isDark ? 'none' : '0 2px 10px rgba(0,0,0,0.03)',
+                }}
               >
-                <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Gross Transaction Volume</p>
-                <p className="text-2xl font-black text-white mt-1">
+                <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>Gross Transaction Volume</p>
+                <p className={`text-2xl font-black mt-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   R {(data.revenue.summary?.totalRevenue || 332700).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
                 </p>
-                <p className="text-[11px] text-on-surface-variant mt-0.5">Recurring Subscriptions & Hardware</p>
+                <p className={`text-[11px] mt-0.5 ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>Recurring Subscriptions & Hardware</p>
               </div>
 
               <div
                 className="rounded-2xl p-4 border transition-all"
-                style={{ backgroundColor: `${buttonBgColor}CC`, borderColor: 'rgba(255,255,255,0.08)' }}
+                style={{
+                  backgroundColor: isDark ? `${buttonBgColor}CC` : '#FFFFFF',
+                  borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0',
+                  boxShadow: isDark ? 'none' : '0 2px 10px rgba(0,0,0,0.03)',
+                }}
               >
-                <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Paystack Processing (1.5%)</p>
-                <p className="text-2xl font-black text-slate-400 mt-1">
+                <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>Paystack Processing (1.5%)</p>
+                <p className={`text-2xl font-black mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                   -R {(data.revenue.summary?.totalPaystackFees || 4990.50).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
                 </p>
-                <p className="text-[11px] text-on-surface-variant mt-0.5">Standard card gateway fee</p>
+                <p className={`text-[11px] mt-0.5 ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>Standard card gateway fee</p>
               </div>
 
               <div
                 className="rounded-2xl p-4 border transition-all"
-                style={{ backgroundColor: `${buttonBgColor}CC`, borderColor: 'rgba(255,255,255,0.08)' }}
+                style={{
+                  backgroundColor: isDark ? `${buttonBgColor}CC` : '#FFFFFF',
+                  borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0',
+                  boxShadow: isDark ? 'none' : '0 2px 10px rgba(0,0,0,0.03)',
+                }}
               >
-                <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">CREAM Platform (1.0%)</p>
-                <p className="text-2xl font-black text-purple-300 mt-1">
+                <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>CREAM Platform (1.0%)</p>
+                <p className={`text-2xl font-black mt-1 ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
                   -R {(data.revenue.summary?.totalCreamShare || 3327.00).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
                 </p>
-                <p className="text-[11px] text-purple-300/70 mt-0.5">SafeLink tech infrastructure</p>
+                <p className={`text-[11px] mt-0.5 ${isDark ? 'text-purple-300/70' : 'text-purple-600/80'}`}>SafeLink tech infrastructure</p>
               </div>
 
               <div
                 className="rounded-2xl p-4 border transition-all relative overflow-hidden"
                 style={{
-                  backgroundColor: `${buttonBgColor}CC`,
-                  borderColor: `${accentColor}60`,
-                  boxShadow: `0 8px 24px -4px ${accentColor}25`,
+                  backgroundColor: isDark ? `${buttonBgColor}CC` : '#FFFFFF',
+                  borderColor: isDark ? `${accentColor}60` : `${accentColor}50`,
+                  boxShadow: isDark ? `0 8px 24px -4px ${accentColor}25` : `0 4px 20px -2px rgba(0,0,0,0.08)`,
                 }}
               >
                 <div
-                  className="absolute top-0 right-0 w-24 h-24 rounded-full blur-2xl pointer-events-none opacity-30"
+                  className={`absolute top-0 right-0 w-24 h-24 rounded-full blur-2xl pointer-events-none ${isDark ? 'opacity-30' : 'opacity-15'}`}
                   style={{ backgroundColor: accentColor }}
                 />
-                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: accentColor }}>
+                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: isDark ? accentColor : '#92400E' }}>
                   {partnerName} Net Payout (97.5%)
                 </p>
-                <p className="text-2xl font-black text-emerald-400 mt-1">
+                <p className="text-2xl font-black text-emerald-500 mt-1">
                   R {(data.revenue.summary?.totalCompanyShare || 324382.50).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
                 </p>
-                <p className="text-[11px] text-emerald-300/80 mt-0.5">Settled automatically to verified bank account</p>
+                <p className={`text-[11px] mt-0.5 ${isDark ? 'text-emerald-300/80' : 'text-emerald-700'}`}>Settled automatically to verified bank account</p>
               </div>
             </div>
 
@@ -606,35 +669,36 @@ export default function CompanyDashboard({ params: paramsPromise }) {
               <div
                 className="border rounded-2xl overflow-hidden shadow-xl"
                 style={{
-                  backgroundColor: `${buttonBgColor}80`,
-                  borderColor: `${accentColor}25`,
+                  backgroundColor: isDark ? `${buttonBgColor}80` : '#FFFFFF',
+                  borderColor: isDark ? `${accentColor}25` : '#E2E8F0',
+                  boxShadow: isDark ? undefined : '0 4px 20px -2px rgba(0,0,0,0.05)',
                 }}
               >
-                <div className="p-4 border-b border-white/10 flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white">Monthly Revenue Breakdown</h3>
-                  <span className="text-xs text-on-surface-variant font-medium">Auto Paystack Split Reconciliation</span>
+                <div className={`p-4 border-b flex items-center justify-between ${isDark ? 'border-white/10' : 'border-slate-200 bg-slate-50/70'}`}>
+                  <h3 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Monthly Revenue Breakdown</h3>
+                  <span className={`text-xs font-medium ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>Auto Paystack Split Reconciliation</span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                    <thead className="border-b border-white/10 text-on-surface-variant uppercase tracking-wider text-[10px] bg-black/40">
+                    <thead className={`border-b uppercase tracking-wider text-[10px] ${isDark ? 'border-white/10 text-on-surface-variant bg-black/40' : 'border-slate-200 text-slate-600 bg-slate-100/90'}`}>
                       <tr>
                         <th className="p-4">Billing Month</th>
                         <th className="p-4">Transactions</th>
                         <th className="p-4">Gross Revenue</th>
                         <th className="p-4">Paystack (1.5%)</th>
                         <th className="p-4">CREAM (1.0%)</th>
-                        <th className="p-4 font-bold" style={{ color: accentColor }}>Company Payout (97.5%)</th>
+                        <th className="p-4 font-bold" style={{ color: isDark ? accentColor : '#92400E' }}>Company Payout (97.5%)</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody className={isDark ? 'divide-y divide-white/5' : 'divide-y divide-slate-100'}>
                       {data.revenue.monthly.map(m => (
-                        <tr key={m.month} className="hover:bg-white/[0.04] transition-colors">
-                          <td className="p-4 font-bold text-white">{m.month}</td>
-                          <td className="p-4">{m.count}</td>
-                          <td className="p-4 text-white font-semibold">R {m.revenue.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-4 text-on-surface-variant">-R {m.paystackFees.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-4 text-purple-300">-R {m.creamShare.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-4 font-extrabold text-emerald-400">R {m.companyShare.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                        <tr key={m.month} className={`${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'} transition-colors`}>
+                          <td className={`p-4 font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{m.month}</td>
+                          <td className={`p-4 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{m.count}</td>
+                          <td className={`p-4 font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>R {m.revenue.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                          <td className={`p-4 ${isDark ? 'text-on-surface-variant' : 'text-slate-600'}`}>-R {m.paystackFees.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                          <td className={`p-4 ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>-R {m.creamShare.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                          <td className="p-4 font-extrabold text-emerald-500">R {m.companyShare.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -647,43 +711,44 @@ export default function CompanyDashboard({ params: paramsPromise }) {
             <div
               className="border rounded-2xl overflow-hidden shadow-xl"
               style={{
-                backgroundColor: `${buttonBgColor}80`,
-                borderColor: `${accentColor}25`,
+                backgroundColor: isDark ? `${buttonBgColor}80` : '#FFFFFF',
+                borderColor: isDark ? `${accentColor}25` : '#E2E8F0',
+                boxShadow: isDark ? undefined : '0 4px 20px -2px rgba(0,0,0,0.05)',
               }}
             >
-              <div className="p-4 border-b border-white/10 flex items-center justify-between">
+              <div className={`p-4 border-b flex items-center justify-between ${isDark ? 'border-white/10' : 'border-slate-200 bg-slate-50/70'}`}>
                 <div>
-                  <h3 className="text-sm font-bold text-white">Recent Transactions</h3>
-                  <p className="text-xs text-on-surface-variant">Live payments processed via Paystack Subaccount</p>
+                  <h3 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Recent Transactions</h3>
+                  <p className={`text-xs ${isDark ? 'text-on-surface-variant' : 'text-slate-500'}`}>Live payments processed via Paystack Subaccount</p>
                 </div>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
                   Direct Bank Settlement
                 </span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="border-b border-white/10 text-on-surface-variant uppercase tracking-wider text-[10px] bg-black/40">
+                  <thead className={`border-b uppercase tracking-wider text-[10px] ${isDark ? 'border-white/10 text-on-surface-variant bg-black/40' : 'border-slate-200 text-slate-600 bg-slate-100/90'}`}>
                     <tr>
                       <th className="p-4">Date</th>
                       <th className="p-4">Reference</th>
                       <th className="p-4">Customer</th>
                       <th className="p-4">Gross Amount</th>
                       <th className="p-4">CREAM (1%)</th>
-                      <th className="p-4" style={{ color: accentColor }}>Net Company Share</th>
+                      <th className="p-4" style={{ color: isDark ? accentColor : '#92400E' }}>Net Company Share</th>
                       <th className="p-4">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className={isDark ? 'divide-y divide-white/5' : 'divide-y divide-slate-100'}>
                     {(data.revenue.transactions || []).map(t => (
-                      <tr key={t.id} className="hover:bg-white/[0.04] transition-colors">
-                        <td className="p-4 text-on-surface-variant">{new Date(t.createdAt).toLocaleDateString('en-ZA')}</td>
-                        <td className="p-4 font-mono text-[11px] text-slate-300">{t.reference}</td>
-                        <td className="p-4 font-bold text-white">{t.customerName}</td>
-                        <td className="p-4 text-white font-semibold">R {t.totalAmount.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
-                        <td className="p-4 text-purple-300">R {t.creamShare.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
-                        <td className="p-4 font-extrabold text-emerald-400">R {t.companyShare.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                      <tr key={t.id} className={`${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'} transition-colors`}>
+                        <td className={`p-4 ${isDark ? 'text-on-surface-variant' : 'text-slate-600'}`}>{new Date(t.createdAt).toLocaleDateString('en-ZA')}</td>
+                        <td className={`p-4 font-mono text-[11px] ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{t.reference}</td>
+                        <td className={`p-4 font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t.customerName}</td>
+                        <td className={`p-4 font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>R {t.totalAmount.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                        <td className={`p-4 ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>R {t.creamShare.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-4 font-extrabold text-emerald-500">R {t.companyShare.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
                         <td className="p-4">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
                             Settled
                           </span>
                         </td>

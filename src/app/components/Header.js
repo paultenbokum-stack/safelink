@@ -7,9 +7,11 @@ import ThemeSwitch from './ThemeSwitch';
 import RefreshButton from './RefreshButton';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
+import { useBrandTheme } from '@/lib/brand-context';
 
 export default function Header({ title, showBack = false, showNotification = true, badgeCount = 0 }) {
   const { user } = useAuth();
+  const { brand } = useBrandTheme();
   const router = useRouter();
 
   const [avatarSrc, setAvatarSrc] = React.useState(
@@ -76,9 +78,17 @@ export default function Header({ title, showBack = false, showNotification = tru
   }, [user]);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-surface/80 backdrop-blur-md border-b border-white/10 shadow-sm flex justify-between items-center px-gutter h-16 w-full transition-all">
+    <header
+      className="fixed top-0 left-0 right-0 z-50 bg-surface/80 backdrop-blur-md border-b border-white/10 shadow-sm flex justify-between items-center px-gutter h-16 w-full transition-all"
+      style={{
+        backgroundColor: brand?.headerBgColor ? `${brand.headerBgColor}f0` : undefined,
+        backgroundImage: brand?.headerBgImage ? `url("${brand.headerBgImage}")` : undefined,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
       <div className="max-w-7xl mx-auto w-full flex items-center justify-between">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
           {showBack ? (
             <button
               onClick={() => router.back()}
@@ -87,19 +97,47 @@ export default function Header({ title, showBack = false, showNotification = tru
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
           ) : (
-            <Link href="/profile" className={`w-11 h-11 flex items-center justify-center shrink-0 ${avatarSrc === '/safelink-shield.png' ? '' : 'rounded-full overflow-hidden border border-outline/30 bg-surface-container-high'}`}>
-              <img
-                className={`w-full h-full ${avatarSrc === '/safelink-shield.png' ? 'object-contain' : 'object-cover'}`}
-                alt="Profile"
-                src={avatarSrc}
-              />
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link href="/profile" className={`w-10 h-10 flex items-center justify-center shrink-0 ${avatarSrc === '/safelink-shield.png' ? '' : 'rounded-full overflow-hidden border border-outline/30 bg-surface-container-high'}`}>
+                <img
+                  className={`w-full h-full ${avatarSrc === '/safelink-shield.png' ? 'object-contain' : 'object-cover'}`}
+                  alt="Profile"
+                  src={avatarSrc}
+                />
+              </Link>
+              {brand?.showLogoInHeader !== false && brand?.logoUrl && (
+                <div
+                  className="h-10 px-2 rounded-xl border border-white/15 flex items-center justify-center shrink-0 shadow-sm overflow-hidden"
+                  style={{ backgroundColor: brand.headerBgColor || '#04070E' }}
+                  title={brand.partnerName || 'Security Partner'}
+                >
+                  <img
+                    src={brand.logoUrl}
+                    alt={brand.partnerName || 'Brand Mark'}
+                    className="h-7 w-auto max-w-[90px] object-contain"
+                  />
+                </div>
+              )}
+            </div>
           )}
 
           <div className="flex flex-col min-w-0">
-            <h1 className="truncate text-sm sm:text-base text-secondary font-bold tracking-tight">
+            <h1
+              className="truncate text-sm sm:text-base font-bold tracking-tight"
+              style={{
+                color: brand?.headerTextAuto
+                  ? (brand?.headerBgColor === '#FFFFFF' ? '#000000' : '#FFFFFF')
+                  : (brand?.headerTextColor || undefined)
+              }}
+            >
               {title || `Hi ${userName}`}
             </h1>
+            {brand?.partnerName && (
+              <span className="text-[10px] text-amber-400/90 font-medium truncate flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                {brand.partnerName}
+              </span>
+            )}
           </div>
         </div>
 

@@ -77,6 +77,26 @@ function PartnerDashboardContent() {
           </p>
         </div>
 
+        {/* White-Label Customization Studio Banner */}
+        <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/30">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300">
+              <span className="material-symbols-outlined text-xl">palette</span>
+            </div>
+            <div>
+              <h3 className="font-bold text-sm text-white">White-Label Look & Feel Studio</h3>
+              <p className="text-xs text-on-surface-variant">Customize your logo, header banner, button colors & opacity for customer apps</p>
+            </div>
+          </div>
+          <Link
+            href="/partner/branding"
+            className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 text-xs font-bold transition-all flex items-center gap-1.5"
+          >
+            <span>Launch Branding Studio</span>
+            <span className="material-symbols-outlined text-sm">arrow_forward</span>
+          </Link>
+        </div>
+
         {/* Stats Bento Grid (from Stitch partner_dashboard/code.html) */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-md">
           {/* Bento Card 1 */}

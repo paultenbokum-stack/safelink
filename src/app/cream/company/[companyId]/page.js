@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
+import BrandCustomizer from '@/app/components/BrandCustomizer';
 
 const PAYMENT_COLORS = { current: '#38a169', '30day': '#d69e2e', '60day': '#dd6b20', '90day': '#e53e3e', inactive: '#718096' };
 const PAYMENT_LABELS = { current: 'Current', '30day': '30 Days', '60day': '60 Days', '90day': '90+ Days', inactive: 'Inactive' };
@@ -19,6 +20,10 @@ export default function CompanyDashboard({ params: paramsPromise }) {
 
   const fetchTab = useCallback(async (tabName) => {
     if (!companyId) return;
+    if (tabName === 'branding') {
+      setLoading(false);
+      return;
+    }
     if (!user) {
       setLoading(false);
       return;
@@ -60,15 +65,31 @@ export default function CompanyDashboard({ params: paramsPromise }) {
             <p className="text-xs text-purple-300/70">Security Company Management</p>
           </div>
         </div>
-        <Link href={`/cream/company/${companyId}/stock`} className="px-4 py-2 rounded-xl bg-purple-600/30 border border-purple-400/40 text-purple-200 hover:bg-purple-600/50 text-xs font-bold flex items-center gap-1.5">
-          <span className="material-symbols-outlined text-sm">inventory_2</span> Stock & Inventory
-        </Link>
+        <div className="flex items-center gap-2.5">
+          <Link
+            href={`/cream/company/${companyId}/branding`}
+            className="px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-200 hover:bg-amber-500/30 text-xs font-bold flex items-center gap-1.5 transition-all"
+          >
+            <span className="material-symbols-outlined text-sm">palette</span> Look & Feel Studio
+          </Link>
+          <Link
+            href={`/cream/company/${companyId}/stock`}
+            className="px-4 py-2 rounded-xl bg-purple-600/30 border border-purple-400/40 text-purple-200 hover:bg-purple-600/50 text-xs font-bold flex items-center gap-1.5 transition-all"
+          >
+            <span className="material-symbols-outlined text-sm">inventory_2</span> Stock & Inventory
+          </Link>
+        </div>
       </header>
 
       {/* Tabs */}
       <div className="border-b border-white/10 px-6">
         <nav className="flex gap-1 max-w-7xl mx-auto">
-          {[['customers', 'people', 'Customers'], ['incidents', 'warning', 'Incidents'], ['revenue', 'payments', 'Revenue']].map(([id, icon, label]) => (
+          {[
+            ['customers', 'people', 'Customers'],
+            ['incidents', 'warning', 'Incidents'],
+            ['revenue', 'payments', 'Revenue'],
+            ['branding', 'palette', 'Look & Feel'],
+          ].map(([id, icon, label]) => (
             <button key={id} onClick={() => setTab(id)} className={`px-4 py-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${tab === id ? 'border-purple-400 text-purple-300' : 'border-transparent text-on-surface-variant hover:text-white'}`}>
               <span className="material-symbols-outlined text-sm">{icon}</span>{label}
             </button>
@@ -259,6 +280,11 @@ export default function CompanyDashboard({ params: paramsPromise }) {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ── LOOK & FEEL / BRANDING TAB ── */}
+        {tab === 'branding' && (
+          <BrandCustomizer companyId={companyId} />
         )}
       </main>
     </div>

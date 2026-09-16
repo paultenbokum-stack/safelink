@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { DEMO_COMPANIES } from '@/lib/demo-companies';
 import { FieldValue } from 'firebase-admin/firestore';
+import { saveCompanyBranding } from '@/lib/branding-store';
 
 /**
  * GET /api/cream/companies
@@ -91,6 +92,11 @@ export async function POST(request) {
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       };
+
+      if (newCompany.branding) {
+        companyData.branding = newCompany.branding;
+        await saveCompanyBranding(id, newCompany.branding);
+      }
 
       await firestore.collection('security_companies').doc(id).set(companyData);
       return NextResponse.json({ success: true, company: companyData });

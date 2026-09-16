@@ -8,6 +8,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
+import { useBrand } from '@/lib/brand-context';
 import { getHousehold, getUserDevices, getUserOrders } from '@/lib/db';
 import Header from '@/app/components/Header';
 import BottomNav from '@/app/components/BottomNav';
@@ -24,7 +25,35 @@ export default function Dashboard() {
 
 function DashboardContent() {
   const { user, partnerSession } = useAuth();
+  const { brand } = useBrand();
   const router = useRouter();
+
+  const fontStyle = brand?.fontFamily === 'classic'
+    ? 'var(--font-cinzel, "Cinzel", serif)'
+    : brand?.fontFamily === 'simple'
+      ? 'var(--font-space, "Space Grotesk", sans-serif)'
+      : undefined;
+
+  const getButtonBg = () => {
+    if (!brand?.buttonBgColor) return undefined;
+    const hex = brand.buttonBgColor.trim();
+    const opacity = (brand.buttonOpacity !== undefined ? brand.buttonOpacity : 100) / 100;
+    if (hex.startsWith('#') && (hex.length === 7 || hex.length === 4)) {
+      let c = hex.substring(1);
+      if (c.length === 3) c = c.split('').map(x => x + x).join('');
+      const num = parseInt(c, 16);
+      const r = (num >> 16) & 255;
+      const g = (num >> 8) & 255;
+      const b = num & 255;
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+    return brand.buttonBgColor;
+  };
+
+  const quickButtonCustomStyle = brand?.buttonBgColor ? {
+    backgroundColor: getButtonBg(),
+    color: brand?.buttonTextColor || undefined,
+  } : undefined;
 
   const [household, setHousehold] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -137,7 +166,17 @@ function DashboardContent() {
   };
 
   return (
-    <div className="bg-background text-on-background min-h-screen pb-[100px]">
+    <div
+      className="bg-background text-on-background min-h-screen pb-[100px] transition-colors"
+      style={{
+        backgroundColor: brand?.pageBgColor || undefined,
+        backgroundImage: brand?.pageBgImage ? `url("${brand.pageBgImage}")` : undefined,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        color: brand?.pageTextColor || undefined,
+        fontFamily: fontStyle,
+      }}
+    >
       <Header title={`Hi ${firstName}`} />
 
       <main className="pt-[88px] px-gutter max-w-3xl mx-auto space-y-lg pb-xl">
@@ -160,7 +199,12 @@ function DashboardContent() {
         <section className="flex flex-col items-center justify-center py-lg">
           <button
             onClick={() => router.push('/sos')}
-            className="w-44 h-44 rounded-full bg-[#e53e3e] flex flex-col items-center justify-center text-white sos-pulse active:scale-95 transition-transform duration-200 shadow-[0_0_35px_rgba(229,62,62,0.6)] cursor-pointer"
+            className="w-44 h-44 rounded-full flex flex-col items-center justify-center sos-pulse active:scale-95 transition-transform duration-200 cursor-pointer"
+            style={{
+              backgroundColor: brand?.highlightedButtonBg || '#e53e3e',
+              color: brand?.highlightedButtonAuto ? '#000000' : (brand?.highlightedButtonText || '#ffffff'),
+              boxShadow: `0 0 35px ${(brand?.highlightedButtonBg || '#e53e3e')}99`,
+            }}
           >
             <span
               className="material-symbols-outlined text-[52px] mb-1"
@@ -212,19 +256,21 @@ function DashboardContent() {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-sm">
             <button
               onClick={() => router.push('/sos?type=armed')}
+              style={quickButtonCustomStyle}
               className="glass-panel rounded-xl p-sm flex flex-col items-center justify-center gap-xs hover:bg-white/5 active:scale-95 transition-all text-on-surface min-h-[105px] border-l-2 border-l-secondary"
             >
               <span
                 className="material-symbols-outlined text-secondary text-3xl"
-                style={{ fontVariationSettings: "'FILL' 1" }}
+                style={{ fontVariationSettings: "'FILL' 1", color: brand?.buttonTextColor || undefined }}
               >
                 security
               </span>
-              <span className="font-label-sm text-label-sm text-center font-semibold mt-1">Armed Response</span>
+              <span className="font-label-sm text-label-sm text-center font-semibold mt-1" style={{ color: brand?.buttonTextColor || undefined }}>Armed Response</span>
             </button>
 
             <button
               onClick={() => router.push('/sos?type=medical')}
+              style={quickButtonCustomStyle}
               className="glass-panel rounded-xl p-sm flex flex-col items-center justify-center gap-xs hover:bg-white/5 active:scale-95 transition-all text-on-surface min-h-[105px] border-l-2 border-l-error"
             >
               <span
@@ -233,11 +279,12 @@ function DashboardContent() {
               >
                 medical_services
               </span>
-              <span className="font-label-sm text-label-sm text-center font-semibold mt-1">Medical</span>
+              <span className="font-label-sm text-label-sm text-center font-semibold mt-1" style={{ color: brand?.buttonTextColor || undefined }}>Medical</span>
             </button>
 
             <button
               onClick={() => router.push('/sos?type=fire')}
+              style={quickButtonCustomStyle}
               className="glass-panel rounded-xl p-sm flex flex-col items-center justify-center gap-xs hover:bg-white/5 active:scale-95 transition-all text-on-surface min-h-[105px] border-l-2 border-l-[#ae111d]"
             >
               <span
@@ -246,52 +293,55 @@ function DashboardContent() {
               >
                 local_fire_department
               </span>
-              <span className="font-label-sm text-label-sm text-center font-semibold mt-1">Fire Response</span>
+              <span className="font-label-sm text-label-sm text-center font-semibold mt-1" style={{ color: brand?.buttonTextColor || undefined }}>Fire Response</span>
             </button>
 
             <button
               onClick={() => router.push('/services')}
+              style={quickButtonCustomStyle}
               className="glass-panel rounded-xl p-sm flex flex-col items-center justify-center gap-xs hover:bg-white/5 active:scale-95 transition-all text-on-surface min-h-[105px]"
             >
               <span
                 className="material-symbols-outlined text-primary text-3xl"
-                style={{ fontVariationSettings: "'FILL' 1" }}
+                style={{ fontVariationSettings: "'FILL' 1", color: brand?.buttonTextColor || undefined }}
               >
                 rv_hookup
               </span>
-              <span className="font-label-sm text-label-sm text-center font-semibold mt-1">Roadside Towing</span>
+              <span className="font-label-sm text-label-sm text-center font-semibold mt-1" style={{ color: brand?.buttonTextColor || undefined }}>Roadside Towing</span>
             </button>
 
             <button
               onClick={() => router.push('/services/technician')}
+              style={quickButtonCustomStyle}
               className="glass-panel rounded-xl p-sm flex flex-col items-center justify-center gap-xs hover:bg-white/5 active:scale-95 transition-all text-on-surface min-h-[105px]"
             >
               <span
                 className="material-symbols-outlined text-primary text-3xl"
-                style={{ fontVariationSettings: "'FILL' 1" }}
+                style={{ fontVariationSettings: "'FILL' 1", color: brand?.buttonTextColor || undefined }}
               >
                 build
               </span>
-              <span className="font-label-sm text-label-sm text-center font-semibold mt-1">Book Technician</span>
+              <span className="font-label-sm text-label-sm text-center font-semibold mt-1" style={{ color: brand?.buttonTextColor || undefined }}>Book Technician</span>
             </button>
 
             <button
               onClick={triggerTestAlarm}
+              style={quickButtonCustomStyle}
               className="glass-panel rounded-xl p-sm flex flex-col items-center justify-center gap-xs hover:bg-white/5 active:scale-95 transition-all text-on-surface min-h-[105px]"
             >
               <span
                 className="material-symbols-outlined text-secondary-container text-3xl"
-                style={{ fontVariationSettings: "'FILL' 1" }}
+                style={{ fontVariationSettings: "'FILL' 1", color: brand?.buttonTextColor || undefined }}
               >
                 notifications_active
               </span>
-              <span className="font-label-sm text-label-sm text-center font-semibold mt-1">Test Alarm</span>
+              <span className="font-label-sm text-label-sm text-center font-semibold mt-1" style={{ color: brand?.buttonTextColor || undefined }}>Test Alarm</span>
             </button>
           </div>
         </section>
 
         <section className="glass-panel rounded-xl p-4"><h2 className="font-bold text-lg mb-2">Your Security Network</h2>{[
-          ['🛡', 'Armed Response', household?.securityCompanyName || 'Not yet linked — tap to connect', '/cream'],
+          ['🛡', 'Armed Response', brand?.partnerName || household?.securityCompanyName || 'Not yet linked — tap to connect', '/cream'],
           ['🚀', 'Dispatch Network', 'Aura · Nationwide coverage [Demo]', '/sos'],
           ['📡', 'Sentinel Devices', devices.filter(d => !d.isPhoneDevice && (d.status === 'active' || d.status === 'online')).length + ' Active', '/devices'],
           ['📷', 'Camera Systems', (household?.cameras?.filter(c => c.status === 'connected').length || 0) + ' Connected', '/community'],

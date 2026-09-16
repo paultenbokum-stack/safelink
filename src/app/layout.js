@@ -4,6 +4,7 @@ import { AuthProvider } from '@/lib/auth-context';
 import { ThemeProvider } from '@/lib/theme-context';
 import AppUpdates from '@/app/components/AppUpdates';
 import { LocationSharingProvider } from '@/lib/location-sharing';
+import { BrandProvider } from '@/lib/brand-context';
 
 export const metadata = {
   title: 'SafeLink - Digital Bodyguard',
@@ -42,7 +43,7 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
         <script
           dangerouslySetInnerHTML={{
@@ -62,17 +63,18 @@ export default function RootLayout({ children }) {
       </head>
       <body className="bg-background text-on-background min-h-screen selection:bg-secondary/30 selection:text-secondary">
         <ThemeProvider>
-
           <AuthProvider>
-            <NotificationProvider>
-            <PwaRegister>
-              <LocationSharingProvider>
-                <AppUpdates />
-                <GpsConsentModal />
-                {children}
-              </LocationSharingProvider>
-            </PwaRegister>
-            </NotificationProvider>
+            <BrandProvider>
+              <NotificationProvider>
+                <PwaRegister>
+                  <LocationSharingProvider>
+                    <AppUpdates />
+                    <GpsConsentModal />
+                    {children}
+                  </LocationSharingProvider>
+                </PwaRegister>
+              </NotificationProvider>
+            </BrandProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

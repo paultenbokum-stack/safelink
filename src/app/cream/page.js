@@ -25,6 +25,41 @@ export default function CreamMasterPage() {
   const [inviteForm, setInviteForm] = useState({ companyName: '', contactEmail: '', notes: '' });
   const [copiedInvite, setCopiedInvite] = useState(false);
 
+  // Automated Website CI Ingestor State
+  const [scrapeUrl, setScrapeUrl] = useState('https://sovereignintervention.co.za');
+  const [isScraping, setIsScraping] = useState(false);
+  const [scrapeStatus, setScrapeStatus] = useState('');
+  const [scrapedBranding, setScrapedBranding] = useState(null);
+
+  const handleScrapeWebsiteCI = async () => {
+    if (!scrapeUrl.trim()) return;
+    setIsScraping(true);
+    setScrapeStatus('Scraping website for brand colors, logo, and typography...');
+    try {
+      const res = await fetch('/api/cream/scrape-branding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: scrapeUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to scrape website');
+
+      setScrapedBranding(data.branding);
+      setNewCompany(prev => ({
+        ...prev,
+        name: prev.name || data.companyName || '',
+        slug: prev.slug || (data.companyName ? data.companyName.toLowerCase().replace(/[^a-z0-9_]/g, '_') : ''),
+        dispatchPhone: prev.dispatchPhone || data.phone || '',
+        branding: data.branding,
+      }));
+      setScrapeStatus(`✓ CI Ingested: ${data.companyName} (${data.branding.fontFamily} font, ${data.branding.headerBgColor} header, ${data.branding.highlightedButtonBg} SOS button)`);
+    } catch (err) {
+      setScrapeStatus(`Error ingesting CI: ${err.message}`);
+    } finally {
+      setIsScraping(false);
+    }
+  };
+
   // New Company Form State
   const [newCompany, setNewCompany] = useState({
     name: '',
@@ -120,6 +155,7 @@ export default function CreamMasterPage() {
           action: 'create_company',
           newCompany: {
             ...newCompany,
+            branding: scrapedBranding || newCompany.branding,
             address: {
               street: newCompany.street,
               suburb: newCompany.suburb,
@@ -143,6 +179,8 @@ export default function CreamMasterPage() {
       }
 
       setShowAddCompanyModal(false);
+      setScrapedBranding(null);
+      setScrapeStatus('');
       setNewCompany({
         name: '',
         slug: '',
@@ -522,6 +560,15 @@ export default function CreamMasterPage() {
                           </Link>
 
                           <Link
+                            href={`/cream/company/${comp.id}/branding`}
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-semibold text-xs inline-flex items-center gap-1 transition-all"
+                            title="Configure white-label look and feel, colors, and website CI"
+                          >
+                            <span className="material-symbols-outlined text-sm">palette</span>
+                            Look & Feel
+                          </Link>
+
+                          <Link
                             href={`/cream/company/${comp.id}/stock`}
                             className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 font-semibold text-xs inline-flex items-center gap-1 transition-all"
                             title="Manage Sentinel toggles and custom security hardware"
@@ -697,6 +744,44 @@ export default function CreamMasterPage() {
             </div>
 
             <form onSubmit={handleCreateCompany} className="space-y-6">
+              {/* Instant Website CI Ingestor */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-blue-500/10 border border-amber-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-secondary">auto_fix_high</span>
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">Instant Website CI Ingestor</span>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary/20 text-secondary font-bold">Fast Onboarding</span>
+                </div>
+                <p className="text-xs text-slate-300">
+                  Insert the security company&apos;s website URL. SafeLink will scrape their CI, logo, brand colors, typography/font, and phone number to auto-configure their white-label app.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://sovereignintervention.co.za"
+                    value={scrapeUrl}
+                    onChange={(e) => setScrapeUrl(e.target.value)}
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-secondary"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleScrapeWebsiteCI}
+                    disabled={isScraping}
+                    className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/90 text-on-secondary font-bold text-xs flex items-center gap-1.5 transition-all disabled:opacity-50 shadow-lg shadow-secondary/20"
+                  >
+                    <span className="material-symbols-outlined text-sm">{isScraping ? 'sync' : 'travel_explore'}</span>
+                    {isScraping ? 'Ingesting...' : '⚡ Ingest CI'}
+                  </button>
+                </div>
+                {scrapeStatus && (
+                  <p className={`text-xs font-medium flex items-center gap-1 ${scrapeStatus.includes('Error') ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    <span className="material-symbols-outlined text-sm">{scrapeStatus.includes('Error') ? 'error' : 'check_circle'}</span>
+                    {scrapeStatus}
+                  </p>
+                )}
+              </div>
+
               {/* Basic Info */}
               <div className="space-y-3">
                 <h4 className="text-xs font-bold uppercase text-purple-400 tracking-wider">1. Company Identity</h4>

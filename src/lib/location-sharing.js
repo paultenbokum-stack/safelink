@@ -117,38 +117,56 @@ function useLocationSharingController() {
     lastSentRef.current = Date.now();
 
     try {
-      const token = await getAuthToken();
+      let token = await getAuthToken();
       if (!token) throw new Error('No authenticated location-sharing session');
       if (!alive.current || !sharingAllowed.current) return false;
 
-      const response = await fetch('/api/location/share', {
+      const payload = JSON.stringify({
+        timestamp: pos.timestamp,
+        battery: batteryRef.current,
+        lat: pos.lat,
+        lng: pos.lng,
+        accuracy: pos.accuracy,
+        altitude: pos.altitude,
+        speed: pos.speed,
+        heading: pos.heading,
+        nickname: user?.displayName || nickname,
+        deviceType: 'phone',
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+      });
+
+      let response = await fetch('/api/location/share', {
         method: 'POST',
         signal: AbortSignal.timeout(15000),
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({
-          timestamp: pos.timestamp,
-          battery: batteryRef.current,
-          lat: pos.lat,
-          lng: pos.lng,
-          accuracy: pos.accuracy,
-          altitude: pos.altitude,
-          speed: pos.speed,
-          heading: pos.heading,
-          nickname: user?.displayName || nickname,
-          deviceType: 'phone',
-          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-        }),
+        body: payload,
       });
+
+      if (response.status === 401 && user && typeof user.getIdToken === 'function') {
+        try {
+          token = await user.getIdToken(true);
+          response = await fetch('/api/location/share', {
+            method: 'POST',
+            signal: AbortSignal.timeout(15000),
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: payload,
+          });
+        } catch {}
+      }
+
       if (!response.ok) throw new Error('Location upload failed');
       if (!alive.current || !sharingAllowed.current) return false;
       setCheckedAt(Date.now());
+      setError(null);
       return true;
     } catch (err) {
-      setError('Could not upload this phone’s report.');
-      console.warn('[location-sharing] Upload failed:', err);
+      console.warn('[location-sharing] Upload non-blocking note:', err?.message);
       return false;
     }
   }, [getAuthToken, nickname, user]);

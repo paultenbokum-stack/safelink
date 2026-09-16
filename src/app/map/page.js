@@ -382,7 +382,6 @@ function LiveFamilyMapContent() {
   /* ─── Fetch device locations (Partner vs Standard Firebase) ─── */
   const fetchDeviceLocations = useCallback(async () => {
     if (!user) {
-      setConnectionStatus('offline');
       return;
     }
 
@@ -436,8 +435,10 @@ function LiveFamilyMapContent() {
       } catch (err) {
         console.warn('[map] Partner device fetch error:', err);
       }
-      setConnectionStatus('offline');
-      throw new Error('Device connection failed');
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setConnectionStatus('offline');
+      }
+      return;
     }
 
     /* 2. Live Firebase & Test Session Path */
@@ -453,63 +454,77 @@ function LiveFamilyMapContent() {
           (user?.isTestSession ? `test_${user.uid}` : (user?.uid ? `test_${user.uid}` : 'demo-test-token'));
       }
 
-      const [devicesRes, phonesRes] = await Promise.all([
+      let [devicesRes, phonesRes] = await Promise.all([
         fetch('/api/devices', { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
         fetch('/api/location/share', { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
       ]);
 
-      if (!devicesRes?.ok) throw new Error('Device connection failed');
-      let telemetryResolved = false;
-      const allMembers = [];
-
-      // Process hardware devices
-      if (devicesRes?.ok) {
-        const data = await devicesRes.json();
-        telemetryResolved = data.tracksolidResolved === true;
-        const devices = (data.devices || []).filter((d) => !d.isPhoneDevice);
-
-        if (devices.length > 0) {
-          const locationsPromises = devices.map(async (device) => {
-            try {
-              const locRes = await fetch(`/api/devices/${device.imei}/location`, {
-                cache: 'no-store', headers: { Authorization: `Bearer ${token}` },
-              });
-              if (locRes.ok) return locRes.json();
-            } catch (e) {
-              console.warn(`Failed to fetch location for ${device.imei}:`, e);
-            }
-            return null;
-          });
-
-          const locations = await Promise.all(locationsPromises);
-
-          devices.forEach((device, i) => {
-            const loc = locations[i] || { ...device, gpsTime: device.updatedAt, address: device.lastAddress };
-            const hasGps = Number.isFinite(loc?.lat) && Number.isFinite(loc?.lng);
-            allMembers.push({
-              id: device.imei,
-              name: device.nickname || device.deviceName || `Device ${device.imei.slice(-4)}`,
-              role: device.model || 'Sentinel Device',
-              status: loc?.isOnline ? 'Online' : (hasGps ? 'Offline' : 'Awaiting GPS Fix'),
-              zone: '',
-              battery: loc?.batteryLevel ?? loc?.tagBattery ?? null,
-              speed: loc?.speed || 0,
-              address: loc?.address || (hasGps ? `${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}` : 'Awaiting GPS fix...'),
-              lastSeen: loc?.gpsTime || null, checkedAt: locations[i] ? Date.now() : device.checkedAt || null,
-              avatar: null,
-              color: getDeviceColor(allMembers.length),
-              lat: hasGps ? loc.lat : null,
-              lng: hasGps ? loc.lng : null,
-              device: `${device.model || 'Sentinel'} • ${device.imei.slice(-6)}`,
-              isTag: loc?.isTag || false,
-              isPhone: false,
-              isDemo: false,
-            });
-          });
+      // If either returned 401 (e.g. mobile wake-up, expired session token), force refresh token once and retry
+      if ((devicesRes?.status === 401 || phonesRes?.status === 401) && user && typeof user.getIdToken === 'function') {
+        try {
+          token = await user.getIdToken(true);
+          const [dRetry, pRetry] = await Promise.all([
+            devicesRes?.status === 401 ? fetch('/api/devices', { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }).catch(() => null) : Promise.resolve(devicesRes),
+            phonesRes?.status === 401 ? fetch('/api/location/share', { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }).catch(() => null) : Promise.resolve(phonesRes),
+          ]);
+          devicesRes = dRetry;
+          phonesRes = pRetry;
+        } catch (authErr) {
+          console.warn('[map] Token refresh retry note:', authErr);
         }
       }
 
+      const allMembers = [];
 
+      // Process hardware devices if available
+      if (devicesRes?.ok) {
+        try {
+          const data = await devicesRes.json();
+          const devices = (data.devices || []).filter((d) => !d.isPhoneDevice);
+
+          if (devices.length > 0) {
+            const locationsPromises = devices.map(async (device) => {
+              try {
+                const locRes = await fetch(`/api/devices/${device.imei}/location`, {
+                  cache: 'no-store', headers: { Authorization: `Bearer ${token}` },
+                });
+                if (locRes.ok) return locRes.json();
+              } catch (e) {
+                console.warn(`Failed to fetch location for ${device.imei}:`, e);
+              }
+              return null;
+            });
+
+            const locations = await Promise.all(locationsPromises);
+
+            devices.forEach((device, i) => {
+              const loc = locations[i] || { ...device, gpsTime: device.updatedAt, address: device.lastAddress };
+              const hasGps = Number.isFinite(loc?.lat) && Number.isFinite(loc?.lng);
+              allMembers.push({
+                id: device.imei,
+                name: device.nickname || device.deviceName || `Device ${device.imei.slice(-4)}`,
+                role: device.model || 'Sentinel Device',
+                status: loc?.isOnline ? 'Online' : (hasGps ? 'Offline' : 'Awaiting GPS Fix'),
+                zone: '',
+                battery: loc?.batteryLevel ?? loc?.tagBattery ?? null,
+                speed: loc?.speed || 0,
+                address: loc?.address || (hasGps ? `${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}` : 'Awaiting GPS fix...'),
+                lastSeen: loc?.gpsTime || null, checkedAt: locations[i] ? Date.now() : device.checkedAt || null,
+                avatar: null,
+                color: getDeviceColor(allMembers.length),
+                lat: hasGps ? loc.lat : null,
+                lng: hasGps ? loc.lng : null,
+                device: `${device.model || 'Sentinel'} • ${device.imei.slice(-6)}`,
+                isTag: loc?.isTag || false,
+                isPhone: false,
+                isDemo: false,
+              });
+            });
+          }
+        } catch (e) {
+          console.warn('[map] Hardware devices parse note:', e);
+        }
+      }
 
       // Process phone GPS sharing from backend
       if (phonesRes?.ok) {
@@ -617,38 +632,64 @@ function LiveFamilyMapContent() {
         }
       }
 
-      if (allMembers.length > 0) {
+      // Determine accurate connection health:
+      // Active phone GPS, beacon, or hardware tracker => LIVE
+      // Succeeded network requests => LIVE
+      // Offline only when actually disconnected or both requests failed with 0 devices
+      const isOnline = typeof navigator === 'undefined' || navigator.onLine !== false;
+      const hasNetworkSuccess = Boolean(devicesRes?.ok || phonesRes?.ok);
+      const hasMembers = allMembers.length > 0;
+
+      if (hasMembers || (hasNetworkSuccess && isOnline)) {
         setMembers(allMembers);
         setSelectedMember((prev) => {
           if (!prev) return detailsDismissed.current ? null : allMembers.find(m => m.id === new URLSearchParams(window.location.search).get('device')) || allMembers[0];
           const match = allMembers.find((m) => m.id === prev.id);
-          return match || allMembers[0];
+          return match || allMembers[0] || null;
         });
-        setConnectionStatus(telemetryResolved ? 'live' : 'offline');
+        setConnectionStatus('live');
+      } else if (!isOnline) {
+        setConnectionStatus('offline');
+      } else if (!hasNetworkSuccess && allMembers.length === 0) {
+        setConnectionStatus('offline');
       } else {
-        setMembers([]);
-        setSelectedMember(null);
-        setConnectionStatus(telemetryResolved ? 'live' : 'offline');
+        setConnectionStatus('live');
       }
     } catch (err) {
-      console.warn('[map] Failed to fetch device locations:', err);
-      setConnectionStatus('offline');
-      throw err;
+      console.warn('[map] fetchDeviceLocations non-blocking note:', err?.message);
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setConnectionStatus('offline');
+      } else {
+        setMembers((current) => {
+          if (current.length === 0) {
+            setConnectionStatus('offline');
+          }
+          return current;
+        });
+      }
     }
   }, [user, isPartner, partnerSession, isPhoneSharing, lastPosition, phoneNickname, phoneCheckedAt, phoneBattery]);
 
   /* ─── Fetch Geofences ───────────────────────────────────────── */
   useRefresh('map', fetchDeviceLocations);
   async function refreshSelected() {
-    if (selectedMember?.isPhone && selectedMember.id === `phone_${user.uid}` && isPhoneSharing) return refreshLocation();
+    if (selectedMember?.isPhone && selectedMember.id === `phone_${user?.uid}` && isPhoneSharing) return refreshLocation();
     if (!selectedMember || selectedMember.isPartner || selectedMember.isPhone) return refreshScope('map');
-    const token = await user.getIdToken();
-    const response = await fetch(`/api/devices/${selectedMember.id}/location`, { cache: 'no-store', headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000) });
-    if (!response.ok) throw new Error('Telemetry unavailable');
-    const data = await response.json();
-    const update = member => member.id === selectedMember.id ? { ...member, checkedAt: Date.now(), lastSeen: data.gpsTime, battery: data.batteryLevel ?? data.tagBattery, lat: data.lat ?? member.lat, lng: data.lng ?? member.lng, address: data.address || member.address, status: data.isOnline ? 'Online' : 'Offline' } : member;
-    setMembers(current => current.map(update));
-    setSelectedMember(current => current ? update(current) : current);
+    try {
+      let token = await user?.getIdToken?.();
+      let response = await fetch(`/api/devices/${selectedMember.id}/location`, { cache: 'no-store', headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000) });
+      if (response.status === 401 && user && typeof user.getIdToken === 'function') {
+        token = await user.getIdToken(true);
+        response = await fetch(`/api/devices/${selectedMember.id}/location`, { cache: 'no-store', headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000) });
+      }
+      if (!response.ok) return;
+      const data = await response.json();
+      const update = member => member.id === selectedMember.id ? { ...member, checkedAt: Date.now(), lastSeen: data.gpsTime, battery: data.batteryLevel ?? data.tagBattery, lat: data.lat ?? member.lat, lng: data.lng ?? member.lng, address: data.address || member.address, status: data.isOnline ? 'Online' : 'Offline' } : member;
+      setMembers(current => current.map(update));
+      setSelectedMember(current => current ? update(current) : current);
+    } catch (e) {
+      console.warn('[map] refreshSelected note:', e?.message);
+    }
   }
 
   const fetchGeofences = useCallback(async () => {

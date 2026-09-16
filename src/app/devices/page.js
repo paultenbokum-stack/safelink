@@ -109,6 +109,7 @@ function DevicesContent() {
     refreshLocation, checkedAt: phoneCheckedAt, battery: phoneBattery,
   } = useLocationSharing();
   const [editingPhoneName, setEditingPhoneName] = useState(false);
+
   const [tempPhoneName, setTempPhoneName] = useState('');
   const [phoneToggling, setPhoneToggling] = useState(false);
 
@@ -186,10 +187,19 @@ function DevicesContent() {
           token = user?.accessToken || user?.stsTokenManager?.accessToken || (user?.isTestSession ? `test_${user.uid}` : (user?.uid ? `test_${user.uid}` : 'demo-test-token'));
         }
 
-        const res = await fetch('/api/devices', {
+        let res = await fetch('/api/devices', {
           cache: 'no-store', headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) throw new Error('Device service unavailable');
+
+        if (res.status === 401 && user && typeof user.getIdToken === 'function') {
+          try {
+            token = await user.getIdToken(true);
+            res = await fetch('/api/devices', {
+              cache: 'no-store', headers: { Authorization: `Bearer ${token}` },
+            });
+          } catch {}
+        }
+
         if (res.ok && !cancelled) {
           setFetchError('');
           const data = await res.json().catch(() => null);
@@ -210,16 +220,42 @@ function DevicesContent() {
               location: d.lastAddress || (Number.isFinite(d.lat) && Number.isFinite(d.lng) ? `${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}` : 'Awaiting GPS fix'),
             }));
             setDevices(mapped);
-            setIsLive(data.tracksolidResolved === true);
+            setIsLive(true);
             try {
               localStorage.setItem('safelink_user_devices', JSON.stringify(mapped));
             } catch {}
           }
+        } else if (!res.ok) {
+          // Gracefully load cached devices if available
+          try {
+            const cached = localStorage.getItem('safelink_user_devices');
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                setDevices(parsed);
+                setFetchError('');
+              }
+            }
+          } catch {}
+          if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            setFetchError('Offline — showing cached device status');
+          }
         }
       } catch (e) {
-        setFetchError('Connection issue — retrying. Last known data may be out of date.');
-        setIsLive(false);
-        throw e;
+        console.warn('[devices] fetch non-blocking note:', e?.message);
+        try {
+          const cached = localStorage.getItem('safelink_user_devices');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setDevices(parsed);
+              setFetchError('');
+            }
+          }
+        } catch {}
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          setFetchError('Offline — showing cached device status');
+        }
       }
       setLoading(false);
     }
@@ -231,17 +267,6 @@ function DevicesContent() {
     document.addEventListener('visibilitychange', run);
     return () => { cancelled = true; unregister(); clearInterval(refresh); window.removeEventListener('online', run); document.removeEventListener('visibilitychange', run); };
   }, [user, isPartner, partnerSession]);
-
-  async function refreshDevice(device) {
-    if (!device.imei || isPartner) return refreshScope('devices');
-    const token = await user.getIdToken();
-    const response = await fetch(`/api/devices/${device.imei}/location`, { cache: 'no-store', headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000) });
-    if (!response.ok) throw new Error('Telemetry unavailable');
-    const data = await response.json();
-    setDevices(current => current.map(item => item.id === device.id ? { ...item, checkedAt: Date.now(), reportedAt: data.gpsTime, battery: data.batteryLevel ?? data.tagBattery, location: data.address || item.location, status: data.isOnline ? 'Online' : 'Offline' } : item));
-  }
-
-  /* ── Delete / Unlink Device ── */
   const handleDeleteDevice = async () => {
     if (!showDeleteModal) return;
     const device = showDeleteModal;

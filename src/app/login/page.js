@@ -271,26 +271,6 @@ export default function LoginPage() {
           </button>
         </div>
 
-        {/* Operational Highlights for Security Company Mode */}
-        {mode === 'company' && (
-          <div className="grid grid-cols-3 gap-2">
-            <div className="glass-panel rounded-xl p-2.5 text-center border border-white/5 bg-white/[0.02]">
-              <span className="block text-lg mb-0.5">🛡️</span>
-              <div className="text-[10px] font-bold text-white uppercase tracking-wider">PSIRA Active</div>
-              <div className="text-[9px] text-on-surface-variant">Accredited Force</div>
-            </div>
-            <div className="glass-panel rounded-xl p-2.5 text-center border border-white/5 bg-white/[0.02]">
-              <span className="block text-lg mb-0.5">📡</span>
-              <div className="text-[10px] font-bold text-white uppercase tracking-wider">Live Telemetry</div>
-              <div className="text-[9px] text-on-surface-variant">Fleet & Sentinel GPS</div>
-            </div>
-            <div className="glass-panel rounded-xl p-2.5 text-center border border-white/5 bg-white/[0.02]">
-              <span className="block text-lg mb-0.5">🚨</span>
-              <div className="text-[10px] font-bold text-white uppercase tracking-wider">Armed Dispatch</div>
-              <div className="text-[9px] text-on-surface-variant">Instant Panic Flow</div>
-            </div>
-          </div>
-        )}
 
         {/* PWA App Prompt */}
         <InstallAppPrompt />

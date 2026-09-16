@@ -17,7 +17,16 @@ export async function GET(request, { params }) {
     const db = getAdminFirestore();
 
     const companyDoc = await db.collection('security_companies').doc(companyId).get();
-    if (!companyDoc.exists) return NextResponse.json({ error: 'Company not found.' }, { status: 404 });
+    let companyName = companyDoc.exists ? companyDoc.data().name : null;
+    let isDemoTenant = false;
+
+    if (!companyDoc.exists) {
+      const { DEMO_COMPANIES } = await import('@/lib/demo-companies');
+      const demoComp = DEMO_COMPANIES.find(c => c.id === companyId);
+      if (!demoComp) return NextResponse.json({ error: 'Company not found.' }, { status: 404 });
+      companyName = demoComp.name;
+      isDemoTenant = true;
+    }
 
     // Get all paid orders for this company
     const ordersSnap = await db.collection('orders')
@@ -45,6 +54,16 @@ export async function GET(request, { params }) {
         createdAt: created.toISOString(),
       };
     });
+
+    if ((isDemoTenant || companyId === 'sovereign_intervention') && transactions.length === 0) {
+      const demoTransactions = [
+        { id: 'sov_tx_1', reference: 'PSK_SOV_991823', customerName: 'Apex Logistics Escort Fleet', items: [{ name: 'Executive Close Protection & Mobile Panic Fob Suite', qty: 10, price: 14500 }], totalAmount: 14500, paystackFee: 217.50, creamShare: 142.83, companyShare: 14139.67, createdAt: '2026-09-05T14:20:00.000Z' },
+        { id: 'sov_tx_2', reference: 'PSK_SOV_991824', customerName: 'Dr. Johan Van Der Merwe', items: [{ name: 'Sentinel LTE Asset Tag & VIP Dispatch Plan', qty: 2, price: 1780 }], totalAmount: 1780, paystackFee: 26.70, creamShare: 17.53, companyShare: 1735.77, createdAt: '2026-09-01T08:30:00.000Z' },
+        { id: 'sov_tx_3', reference: 'PSK_SOV_991825', customerName: 'Clifton Ridge Executive Residence', items: [{ name: 'SafeLink Premium Armed Escort Membership', qty: 1, price: 890 }], totalAmount: 890, paystackFee: 13.35, creamShare: 8.77, companyShare: 867.88, createdAt: '2026-09-03T11:45:00.000Z' },
+        { id: 'sov_tx_4', reference: 'PSK_SOV_991826', customerName: 'Sipho & Lerato Dlamini', items: [{ name: 'Family Shield Multi-Fob Subscription', qty: 1, price: 890 }], totalAmount: 890, paystackFee: 13.35, creamShare: 8.77, companyShare: 867.88, createdAt: '2026-09-02T10:15:00.000Z' },
+      ];
+      transactions.push(...demoTransactions);
+    }
 
     // Summary
     const totalRevenue = transactions.reduce((s, t) => s + t.totalAmount, 0);
@@ -75,7 +94,7 @@ export async function GET(request, { params }) {
         transactionCount: transactions.length,
       },
       monthly,
-      company: { id: companyId, name: companyDoc.data().name },
+      company: { id: companyId, name: companyName || companyDoc?.data()?.name || companyId },
     });
   } catch (err) {
     console.error(`[api/cream/company/revenue] Error:`, err);

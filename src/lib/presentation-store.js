@@ -36,6 +36,22 @@ export const DEFAULT_PRESENTATIONS = [
     contactWebsite: 'creamtech.co.za',
     presentationVersion: 'safelink-core-v1',
   },
+  {
+    slug: 'sovereign-intervention',
+    partnerName: 'Sovereign Intervention',
+    shortName: 'Sovereign',
+    websiteUrl: 'https://sovereignintervention.co.za',
+    logoUrl: '/sovereign-intervention-logo.png',
+    primaryColor: '#D4AF37',
+    secondaryColor: '#E5C158',
+    warningColor: '#FF4D4D',
+    heroScene: 'network',
+    status: 'published',
+    contactName: 'Kyle Saffy',
+    contactEmail: 'kyle@creamtech.co.za',
+    contactWebsite: 'creamtech.co.za',
+    presentationVersion: 'safelink-core-v1',
+  },
 ];
 
 const normalize = (value = {}) => ({

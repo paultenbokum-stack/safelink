@@ -27,7 +27,16 @@ export async function GET(request, { params }) {
     const db = getAdminFirestore();
 
     const companyDoc = await db.collection('security_companies').doc(companyId).get();
-    if (!companyDoc.exists) return NextResponse.json({ error: 'Company not found.' }, { status: 404 });
+    let companyName = companyDoc.exists ? companyDoc.data().name : null;
+    let isDemoTenant = false;
+
+    if (!companyDoc.exists) {
+      const { DEMO_COMPANIES } = await import('@/lib/demo-companies');
+      const demoComp = DEMO_COMPANIES.find(c => c.id === companyId);
+      if (!demoComp) return NextResponse.json({ error: 'Company not found.' }, { status: 404 });
+      companyName = demoComp.name;
+      isDemoTenant = true;
+    }
 
     const url = new URL(request.url);
     const type = url.searchParams.get('type');
@@ -52,6 +61,16 @@ export async function GET(request, { params }) {
       };
     });
 
+    if ((isDemoTenant || companyId === 'sovereign_intervention') && incidents.length === 0) {
+      const demoIncidentList = [
+        { id: 'sov_inc_1', type: 'panic', status: 'resolved', customerUid: 'sov_cust_1', customerName: 'Dr. Johan Van Der Merwe (Sandhurst)', responseTime: 4.2, createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(), resolvedAt: new Date(Date.now() - 1.8 * 3600 * 1000).toISOString() },
+        { id: 'sov_inc_2', type: 'vehicle_theft', status: 'resolved', customerUid: 'sov_cust_3', customerName: 'Apex Logistics Escort Fleet (R21 Corridor)', responseTime: 5.8, createdAt: new Date(Date.now() - 14 * 3600 * 1000).toISOString(), resolvedAt: new Date(Date.now() - 13.5 * 3600 * 1000).toISOString() },
+        { id: 'sov_inc_3', type: 'break_in', status: 'resolved', customerUid: 'sov_cust_5', customerName: 'Clifton Ridge Executive Residence', responseTime: 3.9, createdAt: new Date(Date.now() - 36 * 3600 * 1000).toISOString(), resolvedAt: new Date(Date.now() - 35 * 3600 * 1000).toISOString() },
+        { id: 'sov_inc_4', type: 'medical', status: 'resolved', customerUid: 'sov_cust_2', customerName: 'Sipho & Lerato Dlamini (Morningside)', responseTime: 6.1, createdAt: new Date(Date.now() - 72 * 3600 * 1000).toISOString(), resolvedAt: new Date(Date.now() - 71 * 3600 * 1000).toISOString() },
+      ];
+      incidents.push(...demoIncidentList);
+    }
+
     if (type) incidents = incidents.filter(i => i.type === type);
     if (status) incidents = incidents.filter(i => i.status === status);
 
@@ -66,7 +85,7 @@ export async function GET(request, { params }) {
     return NextResponse.json({
       incidents,
       summary: { total: incidents.length, byType: Object.values(byType), types: INCIDENT_TYPES },
-      company: { id: companyId, name: companyDoc.data().name },
+      company: { id: companyId, name: companyName || companyDoc?.data()?.name || companyId },
     });
   } catch (err) {
     console.error(`[api/cream/company/incidents] Error:`, err);

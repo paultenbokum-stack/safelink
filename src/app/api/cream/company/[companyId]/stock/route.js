@@ -17,8 +17,17 @@ export async function GET(request, { params }) {
     const db = getAdminFirestore();
 
     const companyDoc = await db.collection('security_companies').doc(companyId).get();
-    if (!companyDoc.exists) return NextResponse.json({ error: 'Company not found.' }, { status: 404 });
-    const companyData = companyDoc.data();
+    let companyData = companyDoc.exists ? companyDoc.data() : null;
+
+    if (!companyDoc.exists) {
+      const { DEMO_COMPANIES } = await import('@/lib/demo-companies');
+      const demoComp = DEMO_COMPANIES.find(c => c.id === companyId);
+      if (!demoComp) return NextResponse.json({ error: 'Company not found.' }, { status: 404 });
+      companyData = {
+        name: demoComp.name,
+        enabledSentinelProducts: ['sentinel-sos-fob', 'sentinel-asset-tag', 'sentinel-vehicle-ble', 'sentinel-pet-collar'],
+      };
+    }
 
     // Master Sentinel products from CREAM catalogue
     const masterSnap = await db.collection('masterProducts').where('status', '==', 'active').orderBy('sortOrder', 'asc').get();

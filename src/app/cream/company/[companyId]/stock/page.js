@@ -19,19 +19,34 @@ export default function CompanyStockPage({ params: paramsPromise }) {
   useEffect(() => { paramsPromise.then?.(setParams) ?? setParams(paramsPromise); }, [paramsPromise]);
   const companyId = params?.companyId;
 
+  const [errorMsg, setErrorMsg] = useState('');
+
   const fetchStock = useCallback(async () => {
-    if (!companyId || !user) return;
+    if (!companyId) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setErrorMsg('');
     try {
       const token = await user.getIdToken();
       const res = await fetch(`/api/cream/company/${companyId}/stock`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to load stock data.');
+      }
       const json = await res.json();
       setSentinelProducts(json.sentinelProducts || []);
       setCustomProducts(json.customProducts || []);
       setSales(json.sales || {});
       setCompanyName(json.company?.name || companyId);
-    } catch (err) { console.error('Failed to load stock:', err); }
-    finally { setLoading(false); }
+    } catch (err) {
+      console.error('Failed to load stock:', err);
+      setErrorMsg(err.message || 'Failed to load stock catalogue.');
+    } finally {
+      setLoading(false);
+    }
   }, [companyId, user]);
 
   useEffect(() => { fetchStock(); }, [fetchStock]);
@@ -98,6 +113,23 @@ export default function CompanyStockPage({ params: paramsPromise }) {
       </header>
 
       <main className="p-6 max-w-7xl mx-auto space-y-8">
+        {!user && !loading && (
+          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-300 text-xs flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined">lock</span>
+              <span>Please sign in with your CREAM administrator account to configure device inventory.</span>
+            </div>
+            <Link href="/login" className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold text-xs transition-all">Sign In</Link>
+          </div>
+        )}
+
+        {errorMsg && (
+          <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-300 text-xs flex items-center gap-2">
+            <span className="material-symbols-outlined">error</span>
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
         {loading && <div className="text-center py-12 text-on-surface-variant"><span className="material-symbols-outlined animate-spin">progress_activity</span> Loading…</div>}
 
         {/* ── SENTINEL PRODUCTS (CREAM-controlled) ── */}

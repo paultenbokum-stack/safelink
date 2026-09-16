@@ -246,6 +246,26 @@ export default function CreamMasterPage() {
             Master Catalogue
           </Link>
 
+          <Link
+            href="/p/sovereign-intervention"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3.5 py-2 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-200 hover:bg-amber-500/30 text-xs font-bold transition-all flex items-center gap-1.5 shadow"
+            title="Open Sovereign Intervention White-Label Pitch Deck"
+          >
+            <span className="material-symbols-outlined text-sm">slideshow</span>
+            Pitch Deck
+          </Link>
+
+          <Link
+            href="/control-room?companyId=sovereign_intervention"
+            className="px-3.5 py-2 rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-200 hover:bg-cyan-500/30 text-xs font-bold transition-all flex items-center gap-1.5 shadow"
+            title="Launch Tactical Control Room for Sovereign Intervention"
+          >
+            <span className="material-symbols-outlined text-sm">tune</span>
+            Control Room
+          </Link>
+
           <button
             onClick={() => { setShowInviteModal(true); setInviteResult(null); }}
             className="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 text-xs font-semibold transition-all flex items-center gap-1.5"
@@ -481,10 +501,12 @@ export default function CreamMasterPage() {
                             className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase transition-all ${
                               comp.status === 'active'
                                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
+                                : comp.status === 'pending'
+                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20'
                                 : 'bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20'
                             }`}
                           >
-                            {comp.status || 'Active'}
+                            {comp.status === 'pending' ? 'Pending Review' : comp.status || 'Active'}
                           </button>
                         </td>
 

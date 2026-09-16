@@ -17,19 +17,36 @@ export default function CompanyDashboard({ params: paramsPromise }) {
   useEffect(() => { paramsPromise.then?.(setParams) ?? setParams(paramsPromise); }, [paramsPromise]);
   const companyId = params?.companyId;
 
+  const [errorMsg, setErrorMsg] = useState('');
+
   const fetchTab = useCallback(async (tabName) => {
-    if (!companyId || !user) return;
+    if (!companyId) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setErrorMsg('');
     try {
       const token = await user.getIdToken();
       const res = await fetch(`/api/cream/company/${companyId}/${tabName}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to load company details.');
+      }
       const json = await res.json();
       setData(prev => ({ ...prev, [tabName]: json }));
-    } catch (err) { console.error(`Failed to load ${tabName}:`, err); }
-    finally { setLoading(false); }
+    } catch (err) {
+      console.error(`Failed to load ${tabName}:`, err);
+      setErrorMsg(err.message || 'Failed to load tab data.');
+    } finally {
+      setLoading(false);
+    }
   }, [companyId, user]);
 
-  useEffect(() => { if (companyId) fetchTab(tab); }, [companyId, tab, fetchTab]);
+  useEffect(() => {
+    if (companyId) fetchTab(tab);
+  }, [companyId, tab, fetchTab]);
 
   const companyName = data[tab]?.company?.name || companyId;
 
@@ -62,6 +79,23 @@ export default function CompanyDashboard({ params: paramsPromise }) {
       </div>
 
       <main className="p-6 max-w-7xl mx-auto">
+        {!user && !loading && (
+          <div className="p-4 mb-6 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-300 text-xs flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined">lock</span>
+              <span>Please sign in with your CREAM administrator account to manage live company records.</span>
+            </div>
+            <Link href="/login" className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold text-xs transition-all">Sign In</Link>
+          </div>
+        )}
+
+        {errorMsg && (
+          <div className="p-4 mb-6 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-300 text-xs flex items-center gap-2">
+            <span className="material-symbols-outlined">error</span>
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
         {loading && <div className="text-center py-12 text-on-surface-variant"><span className="material-symbols-outlined animate-spin">progress_activity</span> Loading…</div>}
 
         {/* ── CUSTOMERS TAB ── */}

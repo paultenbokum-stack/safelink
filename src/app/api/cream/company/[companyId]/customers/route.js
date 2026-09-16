@@ -26,9 +26,18 @@ export async function GET(request, { params }) {
     const { companyId } = await params;
     const db = getAdminFirestore();
 
-    // Verify company exists
+    // Verify company exists or fallback to demo
     const companyDoc = await db.collection('security_companies').doc(companyId).get();
-    if (!companyDoc.exists) return NextResponse.json({ error: 'Company not found.' }, { status: 404 });
+    let companyName = companyDoc.exists ? companyDoc.data().name : null;
+    let isDemoTenant = false;
+
+    if (!companyDoc.exists) {
+      const { DEMO_COMPANIES } = await import('@/lib/demo-companies');
+      const demoComp = DEMO_COMPANIES.find(c => c.id === companyId);
+      if (!demoComp) return NextResponse.json({ error: 'Company not found.' }, { status: 404 });
+      companyName = demoComp.name;
+      isDemoTenant = true;
+    }
 
     // Get all households linked to this company
     const householdsSnap = await db.collection('households').where('securityCompanyId', '==', companyId).get();
@@ -50,6 +59,17 @@ export async function GET(request, { params }) {
       };
     });
 
+    if ((isDemoTenant || companyId === 'sovereign_intervention') && customers.length === 0) {
+      const demoClients = [
+        { id: 'sov_cust_1', name: 'Dr. Johan Van Der Merwe', email: 'johan@vdm-holdings.co.za', phone: '+27 82 441 9021', subscriptionTier: 'premium', subscriptionStatus: 'active', membershipStatus: 'active', paymentStatus: 'current', lastPaymentDate: '2026-09-01T08:30:00.000Z', nextBillingDate: '2026-10-01T00:00:00.000Z' },
+        { id: 'sov_cust_2', name: 'Sipho & Lerato Dlamini', email: 'sipho@dlamini-law.com', phone: '+27 83 912 0482', subscriptionTier: 'premium', subscriptionStatus: 'active', membershipStatus: 'active', paymentStatus: 'current', lastPaymentDate: '2026-09-02T10:15:00.000Z', nextBillingDate: '2026-10-02T00:00:00.000Z' },
+        { id: 'sov_cust_3', name: 'Apex Logistics Escort Fleet', email: 'ops@apexlogistics.co.za', phone: '+27 11 884 1000', subscriptionTier: 'enterprise', subscriptionStatus: 'active', membershipStatus: 'active', paymentStatus: 'current', lastPaymentDate: '2026-09-05T14:20:00.000Z', nextBillingDate: '2026-10-05T00:00:00.000Z' },
+        { id: 'sov_cust_4', name: 'Kobus & Annelie Steyn', email: 'kobus@steyn-architects.co.za', phone: '+27 82 559 1192', subscriptionTier: 'standard', subscriptionStatus: 'active', membershipStatus: 'active', paymentStatus: '30day', lastPaymentDate: '2026-08-01T09:00:00.000Z', nextBillingDate: '2026-09-01T00:00:00.000Z' },
+        { id: 'sov_cust_5', name: 'Clifton Ridge Executive Residence', email: 'security@cliftonridge.co.za', phone: '+27 21 438 9011', subscriptionTier: 'premium', subscriptionStatus: 'active', membershipStatus: 'active', paymentStatus: 'current', lastPaymentDate: '2026-09-03T11:45:00.000Z', nextBillingDate: '2026-10-03T00:00:00.000Z' },
+      ];
+      customers.push(...demoClients);
+    }
+
     // Sort: arrears first, then alphabetical
     const order = { '90day': 0, '60day': 1, '30day': 2, 'inactive': 3, 'current': 4 };
     customers.sort((a, b) => (order[a.paymentStatus] ?? 5) - (order[b.paymentStatus] ?? 5) || a.name.localeCompare(b.name));
@@ -63,7 +83,7 @@ export async function GET(request, { params }) {
       inactive: customers.filter(c => c.paymentStatus === 'inactive').length,
     };
 
-    return NextResponse.json({ customers, summary, company: { id: companyId, name: companyDoc.data().name } });
+    return NextResponse.json({ customers, summary, company: { id: companyId, name: companyName || companyDoc?.data()?.name || companyId } });
   } catch (err) {
     console.error(`[api/cream/company/customers] Error:`, err);
     if (err.message === 'UNAUTHENTICATED') return NextResponse.json({ error: 'Please sign in.' }, { status: 401 });

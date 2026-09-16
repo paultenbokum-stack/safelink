@@ -93,6 +93,7 @@ export default function ControlRoomPage() {
   const managementFetch = useManagementFetch(setManagementError);
   const [activeTab, setActiveTab] = useState('incidents'); // 'incidents' | 'cameras' | 'aura' | 'fleet' | 'accounting'
   const [companyId, setCompanyId] = useState('safelink_default');
+  const [companiesList, setCompaniesList] = useState([]);
   const [company, setCompany] = useState(null);
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -120,6 +121,33 @@ export default function ControlRoomPage() {
     streamUrl: '',
     apiKey: '',
   });
+
+  // Check URL params on initial load
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const qCompany = sp.get('companyId');
+      if (qCompany) setCompanyId(qCompany);
+    }
+  }, []);
+
+  // Fetch all companies for tenant switcher
+  useEffect(() => {
+    async function loadCompanies() {
+      try {
+        const res = await managementFetch('/api/cream/companies');
+        if (res && res.ok) {
+          const data = await res.json();
+          if (data.companies?.length) {
+            setCompaniesList(data.companies);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load company list for control room:', err);
+      }
+    }
+    loadCompanies();
+  }, [managementFetch]);
 
   // Fetch company settings & incidents
   const fetchData = useCallback(async () => {
@@ -391,6 +419,11 @@ export default function ControlRoomPage() {
                 className="bg-[#0c1c2b] text-white border border-white/20 rounded px-2 py-0.5 text-xs font-semibold focus:outline-none focus:border-secondary cursor-pointer"
               >
                 <option value="safelink_default">SafeLink Default Network</option>
+                {companiesList.filter(c => c.id !== 'safelink_default').map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} {c.isDemo ? '[Demo]' : ''}
+                  </option>
+                ))}
               </select>
             </p>
           </div>

@@ -20,9 +20,19 @@ export async function GET(request) {
     const db = getAdminFirestore();
     const start = monthStart();
 
-    // Fetch all non-demo companies
-    const companiesSnap = await db.collection('security_companies').where('status', 'in', ['active', 'suspended']).get();
-    const companies = companiesSnap.docs.filter(doc => !doc.data().isDemo).map(doc => ({ id: doc.id, ...doc.data() }));
+    // Fetch all non-demo companies (including pending review)
+    const companiesSnap = await db.collection('security_companies').where('status', 'in', ['active', 'suspended', 'pending', 'not_configured']).get();
+    let companies = companiesSnap.docs.filter(doc => !doc.data().isDemo).map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // If no real companies exist yet, provide DEMO_COMPANIES so metrics console populates cleanly
+    if (!companies.length) {
+      const { DEMO_COMPANIES } = await import('@/lib/demo-companies');
+      companies = DEMO_COMPANIES.map(c => ({
+        ...c,
+        psiraNumber: c.psiraNumber || c.registrationNumber || '',
+        paystackSubaccountCode: c.id === 'sovereign_intervention' ? 'ACCT_sov99281' : null,
+      }));
+    }
 
     // Aggregate customers
     const householdsSnap = await db.collection('households').get();

@@ -219,57 +219,6 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Audience Selector Tabs: Security Company vs Subscriber */}
-        <div className="grid grid-cols-2 p-1 bg-surface-container/70 border border-white/10 rounded-2xl backdrop-blur-md">
-          <button
-            type="button"
-            onClick={() => {
-              setMode('company');
-              setQuickError('');
-            }}
-            className={`py-2.5 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${
-              mode === 'company'
-                ? 'shadow-md font-extrabold'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-            style={
-              mode === 'company'
-                ? {
-                    backgroundColor: `${accentColor}25`,
-                    color: accentColor,
-                    border: `1px solid ${accentColor}60`,
-                  }
-                : {}
-            }
-          >
-            <span className="material-symbols-outlined text-base">shield</span>
-            <span>Security Company</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode('subscriber');
-              setQuickError('');
-            }}
-            className={`py-2.5 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${
-              mode === 'subscriber'
-                ? 'shadow-md font-extrabold'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-            style={
-              mode === 'subscriber'
-                ? {
-                    backgroundColor: `${accentColor}25`,
-                    color: accentColor,
-                    border: `1px solid ${accentColor}60`,
-                  }
-                : {}
-            }
-          >
-            <span className="material-symbols-outlined text-base">smartphone</span>
-            <span>Subscriber App</span>
-          </button>
-        </div>
 
 
         {/* PWA App Prompt */}

@@ -171,7 +171,8 @@ function DashboardContent() {
       style={{
         backgroundColor: brand?.pageBgColor || undefined,
         backgroundImage: brand?.pageBgImage ? `url("${brand.pageBgImage}")` : undefined,
-        backgroundSize: 'cover',
+        backgroundRepeat: brand?.pageBgImage?.includes('/textures/') ? 'repeat' : 'no-repeat',
+        backgroundSize: brand?.pageBgImage?.includes('/textures/') ? 'auto' : 'cover',
         backgroundPosition: 'center',
         color: brand?.pageTextColor || undefined,
         fontFamily: fontStyle,

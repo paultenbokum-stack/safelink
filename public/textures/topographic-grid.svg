@@ -1,0 +1,14 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="200" height="200" fill="#040911" />
+  <!-- Tactical Grid Lines -->
+  <path d="M 0 50 L 200 50 M 0 100 L 200 100 M 0 150 L 200 150 M 50 0 L 50 200 M 100 0 L 100 200 M 150 0 L 150 200"
+        stroke="#0c1726" stroke-width="0.75" />
+  <!-- Elevation Contour Lines -->
+  <path d="M 10 30 Q 50 10 90 40 T 170 30 T 200 50" fill="none" stroke="#14263e" stroke-width="1.2" opacity="0.8" />
+  <path d="M 0 90 Q 60 70 110 100 T 190 85 T 200 95" fill="none" stroke="#162a45" stroke-width="1.4" opacity="0.85" />
+  <path d="M 20 140 Q 70 120 130 150 T 200 135" fill="none" stroke="#18304f" stroke-width="1.2" opacity="0.8" />
+  <path d="M 0 175 Q 80 160 140 185 T 200 180" fill="none" stroke="#122339" stroke-width="1" opacity="0.7" />
+  <!-- Tactical Crosshairs -->
+  <path d="M 96 100 L 104 100 M 100 96 L 100 104" stroke="#d4af37" stroke-width="1" opacity="0.4" />
+  <circle cx="100" cy="100" r="8" fill="none" stroke="#d4af37" stroke-width="0.75" opacity="0.25" />
+</svg>

@@ -9,3 +9,73 @@
 @media(max-width:900px){.heroLayout,.twoColumn,.hardwareLayout,.nextLayout{grid-template-columns:1fr}.globeStage{height:360px;min-height:0;order:-1}.heroCopy h1{font-size:clamp(44px,12vw,72px)}.dispatchPath{grid-template-columns:repeat(2,1fr)}.flowStep b{display:none}.revenueCards{grid-template-columns:1fr}.calculator{grid-template-columns:1fr}.credentialRow{grid-template-columns:1fr}.platformList div{grid-template-columns:130px 1fr}.copyHeader h2{font-size:clamp(34px,8vw,54px)}}
 @media(max-width:600px){.topbar,.controls{height:62px;padding:0 16px}.partnerBadge{display:none}.stage{min-height:calc(100dvh - 124px);padding:30px 16px 16px}.heroPartners{margin:20px 0}.heroCopy p{margin:17px 0 25px}.moduleGrid,.dispatchPath{grid-template-columns:1fr}.moduleCard{min-height:150px}.insightStrip{display:grid;gap:10px}.matrixWrap{margin-inline:-16px;width:calc(100% + 32px)}.hardwareVisual{height:310px}.controlHint{min-width:0}.controlHint:last-child{display:none}.controls{justify-content:space-between}.progress button{width:16px}.slideMenu{right:16px;top:55px;width:calc(100% - 32px)}}
 @media(prefers-reduced-motion:reduce){.ambient,.slideBody{animation:none}.moduleCard{transition:none}}
+
+.heroFullBackground {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.heroFullBackgroundImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 30%;
+  opacity: 0.5;
+}
+.heroBackgroundGradient {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 75% 35%, rgba(0, 229, 255, 0.08), transparent 50%),
+              linear-gradient(to right, rgba(4, 7, 14, 0.92) 0%, rgba(4, 7, 14, 0.6) 45%, rgba(4, 7, 14, 0.3) 75%, rgba(4, 7, 14, 0.85) 100%),
+              linear-gradient(to bottom, rgba(4, 7, 14, 0.7) 0%, transparent 20%, transparent 75%, rgba(4, 7, 14, 0.9) 100%);
+}
+.safeLinkLogo {
+  height: 42px;
+  width: auto;
+  max-width: 180px;
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 0 16px rgba(247, 187, 35, 0.25));
+}
+.underActionLink {
+  font: 700 11px ui-monospace, monospace;
+  letter-spacing: .08em;
+  color: var(--soft);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  border-radius: 2px;
+  border: 1px solid rgba(163, 225, 255, 0.2);
+  background: rgba(4, 10, 20, 0.55);
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+}
+.underActionLink:hover {
+  color: #fff;
+  border-color: var(--partner-primary);
+  background: color-mix(in srgb, var(--partner-primary) 14%, transparent);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--partner-primary) 22%, transparent);
+  transform: translateY(-2px);
+}
+.linkArrow {
+  color: var(--partner-primary);
+  font-size: 13px;
+  transition: transform 0.2s ease;
+}
+.underActionLink:hover .linkArrow {
+  transform: translate(2px, -2px);
+}
+.globeCaptionWrap {
+  height: min(58vw, 560px);
+  position: relative;
+  min-height: 440px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+}

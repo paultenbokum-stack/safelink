@@ -83,7 +83,8 @@ export default function Header({ title, showBack = false, showNotification = tru
       style={{
         backgroundColor: brand?.headerBgColor ? `${brand.headerBgColor}f0` : undefined,
         backgroundImage: brand?.headerBgImage ? `url("${brand.headerBgImage}")` : undefined,
-        backgroundSize: 'cover',
+        backgroundRepeat: brand?.headerBgImage?.includes('/textures/') ? 'repeat' : 'no-repeat',
+        backgroundSize: brand?.headerBgImage?.includes('/textures/') ? 'auto' : 'cover',
         backgroundPosition: 'center',
       }}
     >

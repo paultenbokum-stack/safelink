@@ -1,0 +1,10 @@
+<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <rect width="24" height="24" fill="#06090e" />
+  <!-- 45-degree carbon twill blocks -->
+  <path d="M0 0h12v12H0z" fill="#0d131d" />
+  <path d="M12 12h12v12H12z" fill="#0d131d" />
+  <!-- Twill weave highlights -->
+  <path d="M0 0l12 12M0 6l12 12M6 0l12 12M12 0l12 12M0 12l12 12M0 18l12 12M18 0l6 6M0 24l24-24" stroke="#182332" stroke-width="1.2" opacity="0.65" />
+  <path d="M12 0l12 12M12 6l12 12M18 0l6 6" stroke="#223246" stroke-width="0.8" opacity="0.4" />
+  <rect width="24" height="24" fill="none" stroke="#04060a" stroke-width="0.75" />
+</svg>

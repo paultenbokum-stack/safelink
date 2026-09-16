@@ -1,21 +1,23 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { SOVEREIGN_DEFAULT_BRAND, useBrandTheme } from '@/lib/brand-context';
 
 const PRESET_HEADER_IMAGES = [
-  { id: 'none', label: 'None', url: '' },
-  { id: 'carbon', label: 'Tactical Carbon', url: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=800&q=80' },
-  { id: 'grid', label: 'Security Mesh', url: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80' },
-  { id: 'night', label: 'Night Watch', url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=800&q=80' },
+  { id: 'none', label: 'None (Solid Color)', url: '' },
+  { id: 'carbon', label: 'Tactical Carbon Fiber', url: '/textures/carbon-fiber.svg' },
+  { id: 'honeycomb', label: 'Security Ballistic Mesh', url: '/textures/honeycomb-mesh.svg' },
+  { id: 'obsidian', label: 'Obsidian Armor Weave', url: '/textures/obsidian-weave.svg' },
+  { id: 'topographic', label: 'Tactical Topo Grid', url: '/textures/topographic-grid.svg' },
 ];
 
 const PRESET_PAGE_IMAGES = [
-  { id: 'none', label: 'None', url: '' },
-  { id: 'contour', label: 'Topographic Security Grid', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80' },
-  { id: 'dark_mesh', label: 'Dark Carbon Weave', url: 'https://images.unsplash.com/photo-1550684847-75bdda21cc95?auto=format&fit=crop&w=1200&q=80' },
-  { id: 'obsidian', label: 'Obsidian Fiber', url: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=1200&q=80' },
+  { id: 'none', label: 'None (Solid Color)', url: '' },
+  { id: 'carbon', label: 'Tactical Carbon Fiber', url: '/textures/carbon-fiber.svg' },
+  { id: 'honeycomb', label: 'Security Ballistic Mesh', url: '/textures/honeycomb-mesh.svg' },
+  { id: 'topographic', label: 'Topographic Surveillance Grid', url: '/textures/topographic-grid.svg' },
+  { id: 'obsidian', label: 'Obsidian Armor Weave', url: '/textures/obsidian-weave.svg' },
 ];
 
 const PRESET_LOGOS = [
@@ -29,6 +31,31 @@ export default function BrandCustomizer({ companyId = 'sovereign_intervention', 
   const [loading, setLoading] = useState(!initialBranding);
   const [saving, setSaving] = useState(false);
   const [saveToast, setSaveToast] = useState('');
+
+  // File Upload Input Refs
+  const logoInputRef = useRef(null);
+  const headerBgInputRef = useRef(null);
+  const pageBgInputRef = useRef(null);
+
+  const handleImageUpload = (e, field) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Selected image exceeds 5MB. Please choose a smaller file.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result;
+      if (typeof result === 'string') {
+        updateField(field, result);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   // Scraper State
   const [scrapeUrl, setScrapeUrl] = useState(companyId === 'sovereign_intervention' ? 'https://sovereignintervention.co.za' : '');
@@ -300,18 +327,34 @@ export default function BrandCustomizer({ companyId = 'sovereign_intervention', 
               <p className="text-xs text-on-surface-variant">Your brand mark, shown in the header</p>
             </div>
 
-            <div className="bg-[#04070e] border border-white/10 rounded-xl p-4 flex items-center justify-between gap-4">
-              <div className="w-32 h-14 bg-black/60 rounded-lg flex items-center justify-center p-2 border border-white/5 overflow-hidden">
+            <input
+              type="file"
+              ref={logoInputRef}
+              accept="image/*"
+              onChange={e => handleImageUpload(e, 'logoUrl')}
+              className="hidden"
+            />
+            <div className="bg-[#04070e] border border-white/10 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="w-32 h-14 bg-black/60 rounded-lg flex items-center justify-center p-2 border border-white/5 overflow-hidden shrink-0">
                 {branding.logoUrl ? (
                   <img src={branding.logoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
                 ) : (
                   <span className="text-xs text-on-surface-variant italic">No Logo</span>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => logoInputRef.current?.click()}
+                  className="px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/90 text-xs font-bold text-on-secondary flex items-center gap-1.5 transition-all shadow-sm"
+                  title="Upload brand logo file from computer"
+                >
+                  <span className="material-symbols-outlined text-sm">upload_file</span>
+                  Upload Image
+                </button>
                 <select
                   aria-label="Select Brand Logo"
-                  value={PRESET_LOGOS.some(p => p.url === branding.logoUrl) ? branding.logoUrl : 'custom'}
+                  value={PRESET_LOGOS.some(p => p.url === branding.logoUrl) ? branding.logoUrl : (branding.logoUrl ? 'custom' : '')}
                   onChange={e => {
                     if (e.target.value !== 'custom') updateField('logoUrl', e.target.value);
                   }}
@@ -320,23 +363,31 @@ export default function BrandCustomizer({ companyId = 'sovereign_intervention', 
                   {PRESET_LOGOS.map(p => (
                     <option key={p.id} value={p.url} className="bg-gray-900">{p.label}</option>
                   ))}
-                  <option value="custom" className="bg-gray-900">Custom URL…</option>
+                  {branding.logoUrl && !PRESET_LOGOS.some(p => p.url === branding.logoUrl) && (
+                    <option value="custom" className="bg-gray-900">Custom Uploaded Logo</option>
+                  )}
                 </select>
                 <button
+                  type="button"
                   onClick={() => {
                     const next = prompt('Enter image URL for logo:', branding.logoUrl || '');
                     if (next !== null) updateField('logoUrl', next);
                   }}
-                  className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-semibold text-white transition-all"
+                  className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-semibold text-white transition-all flex items-center gap-1"
+                  title="Enter image URL"
                 >
-                  Replace
+                  <span className="material-symbols-outlined text-sm">link</span>
+                  URL
                 </button>
-                <button
-                  onClick={() => updateField('logoUrl', '')}
-                  className="px-3 py-1.5 rounded-lg text-amber-400 hover:text-amber-300 text-xs font-semibold transition-all"
-                >
-                  Remove
-                </button>
+                {branding.logoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => updateField('logoUrl', '')}
+                    className="px-2.5 py-1.5 rounded-lg text-amber-400 hover:text-amber-300 text-xs font-semibold transition-all"
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
             </div>
 
@@ -392,47 +443,78 @@ export default function BrandCustomizer({ companyId = 'sovereign_intervention', 
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                 Background Image - Optional
               </label>
-              <div className="bg-[#04070e] border border-white/10 rounded-xl p-3 flex items-center justify-between gap-4">
-                <div className="h-12 w-32 bg-black/60 rounded-lg overflow-hidden border border-white/5 flex items-center justify-center">
+              <input
+                type="file"
+                ref={headerBgInputRef}
+                accept="image/*"
+                onChange={e => handleImageUpload(e, 'headerBgImage')}
+                className="hidden"
+              />
+              <div className="bg-[#04070e] border border-white/10 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="h-12 w-32 bg-black/60 rounded-lg overflow-hidden border border-white/5 flex items-center justify-center shrink-0">
                   {branding.headerBgImage ? (
-                    <img src={branding.headerBgImage} alt="Header Bg" className="w-full h-full object-cover" />
+                    <img
+                      src={branding.headerBgImage}
+                      alt="Header Bg"
+                      className="w-full h-full object-cover"
+                      style={{
+                        backgroundRepeat: branding.headerBgImage.includes('/textures/') ? 'repeat' : 'no-repeat',
+                      }}
+                    />
                   ) : (
                     <span className="text-[11px] text-slate-500 italic">No image set</span>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => headerBgInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/90 text-xs font-bold text-on-secondary flex items-center gap-1.5 transition-all shadow-sm"
+                    title="Upload background image file from computer"
+                  >
+                    <span className="material-symbols-outlined text-sm">upload_file</span>
+                    Upload Image
+                  </button>
                   <select
                     aria-label="Select Header Image Preset"
-                    value={PRESET_HEADER_IMAGES.some(p => p.url === branding.headerBgImage) ? branding.headerBgImage : 'custom'}
+                    value={PRESET_HEADER_IMAGES.some(p => p.url === branding.headerBgImage) ? branding.headerBgImage : (branding.headerBgImage ? 'custom' : '')}
                     onChange={e => {
                       if (e.target.value !== 'custom') updateField('headerBgImage', e.target.value);
                     }}
-                    className="bg-white/5 border border-white/15 rounded-lg px-2 py-1 text-xs text-white"
+                    className="bg-white/5 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white"
                   >
                     {PRESET_HEADER_IMAGES.map(p => (
                       <option key={p.id} value={p.url} className="bg-gray-900">{p.label}</option>
                     ))}
-                    <option value="custom" className="bg-gray-900">Custom URL…</option>
+                    {branding.headerBgImage && !PRESET_HEADER_IMAGES.some(p => p.url === branding.headerBgImage) && (
+                      <option value="custom" className="bg-gray-900">Custom Uploaded Image</option>
+                    )}
                   </select>
                   <button
+                    type="button"
                     onClick={() => {
                       const next = prompt('Enter background image URL for header:', branding.headerBgImage || '');
                       if (next !== null) updateField('headerBgImage', next);
                     }}
-                    className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-semibold text-white"
+                    className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-semibold text-white transition-all flex items-center gap-1"
+                    title="Paste an image URL"
                   >
-                    Replace
+                    <span className="material-symbols-outlined text-sm">link</span>
+                    URL
                   </button>
-                  <button
-                    onClick={() => updateField('headerBgImage', '')}
-                    className="px-2 py-1 text-amber-400 hover:text-amber-300 text-xs font-semibold"
-                  >
-                    Remove
-                  </button>
+                  {branding.headerBgImage && (
+                    <button
+                      type="button"
+                      onClick={() => updateField('headerBgImage', '')}
+                      className="px-2.5 py-1.5 rounded-lg text-amber-400 hover:text-amber-300 text-xs font-semibold transition-all"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </div>
               </div>
               <p className="text-[11px] text-slate-400">
-                Sits behind the header. The logo gets a rounded plate in the header colour so it stays legible.
+                Sits behind the top navigation bar. The logo gets a rounded plate in the header colour so it stays legible.
               </p>
             </div>
 
@@ -521,45 +603,79 @@ export default function BrandCustomizer({ companyId = 'sovereign_intervention', 
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                 Background Image - Optional
               </label>
-              <div className="bg-[#04070e] border border-white/10 rounded-xl p-3 flex items-center justify-between gap-4">
-                <div className="h-12 w-32 bg-black/60 rounded-lg overflow-hidden border border-white/5 flex items-center justify-center">
+              <input
+                type="file"
+                ref={pageBgInputRef}
+                accept="image/*"
+                onChange={e => handleImageUpload(e, 'pageBgImage')}
+                className="hidden"
+              />
+              <div className="bg-[#04070e] border border-white/10 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="h-12 w-32 bg-black/60 rounded-lg overflow-hidden border border-white/5 flex items-center justify-center shrink-0">
                   {branding.pageBgImage ? (
-                    <img src={branding.pageBgImage} alt="Page Bg" className="w-full h-full object-cover" />
+                    <img
+                      src={branding.pageBgImage}
+                      alt="Page Bg"
+                      className="w-full h-full object-cover"
+                      style={{
+                        backgroundRepeat: branding.pageBgImage.includes('/textures/') ? 'repeat' : 'no-repeat',
+                      }}
+                    />
                   ) : (
                     <span className="text-[11px] text-slate-500 italic">No image set</span>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => pageBgInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/90 text-xs font-bold text-on-secondary flex items-center gap-1.5 transition-all shadow-sm"
+                    title="Upload page background image file from computer"
+                  >
+                    <span className="material-symbols-outlined text-sm">upload_file</span>
+                    Upload Image
+                  </button>
                   <select
                     aria-label="Select Page Background Image Preset"
-                    value={PRESET_PAGE_IMAGES.some(p => p.url === branding.pageBgImage) ? branding.pageBgImage : 'custom'}
+                    value={PRESET_PAGE_IMAGES.some(p => p.url === branding.pageBgImage) ? branding.pageBgImage : (branding.pageBgImage ? 'custom' : '')}
                     onChange={e => {
                       if (e.target.value !== 'custom') updateField('pageBgImage', e.target.value);
                     }}
-                    className="bg-white/5 border border-white/15 rounded-lg px-2 py-1 text-xs text-white"
+                    className="bg-white/5 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white"
                   >
                     {PRESET_PAGE_IMAGES.map(p => (
                       <option key={p.id} value={p.url} className="bg-gray-900">{p.label}</option>
                     ))}
-                    <option value="custom" className="bg-gray-900">Custom URL…</option>
+                    {branding.pageBgImage && !PRESET_PAGE_IMAGES.some(p => p.url === branding.pageBgImage) && (
+                      <option value="custom" className="bg-gray-900">Custom Uploaded Image</option>
+                    )}
                   </select>
                   <button
+                    type="button"
                     onClick={() => {
                       const next = prompt('Enter background image URL for body:', branding.pageBgImage || '');
                       if (next !== null) updateField('pageBgImage', next);
                     }}
-                    className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-semibold text-white"
+                    className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-semibold text-white transition-all flex items-center gap-1"
+                    title="Paste an image URL"
                   >
-                    Replace
+                    <span className="material-symbols-outlined text-sm">link</span>
+                    URL
                   </button>
-                  <button
-                    onClick={() => updateField('pageBgImage', '')}
-                    className="px-2 py-1 text-amber-400 hover:text-amber-300 text-xs font-semibold"
-                  >
-                    Remove
-                  </button>
+                  {branding.pageBgImage && (
+                    <button
+                      type="button"
+                      onClick={() => updateField('pageBgImage', '')}
+                      className="px-2.5 py-1.5 rounded-lg text-amber-400 hover:text-amber-300 text-xs font-semibold transition-all"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </div>
               </div>
+              <p className="text-[11px] text-slate-400">
+                Sits across the entire page behind the SOS panic button and action buttons. Combine with Button Opacity for a layered glassmorphic look.
+              </p>
             </div>
 
             {/* Text Colour */}
@@ -815,7 +931,8 @@ export default function BrandCustomizer({ companyId = 'sovereign_intervention', 
               style={{
                 backgroundColor: branding.pageBgColor || '#040D16',
                 backgroundImage: branding.pageBgImage ? `url("${branding.pageBgImage}")` : 'none',
-                backgroundSize: 'cover',
+                backgroundRepeat: branding.pageBgImage?.includes('/textures/') ? 'repeat' : 'no-repeat',
+                backgroundSize: branding.pageBgImage?.includes('/textures/') ? 'auto' : 'cover',
                 backgroundPosition: 'center',
                 fontFamily: fontStyle,
                 color: branding.pageTextColor || '#F8FAFC',
@@ -837,7 +954,8 @@ export default function BrandCustomizer({ companyId = 'sovereign_intervention', 
                 style={{
                   backgroundColor: branding.headerBgColor || '#04070E',
                   backgroundImage: branding.headerBgImage ? `url("${branding.headerBgImage}")` : 'none',
-                  backgroundSize: 'cover',
+                  backgroundRepeat: branding.headerBgImage?.includes('/textures/') ? 'repeat' : 'no-repeat',
+                  backgroundSize: branding.headerBgImage?.includes('/textures/') ? 'auto' : 'cover',
                   backgroundPosition: 'center',
                 }}
               >

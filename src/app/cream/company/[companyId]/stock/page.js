@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 
 export default function CompanyStockPage({ params: paramsPromise }) {
-  const [params, setParams] = useState(null);
+  const resolvedParams = paramsPromise && typeof paramsPromise.then === 'function' ? React.use(paramsPromise) : paramsPromise;
+  const companyId = resolvedParams?.companyId;
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [sentinelProducts, setSentinelProducts] = useState([]);
@@ -15,9 +16,6 @@ export default function CompanyStockPage({ params: paramsPromise }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newProduct, setNewProduct] = useState({ name: '', sku: '', description: '', category: 'Security Hardware', costPrice: '', sellingPrice: '', stockQty: '' });
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => { paramsPromise.then?.(setParams) ?? setParams(paramsPromise); }, [paramsPromise]);
-  const companyId = params?.companyId;
 
   const [errorMsg, setErrorMsg] = useState('');
 

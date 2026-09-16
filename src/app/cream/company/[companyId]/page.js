@@ -8,14 +8,12 @@ const PAYMENT_COLORS = { current: '#38a169', '30day': '#d69e2e', '60day': '#dd6b
 const PAYMENT_LABELS = { current: 'Current', '30day': '30 Days', '60day': '60 Days', '90day': '90+ Days', inactive: 'Inactive' };
 
 export default function CompanyDashboard({ params: paramsPromise }) {
-  const [params, setParams] = useState(null);
+  const resolvedParams = paramsPromise && typeof paramsPromise.then === 'function' ? React.use(paramsPromise) : paramsPromise;
+  const companyId = resolvedParams?.companyId;
   const [tab, setTab] = useState('customers');
   const [data, setData] = useState({ customers: null, incidents: null, revenue: null });
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
-
-  useEffect(() => { paramsPromise.then?.(setParams) ?? setParams(paramsPromise); }, [paramsPromise]);
-  const companyId = params?.companyId;
 
   const [errorMsg, setErrorMsg] = useState('');
 

@@ -82,6 +82,11 @@ export async function resolveAdapter(partnerId) {
   const prefix = partnerId.toUpperCase().split('-')[0];
 
   // Lazy-load adapters to keep bundle clean
+  if (prefix === 'SI') {
+    const { MockSovereignInterventionAdapter } = await import('./adapters/mock-partner.js');
+    return new MockSovereignInterventionAdapter();
+  }
+
   if (prefix === 'SB') {
     const { MockSecurityBrokersAdapter } = await import('./adapters/mock-partner.js');
     return new MockSecurityBrokersAdapter();

@@ -69,6 +69,22 @@ export function BrandProvider({ children }) {
 
   const loadBrand = useCallback(async (targetId) => {
     const cid = String(targetId || 'sovereign_intervention').trim().toLowerCase();
+    
+    // Check localStorage cache first for immediate hydration
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('safelink_brand_' + cid);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.partnerName) {
+            setBrand(parsed);
+            setIsWhiteLabeled(true);
+            applyCssVariables(parsed);
+          }
+        }
+      } catch {}
+    }
+
     try {
       const res = await fetch(`/api/cream/company/${cid}/branding`, { cache: 'no-store' });
       if (res.ok) {
@@ -77,6 +93,9 @@ export function BrandProvider({ children }) {
           setBrand(json.branding);
           setIsWhiteLabeled(true);
           applyCssVariables(json.branding);
+          try {
+            localStorage.setItem('safelink_brand_' + cid, JSON.stringify(json.branding));
+          } catch {}
           return;
         }
       }
@@ -95,9 +114,17 @@ export function BrandProvider({ children }) {
 
     // Detect company from search params or household
     const params = new URLSearchParams(window.location.search);
-    const paramCompany = params.get('companyId') || params.get('partner') || params.get('tenant');
+    const rawParam = params.get('companyId') || params.get('partner') || params.get('tenant') || params.get('company');
     
-    let resolvedCompany = paramCompany;
+    const ALIAS_MAP = {
+      si: 'sovereign_intervention',
+      sovereign: 'sovereign_intervention',
+      sb: 'security_brokers',
+      th: 'thompsons_security',
+      ms: 'marshals_security',
+    };
+    
+    let resolvedCompany = rawParam ? (ALIAS_MAP[rawParam.toLowerCase()] || rawParam.toLowerCase()) : null;
     if (!resolvedCompany) {
       try {
         const rawH = localStorage.getItem('active_household');

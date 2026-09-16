@@ -49,6 +49,25 @@ const MOCK_CLIENTS = {
       { imei: '333444555666777', nickname: "Lerato's Watch", type: 'BLE_TAG' },
     ],
   },
+  'SI-000001': {
+    displayName: 'Kyle Saffy',
+    tier: 'Executive Armed VIP',
+    pin: '1234',
+    contractSince: '2024-01-15',
+    deviceImeis: [
+      { imei: '123456789012345', nickname: "Kyle's Sovereign Sentinel Guard", type: 'BLE_TAG' },
+      { imei: '987654321098765', nickname: 'Tactical Patrol Vehicle #01', type: 'VEHICLE_GPS' },
+    ],
+  },
+  'SI-000002': {
+    displayName: 'Sovereign Command Center',
+    tier: 'Fleet Operations',
+    pin: '0000',
+    contractSince: '2023-06-01',
+    deviceImeis: [
+      { imei: '111222333444555', nickname: 'Rapid Response Unit Alpha', type: 'VEHICLE_GPS' },
+    ],
+  },
 };
 
 /* ─── Security Brokers Adapter ───────────────────────────────────── */
@@ -120,6 +139,81 @@ export class MockSecurityBrokersAdapter extends PartnerAdapter {
     return client.deviceImeis.map((d) => ({
       hashedImei: hashImei(d.imei),
       rawImei: d.imei, // stripped before API response is sent to client
+      nickname: d.nickname,
+      type: d.type,
+    }));
+  }
+}
+
+export class MockSovereignInterventionAdapter extends PartnerAdapter {
+  constructor() {
+    super('SI');
+    this.partnerName = 'Sovereign Intervention';
+    this.partnerLogo = '/sovereign-intervention-logo.png';
+    this.primaryColor = '#C69A2C';
+  }
+
+  async verifyClient(clientId, pin) {
+    const normalised = clientId.toUpperCase().trim();
+    const client = MOCK_CLIENTS[normalised];
+
+    if (!client) {
+      if (normalised.startsWith('SI-') && String(pin).trim() === '1234') {
+        return {
+          valid: true,
+          clientRef: normalised,
+          displayName: 'Sovereign VIP Member',
+          tier: 'Armed VIP Tier',
+          partnerName: this.partnerName,
+          deviceRefs: [
+            {
+              hashedImei: hashImei('123456789012345'),
+              rawImei: '123456789012345',
+              nickname: "Sovereign Rapid Response Sentinel",
+              type: 'BLE_TAG',
+            },
+          ],
+        };
+      }
+      return { valid: false, error: 'Account not found. Please contact Sovereign Intervention.' };
+    }
+
+    if (String(pin).trim() !== String(client.pin)) {
+      return { valid: false, error: 'Incorrect PIN. Please try again.' };
+    }
+
+    return {
+      valid: true,
+      clientRef: normalised,
+      displayName: client.displayName,
+      tier: client.tier,
+      partnerName: this.partnerName,
+      deviceRefs: client.deviceImeis.map((d) => ({
+        hashedImei: hashImei(d.imei),
+        rawImei: d.imei,
+        nickname: d.nickname,
+        type: d.type,
+      })),
+    };
+  }
+
+  async getClientProfile(clientRef) {
+    const client = MOCK_CLIENTS[clientRef];
+    return {
+      displayName: client?.displayName || 'Sovereign Client',
+      tier: client?.tier || 'Armed VIP',
+      partnerName: this.partnerName,
+      since: client?.contractSince || '2024-01-01',
+      managedBy: 'Sovereign Intervention',
+    };
+  }
+
+  async getDevices(clientRef) {
+    const client = MOCK_CLIENTS[clientRef];
+    if (!client) return [];
+    return client.deviceImeis.map((d) => ({
+      hashedImei: hashImei(d.imei),
+      rawImei: d.imei,
       nickname: d.nickname,
       type: d.type,
     }));

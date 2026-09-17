@@ -7,13 +7,19 @@ import { scrapeCompanyBrand } from '@/lib/brand-scraper';
  */
 export async function POST(request) {
   try {
-    const { websiteUrl } = await request.json();
+    const body = await request.json();
+    const websiteUrl = (body.websiteUrl || body.url || '').trim();
     if (!websiteUrl || typeof websiteUrl !== 'string') {
       return NextResponse.json({ error: 'Please provide a valid website URL.' }, { status: 400 });
     }
 
     const result = await scrapeCompanyBrand(websiteUrl);
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ...result,
+      companyName: result.branding?.partnerName || result.extracted?.partnerName || '',
+      phone: result.extracted?.phones?.[0] || '',
+      email: result.extracted?.emails?.[0] || '',
+    });
   } catch (err) {
     console.error('[api/cream/scrape-branding] Failed to scrape website:', err.message);
     return NextResponse.json(

@@ -39,20 +39,26 @@ export default function CreamMasterPage() {
       const res = await fetch('/api/cream/scrape-branding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: scrapeUrl.trim() }),
+        body: JSON.stringify({ websiteUrl: scrapeUrl.trim(), url: scrapeUrl.trim() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to scrape website');
 
+      const companyName = data.companyName || data.branding?.partnerName || data.extracted?.partnerName || '';
+      const phone = data.phone || data.extracted?.phones?.[0] || '';
+      const email = data.email || data.extracted?.emails?.[0] || '';
+      const slug = companyName ? companyName.toLowerCase().replace(/[^a-z0-9_]/g, '_') : '';
+
       setScrapedBranding(data.branding);
       setNewCompany(prev => ({
         ...prev,
-        name: prev.name || data.companyName || '',
-        slug: prev.slug || (data.companyName ? data.companyName.toLowerCase().replace(/[^a-z0-9_]/g, '_') : ''),
-        dispatchPhone: prev.dispatchPhone || data.phone || '',
+        name: prev.name || companyName,
+        slug: prev.slug || slug,
+        dispatchPhone: prev.dispatchPhone || phone,
+        contactEmail: prev.contactEmail || email,
         branding: data.branding,
       }));
-      setScrapeStatus(`✓ CI Ingested: ${data.companyName} (${data.branding.fontFamily} font, ${data.branding.headerBgColor} header, ${data.branding.highlightedButtonBg} SOS button)`);
+      setScrapeStatus(`✓ CI Ingested: ${companyName || 'Company'} (${data.branding?.fontFamily || 'modern'} font, ${data.branding?.headerBgColor || '#04070E'} header, ${data.branding?.highlightedButtonBg || '#D4AF37'} SOS button)`);
     } catch (err) {
       setScrapeStatus(`Error ingesting CI: ${err.message}`);
     } finally {

@@ -15,7 +15,12 @@ const blockedHost = (host) => {
 const cleanHex = (hex) => {
   if (!hex) return null;
   const match = hex.match(/#([0-9a-f]{3,6})\b/i);
-  return match ? `#${match[1].toUpperCase()}` : null;
+  if (!match) return null;
+  let code = match[1].toUpperCase();
+  if (code.length === 3) {
+    code = code.split('').map(c => c + c).join('');
+  }
+  return `#${code}`;
 };
 
 // Check if hex color is bright
@@ -67,19 +72,47 @@ export async function scrapeCompanyBrand(websiteUrl) {
   }
 
   // 1. Company Name & Title
-  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  let rawTitle = titleMatch ? titleMatch[1].trim() : urlObj.hostname.replace(/^www\./, '').split('.')[0];
-  rawTitle = rawTitle.replace(/[-|·–].*$/, '').trim(); // Remove suffixes like " - Home"
+  let partnerName = '';
+  const isSbSecurity = urlObj.hostname.includes('sbsecurity') || html.includes('SB Security') || urlObj.hostname.includes('securitybrokerz');
+  const isSovereign = urlObj.hostname.includes('sovereign') || html.includes('Sovereign Intervention');
 
-  const partnerName = rawTitle.length > 2 ? rawTitle : 'Security Partner';
+  if (isSbSecurity) {
+    partnerName = 'SB Security';
+  } else if (isSovereign) {
+    partnerName = 'Sovereign Intervention';
+  } else {
+    const ogSiteName = html.match(/<meta[^>]+(?:property|name)=["']og:site_name["'][^>]+content=["']([^"']+)["']/i)?.[1];
+    if (ogSiteName && ogSiteName.trim().length > 2) {
+      partnerName = ogSiteName.trim();
+    } else {
+      const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      let rawTitle = titleMatch ? titleMatch[1].trim() : urlObj.hostname.replace(/^www\./, '').split('.')[0];
+      rawTitle = rawTitle.replace(/[-|·–].*$/, '').trim(); // Remove suffixes like " - Home"
+      partnerName = rawTitle.length > 2 ? rawTitle : 'Security Partner';
+    }
+  }
   const shortName = partnerName.split(' ')[0] || 'Partner';
 
-  // 2. Logos
+  // 2. Logos — prioritize actual high-res brand marks over 16px/32px favicons
   const logoCandidates = [];
 
-  // Special case: if sovereign intervention, use official logo in public directory
-  if (urlObj.hostname.includes('sovereign') || partnerName.toLowerCase().includes('sovereign')) {
+  // Special cases for recognized partner portfolios
+  if (isSovereign) {
     logoCandidates.push('/sovereign-intervention-logo.png');
+  }
+  if (isSbSecurity) {
+    logoCandidates.push('/presentation/security-brokers-logo.png');
+  }
+
+  // Check img tags with 'logo' in class/alt/src first
+  const imgLogoMatches = [...html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*(?:logo|brand|emblem)[^>]*>/gi)];
+  for (const m of imgLogoMatches) {
+    if (m[1]) {
+      const candidateUrl = new URL(m[1], finalUrl).toString();
+      if (!candidateUrl.includes('32x32') && !candidateUrl.includes('16x16')) {
+        logoCandidates.push(candidateUrl);
+      }
+    }
   }
 
   // Check og:image
@@ -87,19 +120,13 @@ export async function scrapeCompanyBrand(websiteUrl) {
                   html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']og:image["']/i)?.[1];
   if (ogImage) logoCandidates.push(new URL(ogImage, finalUrl).toString());
 
-  // Check icons
-  const iconMatches = [...html.matchAll(/<link[^>]+rel=["'](?:shortcut )?icon["'][^>]+href=["']([^"']+)["']/gi)];
-  for (const m of iconMatches) {
-    if (m[1]) logoCandidates.push(new URL(m[1], finalUrl).toString());
-  }
-
   // Check apple-touch-icon
   const appleIcon = html.match(/<link[^>]+rel=["']apple-touch-icon["'][^>]+href=["']([^"']+)["']/i)?.[1];
   if (appleIcon) logoCandidates.push(new URL(appleIcon, finalUrl).toString());
 
-  // Check img tags with 'logo' in class/alt/src
-  const imgLogoMatches = [...html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*(?:logo|brand|emblem)[^>]*>/gi)];
-  for (const m of imgLogoMatches) {
+  // Check generic icons/favicons as last resort
+  const iconMatches = [...html.matchAll(/<link[^>]+rel=["'](?:shortcut )?icon["'][^>]+href=["']([^"']+)["']/gi)];
+  for (const m of iconMatches) {
     if (m[1]) logoCandidates.push(new URL(m[1], finalUrl).toString());
   }
 
@@ -115,17 +142,19 @@ export async function scrapeCompanyBrand(websiteUrl) {
   const colorFreq = {};
   for (const c of colorMatches) {
     // Ignore pure white/black in frequency count for accent detection
-    if (c !== '#FFFFFF' && c !== '#000000' && c !== '#FFF' && c !== '#000') {
+    if (c !== '#FFFFFF' && c !== '#000000') {
       colorFreq[c] = (colorFreq[c] || 0) + 1;
     }
   }
 
   const sortedAccents = Object.entries(colorFreq).sort((a, b) => b[1] - a[1]).map(([c]) => c);
 
-  // Check for sovereign gold specifics
+  // Check for sovereign gold or SB Security gold specifics
   let primaryAccent = themeColor || sortedAccents[0];
-  if (urlObj.hostname.includes('sovereign') || html.includes('sovereign') || sortedAccents.some(c => c.toLowerCase().includes('b8780b') || c.toLowerCase().includes('d4af37'))) {
+  if (isSovereign || sortedAccents.some(c => c.toLowerCase().includes('b8780b') || c.toLowerCase().includes('d4af37'))) {
     primaryAccent = '#D4AF37'; // Sovereign Gold
+  } else if (isSbSecurity || sortedAccents.includes('#F7BB23')) {
+    primaryAccent = '#F7BB23'; // SB Security Signature Gold
   } else if (!primaryAccent) {
     primaryAccent = '#00E5FF'; // Default SafeLink Cyan
   }

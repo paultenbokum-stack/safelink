@@ -59,13 +59,13 @@ export async function GET(request, { params }) {
       };
     });
 
-    if ((isDemoTenant || companyId === 'sovereign_intervention') && customers.length === 0) {
+    if (customers.length === 0) {
       const demoClients = [
-        { id: 'sov_cust_1', name: 'Dr. Johan Van Der Merwe', email: 'johan@vdm-holdings.co.za', phone: '+27 82 441 9021', subscriptionTier: 'premium', subscriptionStatus: 'active', membershipStatus: 'active', paymentStatus: 'current', lastPaymentDate: '2026-09-01T08:30:00.000Z', nextBillingDate: '2026-10-01T00:00:00.000Z' },
-        { id: 'sov_cust_2', name: 'Sipho & Lerato Dlamini', email: 'sipho@dlamini-law.com', phone: '+27 83 912 0482', subscriptionTier: 'premium', subscriptionStatus: 'active', membershipStatus: 'active', paymentStatus: 'current', lastPaymentDate: '2026-09-02T10:15:00.000Z', nextBillingDate: '2026-10-02T00:00:00.000Z' },
-        { id: 'sov_cust_3', name: 'Apex Logistics Escort Fleet', email: 'ops@apexlogistics.co.za', phone: '+27 11 884 1000', subscriptionTier: 'enterprise', subscriptionStatus: 'active', membershipStatus: 'active', paymentStatus: 'current', lastPaymentDate: '2026-09-05T14:20:00.000Z', nextBillingDate: '2026-10-05T00:00:00.000Z' },
-        { id: 'sov_cust_4', name: 'Kobus & Annelie Steyn', email: 'kobus@steyn-architects.co.za', phone: '+27 82 559 1192', subscriptionTier: 'standard', subscriptionStatus: 'active', membershipStatus: 'active', paymentStatus: '30day', lastPaymentDate: '2026-08-01T09:00:00.000Z', nextBillingDate: '2026-09-01T00:00:00.000Z' },
-        { id: 'sov_cust_5', name: 'Clifton Ridge Executive Residence', email: 'security@cliftonridge.co.za', phone: '+27 21 438 9011', subscriptionTier: 'premium', subscriptionStatus: 'active', membershipStatus: 'active', paymentStatus: 'current', lastPaymentDate: '2026-09-03T11:45:00.000Z', nextBillingDate: '2026-10-03T00:00:00.000Z' },
+        { id: `${companyId}_cust_4`, name: 'Kobus & Annelie Steyn', email: 'kobus@steyn-architects.co.za', phone: '+27 82 559 1192', subscriptionTier: 'standard', subscriptionStatus: 'active', membershipStatus: 'active', paymentStatus: '30day', lastPaymentDate: '2026-08-01T09:00:00.000Z', nextBillingDate: '2026-09-01T00:00:00.000Z' },
+        { id: `${companyId}_cust_3`, name: 'Apex Logistics Escort Fleet', email: 'ops@apexlogistics.co.za', phone: '+27 11 884 1000', subscriptionTier: 'enterprise', subscriptionStatus: 'active', membershipStatus: 'active', paymentStatus: 'current', lastPaymentDate: '2026-09-05T14:20:00.000Z', nextBillingDate: '2026-10-05T00:00:00.000Z' },
+        { id: `${companyId}_cust_5`, name: 'Clifton Ridge Executive Residence', email: 'security@cliftonridge.co.za', phone: '+27 21 438 9011', subscriptionTier: 'premium', subscriptionStatus: 'active', membershipStatus: 'active', paymentStatus: 'current', lastPaymentDate: '2026-09-03T11:45:00.000Z', nextBillingDate: '2026-10-03T00:00:00.000Z' },
+        { id: `${companyId}_cust_1`, name: 'Dr. Johan Van Der Merwe', email: 'johan@vdm-holdings.co.za', phone: '+27 82 441 9021', subscriptionTier: 'premium', subscriptionStatus: 'active', membershipStatus: 'active', paymentStatus: 'current', lastPaymentDate: '2026-09-01T08:30:00.000Z', nextBillingDate: '2026-10-01T00:00:00.000Z' },
+        { id: `${companyId}_cust_2`, name: 'Sipho & Lerato Dlamini', email: 'sipho@dlamini-law.com', phone: '+27 83 912 0482', subscriptionTier: 'premium', subscriptionStatus: 'active', membershipStatus: 'active', paymentStatus: 'current', lastPaymentDate: '2026-09-02T10:15:00.000Z', nextBillingDate: '2026-10-02T00:00:00.000Z' },
       ];
       customers.push(...demoClients);
     }

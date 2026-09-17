@@ -12,14 +12,13 @@ const PAYMENT_COLORS = { current: '#38a169', '30day': '#d69e2e', '60day': '#dd6b
 const PAYMENT_LABELS = { current: 'Current', '30day': '30 Days', '60day': '60 Days', '90day': '90+ Days', inactive: 'Inactive' };
 
 export const DEMO_SOVEREIGN_CUSTOMERS = {
-  summary: { total: 184, current: 168, '30day': 11, '60day': 4, '90day': 1 },
+  summary: { total: 5, current: 4, '30day': 1, '60day': 0, '90day': 0 },
   customers: [
-    { id: 'c1', name: 'Dr. Johan Van Der Merwe', email: 'johan@vdm-holdings.co.za', phone: '+27 82 459 1001', subscriptionTier: 'VIP Armed Shield', paymentStatus: 'current', lastPaymentDate: '2026-09-01' },
-    { id: 'c2', name: 'Apex Logistics Escort Fleet', email: 'fleet@apexlogistics.co.za', phone: '+27 11 884 9200', subscriptionTier: 'Fleet Armed Telemetry', paymentStatus: 'current', lastPaymentDate: '2026-09-05' },
-    { id: 'c3', name: 'Sandhurst Residential Estate HOA', email: 'admin@sandhurst-hoa.co.za', phone: '+27 11 784 1122', subscriptionTier: 'Estate Armed Grid', paymentStatus: 'current', lastPaymentDate: '2026-09-01' },
-    { id: 'c4', name: 'Clifton Ridge Executive Residence', email: 'security@cliftonridge.co.za', phone: '+27 83 220 4499', subscriptionTier: 'VIP Armed Shield', paymentStatus: 'current', lastPaymentDate: '2026-09-03' },
-    { id: 'c5', name: 'Sipho & Lerato Dlamini', email: 'sipho.dlamini@investec.co.za', phone: '+27 72 311 8820', subscriptionTier: 'Family SafeLink Pack', paymentStatus: 'current', lastPaymentDate: '2026-09-02' },
-    { id: 'c6', name: 'Kyle Saffy', email: 'kyle@creamtech.co.za', phone: '+27 82 999 1234', subscriptionTier: 'Executive Close Protection', paymentStatus: 'current', lastPaymentDate: '2026-09-01' },
+    { id: 'sov_cust_4', name: 'Kobus & Annelie Steyn', email: 'kobus@steyn-architects.co.za', phone: '+27 82 559 1192', subscriptionTier: 'STANDARD', paymentStatus: '30day', lastPaymentDate: '2026-08-01' },
+    { id: 'sov_cust_3', name: 'Apex Logistics Escort Fleet', email: 'ops@apexlogistics.co.za', phone: '+27 11 884 1000', subscriptionTier: 'ENTERPRISE', paymentStatus: 'current', lastPaymentDate: '2026-09-05' },
+    { id: 'sov_cust_5', name: 'Clifton Ridge Executive Residence', email: 'security@cliftonridge.co.za', phone: '+27 21 438 9011', subscriptionTier: 'PREMIUM', paymentStatus: 'current', lastPaymentDate: '2026-09-03' },
+    { id: 'sov_cust_1', name: 'Dr. Johan Van Der Merwe', email: 'johan@vdm-holdings.co.za', phone: '+27 82 441 9021', subscriptionTier: 'PREMIUM', paymentStatus: 'current', lastPaymentDate: '2026-09-01' },
+    { id: 'sov_cust_2', name: 'Sipho & Lerato Dlamini', email: 'sipho@dlamini-law.com', phone: '+27 83 912 0482', subscriptionTier: 'PREMIUM', paymentStatus: 'current', lastPaymentDate: '2026-09-02' },
   ],
   company: { id: 'sovereign_intervention', name: 'Sovereign Intervention' },
 };
@@ -85,14 +84,13 @@ export function getCompanyDemoData(cid, pName) {
 
   return {
     customers: {
-      summary: { total: 184, current: 168, '30day': 11, '60day': 4, '90day': 1 },
+      summary: { total: 5, current: 4, '30day': 1, '60day': 0, '90day': 0 },
       customers: [
-        { id: `${cid}_c1`, name: 'Dr. Johan Van Der Merwe', email: 'johan@vdm-holdings.co.za', phone: '+27 82 459 1001', subscriptionTier: `${name} Armed Shield`, paymentStatus: 'current', lastPaymentDate: '2026-09-01' },
-        { id: `${cid}_c2`, name: 'Apex Logistics Escort Fleet', email: 'fleet@apexlogistics.co.za', phone: '+27 11 884 9200', subscriptionTier: `${name} Tactical Telemetry`, paymentStatus: 'current', lastPaymentDate: '2026-09-05' },
-        { id: `${cid}_c3`, name: 'Sandhurst Residential Estate HOA', email: 'admin@sandhurst-hoa.co.za', phone: '+27 11 784 1122', subscriptionTier: `${name} Estate Armed Grid`, paymentStatus: 'current', lastPaymentDate: '2026-09-01' },
-        { id: `${cid}_c4`, name: 'Clifton Ridge Executive Residence', email: 'security@cliftonridge.co.za', phone: '+27 83 220 4499', subscriptionTier: `${name} Armed Shield`, paymentStatus: 'current', lastPaymentDate: '2026-09-03' },
-        { id: `${cid}_c5`, name: 'Sipho & Lerato Dlamini', email: 'sipho.dlamini@investec.co.za', phone: '+27 72 311 8820', subscriptionTier: 'Family SafeLink Pack', paymentStatus: 'current', lastPaymentDate: '2026-09-02' },
-        { id: `${cid}_c6`, name: 'Kyle Saffy', email: 'kyle@creamtech.co.za', phone: '+27 82 999 1234', subscriptionTier: `${name} Close Protection`, paymentStatus: 'current', lastPaymentDate: '2026-09-01' },
+        { id: `${cid}_cust_4`, name: 'Kobus & Annelie Steyn', email: 'kobus@steyn-architects.co.za', phone: '+27 82 559 1192', subscriptionTier: 'STANDARD', paymentStatus: '30day', lastPaymentDate: '2026-08-01' },
+        { id: `${cid}_cust_3`, name: 'Apex Logistics Escort Fleet', email: 'ops@apexlogistics.co.za', phone: '+27 11 884 1000', subscriptionTier: 'ENTERPRISE', paymentStatus: 'current', lastPaymentDate: '2026-09-05' },
+        { id: `${cid}_cust_5`, name: 'Clifton Ridge Executive Residence', email: 'security@cliftonridge.co.za', phone: '+27 21 438 9011', subscriptionTier: 'PREMIUM', paymentStatus: 'current', lastPaymentDate: '2026-09-03' },
+        { id: `${cid}_cust_1`, name: 'Dr. Johan Van Der Merwe', email: 'johan@vdm-holdings.co.za', phone: '+27 82 441 9021', subscriptionTier: 'PREMIUM', paymentStatus: 'current', lastPaymentDate: '2026-09-01' },
+        { id: `${cid}_cust_2`, name: 'Sipho & Lerato Dlamini', email: 'sipho@dlamini-law.com', phone: '+27 83 912 0482', subscriptionTier: 'PREMIUM', paymentStatus: 'current', lastPaymentDate: '2026-09-02' },
       ],
       company: { id: cid, name },
     },
@@ -270,8 +268,12 @@ export default function CompanyDashboard({ params: paramsPromise }) {
         const res = await fetch(`/api/cream/company/${companyId}/${tabName}`, { headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
           const json = await res.json();
-          if (json && (json.customers || json.incidents || json.transactions || json.summary)) {
-            setData(prev => ({ ...prev, [tabName]: json }));
+          if (json) {
+            if (tabName === 'customers' && (!json.customers || json.customers.length === 0)) {
+              setData(prev => ({ ...prev, customers: fallbackMap.customers }));
+            } else if (json.customers || json.incidents || json.transactions || json.summary) {
+              setData(prev => ({ ...prev, [tabName]: json }));
+            }
             setLoading(false);
             return;
           }
@@ -459,9 +461,9 @@ export default function CompanyDashboard({ params: paramsPromise }) {
             {/* Summary cards */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {[
-                ['Total Subscribers', data.customers.summary?.total || 184, isDark ? '#fff' : '#0F172A'],
-                ['Active (Current)', data.customers.summary?.current || 168, '#38a169'],
-                ['30 Days Due', data.customers.summary?.['30day'] || 11, '#d69e2e'],
+                ['Total Subscribers', data.customers.summary?.total || 5, isDark ? '#fff' : '#0F172A'],
+                ['Active (Current)', data.customers.summary?.current || 4, '#38a169'],
+                ['30 Days Due', data.customers.summary?.['30day'] || 1, '#d69e2e'],
                 ['60 Days Due', data.customers.summary?.['60day'] || 4, '#dd6b20'],
                 ['90+ Days Due', data.customers.summary?.['90day'] || 1, '#e53e3e'],
               ].map(([label, count, color]) => (
@@ -502,7 +504,7 @@ export default function CompanyDashboard({ params: paramsPromise }) {
                     borderColor: `${accentColor}30`,
                   }}
                 >
-                  {data.customers.customers?.length || 6} Verified Clients
+                  {data.customers.customers?.length || 5} Verified Clients
                 </span>
               </div>
               <div className="overflow-x-auto">

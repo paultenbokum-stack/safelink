@@ -71,10 +71,8 @@ export default function LoginPage() {
       setTimeout(() => {
         if (redirect) {
           router.push(redirect);
-        } else if (isAdminUser) {
-          router.push(`/cream/company/${companyId || 'sovereign_intervention'}`);
         } else {
-          router.push('/partner');
+          router.push(`/cream/company/${companyId || 'sovereign_intervention'}`);
         }
       }, 400);
     } catch (err) {
@@ -98,7 +96,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await loginWithPartnerId(partnerId.trim(), partnerPin.trim());
-      setTimeout(() => router.push('/partner'), 400);
+      setTimeout(() => router.push(`/cream/company/${companyId || 'sovereign_intervention'}`), 400);
     } catch (err) {
       setQuickError(err.message || 'Login failed. Please check your account number and PIN.');
       setLoading(false);

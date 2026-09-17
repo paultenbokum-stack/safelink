@@ -159,9 +159,6 @@ export default function Header({ title, showBack = false, showNotification = tru
           <Link href="/devices" className="text-on-surface-variant hover:text-secondary text-label-md flex items-center gap-xs transition-colors">
             <span className="material-symbols-outlined text-[20px]">devices</span> Devices
           </Link>
-          <Link href="/partner" className="text-on-surface-variant hover:text-secondary text-label-md flex items-center gap-xs transition-colors">
-            <span className="material-symbols-outlined text-[20px]">local_police</span> Partner
-          </Link>
           <Link href="/profile" className="text-on-surface-variant hover:text-secondary text-label-md flex items-center gap-xs transition-colors">
             <span className="material-symbols-outlined text-[20px]">person</span> Profile
           </Link>

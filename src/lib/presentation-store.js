@@ -52,6 +52,22 @@ export const DEFAULT_PRESENTATIONS = [
     contactWebsite: 'creamtech.co.za',
     presentationVersion: 'safelink-core-v1',
   },
+  {
+    slug: 'sb-security',
+    partnerName: 'SB Security',
+    shortName: 'SB Security',
+    websiteUrl: 'https://sbsecurity.co.za',
+    logoUrl: '/presentation/security-brokers-logo.png',
+    primaryColor: '#F7BB23',
+    secondaryColor: '#FFD700',
+    warningColor: '#FF4D4D',
+    heroScene: 'network',
+    status: 'published',
+    contactName: 'Kyle Saffy',
+    contactEmail: 'kyle@creamtech.co.za',
+    contactWebsite: 'creamtech.co.za',
+    presentationVersion: 'safelink-core-v1',
+  },
 ];
 
 const normalize = (value = {}) => ({
@@ -64,19 +80,70 @@ const normalize = (value = {}) => ({
 
 export async function getPublishedPresentation(slug) {
   const safeSlug = String(slug || '').toLowerCase();
-  const fallback = DEFAULT_PRESENTATIONS.find((item) => item.slug === safeSlug);
+  const safeSlugDash = safeSlug.replace(/_/g, '-');
+  const safeSlugUnderscore = safeSlug.replace(/-/g, '_');
+
+  const fallback = DEFAULT_PRESENTATIONS.find(
+    (item) => item.slug === safeSlugDash || item.slug === safeSlugUnderscore || item.slug === safeSlug
+  );
 
   try {
-    const document = await getAdminFirestore().collection('presentationProfiles').doc(safeSlug).get();
-    if (document.exists) {
-      const profile = normalize(document.data());
+    const db = getAdminFirestore();
+    const docDash = await db.collection('presentationProfiles').doc(safeSlugDash).get();
+    if (docDash.exists) {
+      const profile = normalize(docDash.data());
+      return profile.status === 'published' ? profile : null;
+    }
+
+    const docUnder = await db.collection('presentationProfiles').doc(safeSlugUnderscore).get();
+    if (docUnder.exists) {
+      const profile = normalize(docUnder.data());
       return profile.status === 'published' ? profile : null;
     }
   } catch (error) {
     console.warn('[presentationProfiles] Falling back to seeded profile:', error.message);
   }
 
-  return fallback?.status === 'published' ? fallback : null;
+  if (fallback?.status === 'published') return fallback;
+
+  // Dynamically resolve presentation profile from security company branding
+  try {
+    const { getCompanyBranding } = await import('@/lib/branding-store');
+    const branding = await getCompanyBranding(safeSlugUnderscore);
+
+    const db = getAdminFirestore();
+    let compData = null;
+    try {
+      const compDoc = await db.collection('security_companies').doc(safeSlugUnderscore).get();
+      if (compDoc.exists) compData = compDoc.data();
+    } catch {}
+
+    const partnerName = branding?.partnerName || compData?.name || safeSlugUnderscore.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+    const primaryColor = branding?.highlightedButtonBg || branding?.buttonTextColor || '#D4AF37';
+    const secondaryColor = branding?.buttonTextColor || branding?.highlightedButtonBg || '#E5C158';
+    const logoUrl = branding?.logoUrl || '/safelink-shield.png';
+
+    return normalize({
+      slug: safeSlugDash,
+      partnerName,
+      shortName: branding?.shortName || partnerName,
+      websiteUrl: branding?.sourceUrl || compData?.websiteUrl || '',
+      logoUrl,
+      primaryColor,
+      secondaryColor,
+      warningColor: '#FF4D4D',
+      heroScene: 'network',
+      status: 'published',
+      contactName: 'Kyle Saffy',
+      contactEmail: compData?.contactEmail || 'kyle@creamtech.co.za',
+      contactWebsite: 'creamtech.co.za',
+      presentationVersion: 'safelink-core-v1',
+    });
+  } catch (err) {
+    console.warn('[presentationProfiles] Error dynamically resolving presentation profile:', err);
+  }
+
+  return null;
 }
 
 export async function listPresentationProfiles() {

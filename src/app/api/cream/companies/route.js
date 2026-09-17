@@ -16,16 +16,32 @@ export async function GET(request) {
     const firestore = getAdminFirestore();
     const snap = await firestore.collection('security_companies').get();
 
-    // Never seed demo tenants during a GET request. Expose only presentation fields.
-    const companies = snap.empty ? DEMO_COMPANIES : snap.docs.map(doc => {
+    const companyMap = new Map();
+    DEMO_COMPANIES.forEach(c => companyMap.set(c.id, { ...c }));
+
+    snap.docs.forEach(doc => {
       const c = doc.data();
       const legacyDemo = ['PSIRA-2024/99182', 'PSIRA-2023/55410', 'PSIRA-1998/00124'].includes(c.registrationNumber);
-      return { id: doc.id, name: c.name, isDemo: c.isDemo === true || legacyDemo, status: c.status,
-        memberCount: c.memberCount || 0, deviceCount: c.deviceCount || 0,
-        accounting: { provider: c.accounting?.provider }, cameraSystem: { defaultBrand: c.cameraSystem?.defaultBrand },
-        aura: { enabled: c.aura?.enabled === true }, cameras: (c.cameras || []).map(() => ({})) };
+      const isDemo = c.isDemo === true || legacyDemo;
+      const existing = companyMap.get(doc.id);
+      companyMap.set(doc.id, {
+        ...(existing || {}),
+        id: doc.id,
+        name: c.name || existing?.name,
+        isDemo: existing ? true : isDemo,
+        status: c.status || existing?.status || 'active',
+        memberCount: c.memberCount || existing?.memberCount || 0,
+        deviceCount: c.deviceCount || existing?.deviceCount || 0,
+        registrationNumber: c.registrationNumber || existing?.registrationNumber || '',
+        psiraNumber: c.psiraNumber || existing?.psiraNumber || '',
+        accounting: { provider: c.accounting?.provider || existing?.accounting?.provider },
+        cameraSystem: { defaultBrand: c.cameraSystem?.defaultBrand || existing?.cameraSystem?.defaultBrand },
+        aura: { enabled: c.aura?.enabled === true || existing?.aura?.enabled === true },
+        cameras: (c.cameras || []).map(() => ({})),
+      });
     });
-    return NextResponse.json({ companies: companies.every(c => c.isDemo) ? DEMO_COMPANIES : companies.filter(c => !c.isDemo) });
+
+    return NextResponse.json({ companies: Array.from(companyMap.values()) });
   } catch (err) {
     console.error('[api/cream/companies] Error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -8,8 +8,11 @@ import { DEMO_COMPANIES } from '@/lib/demo-companies';
 import { SA_BANKS } from '@/lib/banks';
 import { formatZAR } from '@/lib/products';
 import { useAuth } from '@/lib/auth-context';
+import { useTheme } from '@/lib/theme-context';
 
 export default function CreamMasterPage() {
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === 'dark';
   const [managementError, setManagementError] = useState('');
   const managementFetch = useManagementFetch(setManagementError);
   const { user } = useAuth();
@@ -115,7 +118,13 @@ export default function CreamMasterPage() {
               }
             } catch {}
           }
-          setCompanies(list);
+          const companyMap = new Map();
+          DEMO_COMPANIES.forEach(c => companyMap.set(c.id, { ...c }));
+          list.forEach(c => {
+            const existing = companyMap.get(c.id);
+            companyMap.set(c.id, { ...(existing || {}), ...c });
+          });
+          setCompanies(Array.from(companyMap.values()));
         }
       } else {
         // Fallback to legacy companies list
@@ -133,7 +142,13 @@ export default function CreamMasterPage() {
               }
             } catch {}
           }
-          setCompanies(baseList);
+          const companyMap = new Map();
+          DEMO_COMPANIES.forEach(c => companyMap.set(c.id, { ...c }));
+          baseList.forEach(c => {
+            const existing = companyMap.get(c.id);
+            companyMap.set(c.id, { ...(existing || {}), ...c });
+          });
+          setCompanies(Array.from(companyMap.values()));
         }
       }
     } catch (e) {
@@ -337,33 +352,53 @@ export default function CreamMasterPage() {
   };
 
   return (
-    <div className="bg-[#03070f] text-on-background min-h-screen flex flex-col font-sans selection:bg-purple-500/30 selection:text-purple-300">
+    <div className={`${isDark ? 'bg-[#03070f] text-white' : 'bg-[#F8FAFC] text-slate-900'} min-h-screen flex flex-col font-sans transition-colors duration-200 selection:bg-purple-500/30 selection:text-purple-300`}>
       {managementError && <p role="alert" className="p-4 text-error">{managementError}</p>}
       {/* Executive Top Banner */}
-      <header className="bg-gradient-to-r from-[#0d091a] via-[#100c24] to-[#0d091a] border-b border-purple-500/20 px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-30 shadow-2xl">
+      <header className={`${isDark ? 'bg-gradient-to-r from-[#0d091a] via-[#100c24] to-[#0d091a] border-purple-500/20 shadow-2xl' : 'bg-white border-slate-200 shadow-sm'} border-b px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-30 transition-all`}>
         <div className="flex items-center gap-4">
           <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 to-amber-500 flex items-center justify-center text-white shadow-[0_0_20px_rgba(168,85,247,0.4)]">
             <span className="material-symbols-outlined text-2xl font-bold">diamond</span>
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-headline-md text-xl font-extrabold text-white tracking-wider">
+              <h1 className={`font-headline-md text-xl font-extrabold tracking-wider ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 CREAM
               </h1>
               <span className="text-[10px] uppercase font-extrabold bg-gradient-to-r from-purple-500 to-amber-400 text-black px-2 py-0.5 rounded shadow">
                 Software Owner Console
               </span>
             </div>
-            <p className="text-xs text-purple-300/70">
+            <p className={`text-xs ${isDark ? 'text-purple-300/70' : 'text-slate-500'}`}>
               SafeLink Master Control • Multi-Tenant Security Infrastructure
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {/* Light / Dark Mode Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            className={`h-9 px-3 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition-all active:scale-95 shadow-sm cursor-pointer ${
+              isDark
+                ? 'bg-purple-950/40 border-purple-500/30 text-purple-200 hover:bg-purple-900/50'
+                : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-100 shadow'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">
+              {isDark ? 'light_mode' : 'dark_mode'}
+            </span>
+            <span className="hidden sm:inline font-semibold">{isDark ? 'Light' : 'Dark'}</span>
+          </button>
+
           <Link
             href="/cream/products"
-            className="px-3.5 py-2 rounded-xl bg-purple-950/40 border border-purple-500/30 text-purple-200 hover:bg-purple-900/50 text-xs font-semibold transition-all flex items-center gap-1.5 shadow"
+            className={`px-3.5 py-2 rounded-xl border text-xs font-semibold transition-all flex items-center gap-1.5 shadow ${
+              isDark ? 'bg-purple-950/40 border-purple-500/30 text-purple-200 hover:bg-purple-900/50' : 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100'
+            }`}
           >
             <span className="material-symbols-outlined text-sm">inventory_2</span>
             Master Catalogue
@@ -373,7 +408,9 @@ export default function CreamMasterPage() {
             href="/p/sovereign-intervention"
             target="_blank"
             rel="noopener noreferrer"
-            className="px-3.5 py-2 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-200 hover:bg-amber-500/30 text-xs font-bold transition-all flex items-center gap-1.5 shadow"
+            className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 shadow ${
+              isDark ? 'bg-amber-500/20 border-amber-400/40 text-amber-200 hover:bg-amber-500/30' : 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
+            }`}
             title="Open Sovereign Intervention White-Label Pitch Deck"
           >
             <span className="material-symbols-outlined text-sm">slideshow</span>
@@ -382,7 +419,9 @@ export default function CreamMasterPage() {
 
           <Link
             href="/control-room?companyId=sovereign_intervention"
-            className="px-3.5 py-2 rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-200 hover:bg-cyan-500/30 text-xs font-bold transition-all flex items-center gap-1.5 shadow"
+            className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 shadow ${
+              isDark ? 'bg-cyan-500/20 border-cyan-400/40 text-cyan-200 hover:bg-cyan-500/30' : 'bg-cyan-50 border-cyan-300 text-cyan-800 hover:bg-cyan-100'
+            }`}
             title="Launch Tactical Control Room for Sovereign Intervention"
           >
             <span className="material-symbols-outlined text-sm">tune</span>
@@ -391,7 +430,9 @@ export default function CreamMasterPage() {
 
           <button
             onClick={() => { setShowInviteModal(true); setInviteResult(null); }}
-            className="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 text-xs font-semibold transition-all flex items-center gap-1.5"
+            className={`px-3.5 py-2 rounded-xl border text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              isDark ? 'bg-white/5 border-white/10 text-slate-300 hover:text-white hover:bg-white/10' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100 shadow-sm'
+            }`}
           >
             <span className="material-symbols-outlined text-sm">link</span>
             Invite Partner
@@ -407,7 +448,9 @@ export default function CreamMasterPage() {
 
           <Link
             href="/dashboard"
-            className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white text-xs font-semibold transition-all flex items-center gap-1"
+            className={`px-3 py-2 rounded-xl border text-xs font-semibold transition-all flex items-center gap-1 ${
+              isDark ? 'bg-white/5 border-white/10 text-slate-400 hover:text-white' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100 shadow-sm'
+            }`}
           >
             <span className="material-symbols-outlined text-sm">home</span>
             App
@@ -419,68 +462,72 @@ export default function CreamMasterPage() {
       <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-8">
         {/* Executive Summary Metrics Strip */}
         <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className="bg-[#080d19] border border-white/10 rounded-2xl p-4 shadow">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+          <div className={`rounded-2xl p-4 border transition-all ${isDark ? 'bg-[#080d19] border-white/10 shadow' : 'bg-white border-slate-200 shadow-sm'}`}>
+            <div className={`flex items-center justify-between text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               <span>Total Customers</span>
               <span className="material-symbols-outlined text-sm text-purple-400">group</span>
             </div>
-            <p className="text-2xl font-black text-white">{totals.totalCustomers}</p>
-            <p className="text-[11px] text-emerald-400 mt-1">
+            <p className={`text-2xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{totals.totalCustomers}</p>
+            <p className="text-[11px] text-emerald-500 mt-1 font-semibold">
               {totals.activeCustomers} active • {totals.inactiveCustomers} inactive
             </p>
           </div>
 
-          <div className="bg-[#080d19] border border-white/10 rounded-2xl p-4 shadow">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+          <div className={`rounded-2xl p-4 border transition-all ${isDark ? 'bg-[#080d19] border-white/10 shadow' : 'bg-white border-slate-200 shadow-sm'}`}>
+            <div className={`flex items-center justify-between text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               <span>Incidents (Month)</span>
               <span className="material-symbols-outlined text-sm text-amber-400">warning</span>
             </div>
-            <p className="text-2xl font-black text-white">{totals.monthlyIncidents}</p>
-            <p className="text-[11px] text-slate-400 mt-1">
+            <p className={`text-2xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{totals.monthlyIncidents}</p>
+            <p className={`text-[11px] mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               {totals.totalIncidents} all-time logged
             </p>
           </div>
 
-          <div className="bg-[#080d19] border border-white/10 rounded-2xl p-4 shadow">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+          <div className={`rounded-2xl p-4 border transition-all ${isDark ? 'bg-[#080d19] border-white/10 shadow' : 'bg-white border-slate-200 shadow-sm'}`}>
+            <div className={`flex items-center justify-between text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               <span>Sentinel Sold</span>
               <span className="material-symbols-outlined text-sm text-sky-400">sensors</span>
             </div>
-            <p className="text-2xl font-black text-white">{totals.monthlySentinelSold}</p>
-            <p className="text-[11px] text-slate-400 mt-1">
+            <p className={`text-2xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{totals.monthlySentinelSold}</p>
+            <p className={`text-[11px] mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               {totals.totalSentinelSold} devices total
             </p>
           </div>
 
-          <div className="bg-[#080d19] border border-white/10 rounded-2xl p-4 shadow">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+          <div className={`rounded-2xl p-4 border transition-all ${isDark ? 'bg-[#080d19] border-white/10 shadow' : 'bg-white border-slate-200 shadow-sm'}`}>
+            <div className={`flex items-center justify-between text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               <span>Other HW (Month)</span>
               <span className="material-symbols-outlined text-sm text-indigo-400">videocam</span>
             </div>
-            <p className="text-2xl font-black text-white">{totals.monthlyOtherHW}</p>
-            <p className="text-[11px] text-slate-400 mt-1">
+            <p className={`text-2xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{totals.monthlyOtherHW}</p>
+            <p className={`text-[11px] mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               Cameras & Custom HW
             </p>
           </div>
 
-          <div className="bg-[#080d19] border border-white/10 rounded-2xl p-4 shadow">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+          <div className={`rounded-2xl p-4 border transition-all ${isDark ? 'bg-[#080d19] border-white/10 shadow' : 'bg-white border-slate-200 shadow-sm'}`}>
+            <div className={`flex items-center justify-between text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               <span>Monthly Volume</span>
               <span className="material-symbols-outlined text-sm text-emerald-400">payments</span>
             </div>
-            <p className="text-2xl font-black text-white">{formatZAR(totals.monthlyRevenue)}</p>
-            <p className="text-[11px] text-slate-400 mt-1">
+            <p className={`text-2xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{formatZAR(totals.monthlyRevenue)}</p>
+            <p className={`text-[11px] mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               Platform Gross Volume
             </p>
           </div>
 
-          <div className="bg-gradient-to-br from-purple-950/40 to-[#080d19] border border-purple-500/30 rounded-2xl p-4 shadow">
-            <div className="flex items-center justify-between text-xs text-purple-300 mb-1">
+          <div className={`rounded-2xl p-4 border transition-all ${
+            isDark
+              ? 'bg-gradient-to-br from-purple-950/40 to-[#080d19] border-purple-500/30 shadow'
+              : 'bg-gradient-to-br from-purple-50 to-white border-purple-200 shadow-sm'
+          }`}>
+            <div className={`flex items-center justify-between text-xs mb-1 ${isDark ? 'text-purple-300' : 'text-purple-700 font-semibold'}`}>
               <span>CREAM 1% Share</span>
               <span className="material-symbols-outlined text-sm text-amber-400">diamond</span>
             </div>
-            <p className="text-2xl font-black text-amber-300">{formatZAR(totals.creamRevenue)}</p>
-            <p className="text-[11px] text-purple-300/70 mt-1">
+            <p className={`text-2xl font-black ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>{formatZAR(totals.creamRevenue)}</p>
+            <p className={`text-[11px] mt-1 ${isDark ? 'text-purple-300/70' : 'text-purple-600'}`}>
               Auto Split via Paystack
             </p>
           </div>
@@ -490,21 +537,21 @@ export default function CreamMasterPage() {
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <h2 className={`text-lg font-bold flex items-center gap-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 <span className="material-symbols-outlined text-purple-400">corporate_fare</span>
                 SafeLink Security Companies
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 Multi-tenant performance, customer payment statuses, incident response, and hardware turnover.
               </p>
             </div>
           </div>
 
           {/* Enhanced Companies Table */}
-          <div className="bg-[#080d19] border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
+          <div className={`rounded-2xl overflow-hidden border transition-all ${isDark ? 'bg-[#080d19] border-white/10 shadow-2xl' : 'bg-white border-slate-200 shadow-md'}`}>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-[#0d1527] border-b border-white/10 text-slate-400 uppercase tracking-wider text-[10px]">
+                <thead className={`border-b uppercase tracking-wider text-[10px] ${isDark ? 'bg-[#0d1527] border-white/10 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
                   <tr>
                     <th className="p-4">Security Company</th>
                     <th className="p-4 text-center">Customers (Tot / Act / Inact)</th>
@@ -517,7 +564,7 @@ export default function CreamMasterPage() {
                     <th className="p-4 text-right">Drill Down</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className={isDark ? 'divide-y divide-white/5' : 'divide-y divide-slate-100'}>
                   {companies.map((comp) => {
                     const totalCust = comp.totalCustomers ?? comp.memberCount ?? 0;
                     const actCust = comp.activeCustomers ?? comp.memberCount ?? 0;
@@ -532,21 +579,23 @@ export default function CreamMasterPage() {
                     return (
                       <tr
                         key={comp.id}
-                        className={`hover:bg-white/5 transition-colors ${
-                          selectedTenant === comp.id ? 'bg-purple-900/10' : ''
-                        }`}
+                        className={`transition-colors ${
+                          isDark ? 'hover:bg-white/5' : 'hover:bg-slate-50'
+                        } ${selectedTenant === comp.id ? (isDark ? 'bg-purple-900/10' : 'bg-purple-50/50') : ''}`}
                       >
                         {/* Company Name */}
                         <td className="p-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-300 flex items-center justify-center font-bold">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold ${
+                              isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-100 text-purple-700'
+                            }`}>
                               {comp.name?.substring(0, 1)}
                             </div>
                             <div>
-                              <strong className="text-white text-sm block">
-                                {comp.name} {comp.isDemo && <span className="text-gray-400 font-normal text-xs">[Demo]</span>}
+                              <strong className={`text-sm block ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                                {comp.name} {comp.isDemo && <span className={`font-normal text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>[Demo]</span>}
                               </strong>
-                              <span className="text-[11px] text-gray-400 font-mono">
+                              <span className={`text-[11px] font-mono ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>
                                 PSIRA: {comp.registrationNumber || comp.psiraNumber || 'PSIRA-2024/001'}
                               </span>
                             </div>
@@ -560,10 +609,10 @@ export default function CreamMasterPage() {
                             className="inline-block hover:underline"
                             title="Click to view customer details & payment arrears"
                           >
-                            <span className="font-bold text-white text-sm">{totalCust}</span>
+                            <span className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{totalCust}</span>
                             <span className="text-slate-400 text-[11px] block">
-                              <span className="text-emerald-400 font-semibold">{actCust} act</span> •{' '}
-                              <span className="text-rose-400">{inactCust} inact</span>
+                              <span className="text-emerald-500 font-semibold">{actCust} act</span> •{' '}
+                              <span className="text-rose-500">{inactCust} inact</span>
                             </span>
                           </Link>
                         </td>
@@ -575,8 +624,8 @@ export default function CreamMasterPage() {
                             className="inline-block hover:underline"
                             title="Click to view incident types and logs"
                           >
-                            <span className="font-bold text-amber-300 text-sm">{moInc}</span>
-                            <span className="text-slate-500 text-[11px] block">{totInc} all-time</span>
+                            <span className={`font-bold text-sm ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>{moInc}</span>
+                            <span className={`text-[11px] block ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{totInc} all-time</span>
                           </Link>
                         </td>
 
@@ -587,21 +636,21 @@ export default function CreamMasterPage() {
                             className="inline-block hover:underline"
                             title="Click to manage stock & view device orders"
                           >
-                            <span className="font-bold text-sky-400 text-sm">+{moSent}</span>
-                            <span className="text-slate-500 text-[11px] block">{totSent} total</span>
+                            <span className={`font-bold text-sm ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>{moSent > 0 ? `+${moSent}` : moSent}</span>
+                            <span className={`text-[11px] block ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{totSent} total</span>
                           </Link>
                         </td>
 
                         {/* Other HW Sold */}
                         <td className="p-4 text-center font-mono">
-                          <span className="font-bold text-indigo-300">{moOther}</span>
-                          <span className="text-slate-500 text-[11px] block">units</span>
+                          <span className={`font-bold ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>{moOther}</span>
+                          <span className={`text-[11px] block ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>units</span>
                         </td>
 
                         {/* Monthly Revenue */}
                         <td className="p-4 text-right font-mono">
-                          <div className="font-bold text-emerald-400">{formatZAR(moRev)}</div>
-                          <div className="text-[10px] text-purple-300">
+                          <div className={`font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{formatZAR(moRev)}</div>
+                          <div className={`text-[10px] ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>
                             CREAM: {formatZAR(moRev * 0.01)}
                           </div>
                         </td>
@@ -609,11 +658,13 @@ export default function CreamMasterPage() {
                         {/* Paystack Subaccount */}
                         <td className="p-4 text-center">
                           {comp.paystackSubaccountCode ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono border ${
+                              isDark ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            }`}>
                               {comp.paystackSubaccountCode}
                             </span>
                           ) : (
-                            <span className="text-slate-500 text-[11px]">Pending Bank</span>
+                            <span className={`text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Pending Bank</span>
                           )}
                         </td>
 
@@ -623,10 +674,10 @@ export default function CreamMasterPage() {
                             onClick={() => handleToggleStatus(comp.id, comp.status)}
                             className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase transition-all ${
                               comp.status === 'active'
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
+                                ? (isDark ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100')
                                 : comp.status === 'pending'
-                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20'
-                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20'
+                                ? (isDark ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20' : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100')
+                                : (isDark ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20' : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100')
                             }`}
                           >
                             {comp.status === 'pending' ? 'Pending Review' : comp.status || 'Active'}
@@ -634,10 +685,30 @@ export default function CreamMasterPage() {
                         </td>
 
                         {/* Actions / Drill-down */}
-                        <td className="p-4 text-right space-x-1 whitespace-nowrap">
+                        <td className="p-4 text-right space-x-1.5 whitespace-nowrap">
+                          {/* Inline Pitch Deck Button */}
+                          <Link
+                            href={`/p/${comp.id.replace(/_/g, '-')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`px-2.5 py-1.5 rounded-lg border font-semibold text-xs inline-flex items-center gap-1 transition-all ${
+                              isDark
+                                ? 'bg-amber-500/15 hover:bg-amber-500/25 border-amber-400/40 text-amber-300 shadow'
+                                : 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800 shadow-sm'
+                            }`}
+                            title={`Open White-Label Pitch Deck for ${comp.name}`}
+                          >
+                            <span className="material-symbols-outlined text-sm">slideshow</span>
+                            Pitch Deck
+                          </Link>
+
                           <Link
                             href={`/cream/company/${comp.id}`}
-                            className="px-2.5 py-1.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 font-semibold text-xs inline-flex items-center gap-1 transition-all"
+                            className={`px-2.5 py-1.5 rounded-lg border font-semibold text-xs inline-flex items-center gap-1 transition-all ${
+                              isDark
+                                ? 'bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/30 text-purple-300'
+                                : 'bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700'
+                            }`}
                             title="Drill down into customers, payments, incidents, and revenue"
                           >
                             <span className="material-symbols-outlined text-sm">query_stats</span>
@@ -646,7 +717,11 @@ export default function CreamMasterPage() {
 
                           <Link
                             href={`/cream/company/${comp.id}/branding`}
-                            className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-semibold text-xs inline-flex items-center gap-1 transition-all"
+                            className={`px-2.5 py-1.5 rounded-lg border font-semibold text-xs inline-flex items-center gap-1 transition-all ${
+                              isDark
+                                ? 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-300'
+                                : 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-800'
+                            }`}
                             title="Configure white-label look and feel, colors, and website CI"
                           >
                             <span className="material-symbols-outlined text-sm">palette</span>
@@ -655,7 +730,11 @@ export default function CreamMasterPage() {
 
                           <Link
                             href={`/cream/company/${comp.id}/stock`}
-                            className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 font-semibold text-xs inline-flex items-center gap-1 transition-all"
+                            className={`px-2.5 py-1.5 rounded-lg border font-semibold text-xs inline-flex items-center gap-1 transition-all ${
+                              isDark
+                                ? 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
+                                : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                            }`}
                             title="Manage Sentinel toggles and custom security hardware"
                           >
                             <span className="material-symbols-outlined text-sm">inventory_2</span>
@@ -664,7 +743,9 @@ export default function CreamMasterPage() {
 
                           <Link
                             href={comp.isDemo ? "#demo-company" : `/control-room?companyId=${comp.id}`}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 inline-block align-middle"
+                            className={`p-1.5 rounded-lg inline-block align-middle transition-colors ${
+                              isDark ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                            }`}
                             title="Launch Dispatch Control Room"
                           >
                             <span className="material-symbols-outlined text-sm">open_in_browser</span>
@@ -680,24 +761,26 @@ export default function CreamMasterPage() {
         </section>
 
         {/* Partner & Hardware Revenue Model */}
-        <PartnerIntegrations />
+        <PartnerIntegrations isDark={isDark} />
 
-        <section className="glass-panel rounded-2xl p-5 border border-white/10 bg-[#080d19]">
-          <h2 className="text-lg font-bold text-secondary">Paystack Split Payment Model (CREAM 1%)</h2>
-          <p className="text-xs text-on-surface-variant mt-1">
+        <section className={`rounded-2xl p-5 border transition-all ${
+          isDark ? 'bg-[#080d19] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+        }`}>
+          <h2 className={`text-lg font-bold ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>Paystack Split Payment Model (CREAM 1%)</h2>
+          <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             Automated multi-tenant financial settlements via Paystack Subaccounts
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-xs text-slate-300">
-            <div className="p-3 bg-white/5 rounded-xl border border-white/5">
-              <strong className="text-white block mb-1">1. Customer Payment</strong>
+          <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+            <div className={`p-3 rounded-xl border ${isDark ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-100'}`}>
+              <strong className={`block mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>1. Customer Payment</strong>
               <span>Subscriber pays SafeLink monthly fee or purchases hardware using card / instant EFT.</span>
             </div>
-            <div className="p-3 bg-white/5 rounded-xl border border-white/5">
-              <strong className="text-white block mb-1">2. CREAM Platform Fee</strong>
+            <div className={`p-3 rounded-xl border ${isDark ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-100'}`}>
+              <strong className={`block mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>2. CREAM Platform Fee</strong>
               <span>Paystack routes 1% commission to the CREAM master account directly.</span>
             </div>
-            <div className="p-3 bg-white/5 rounded-xl border border-white/5">
-              <strong className="text-white block mb-1">3. Automated T+1 Settlement</strong>
+            <div className={`p-3 rounded-xl border ${isDark ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-100'}`}>
+              <strong className={`block mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>3. Automated T+1 Settlement</strong>
               <span>99% net proceeds settle directly into the security company&apos;s verified bank account.</span>
             </div>
           </div>
@@ -707,15 +790,17 @@ export default function CreamMasterPage() {
       {/* Invite Modal */}
       {showInviteModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0e1424] border border-purple-500/30 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+          <div className={`border rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 ${
+            isDark ? 'bg-[#0e1424] border-purple-500/30 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className={`flex items-center justify-between pb-3 border-b ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-purple-400">person_add</span>
-                <h3 className="text-base font-bold text-white">Generate Partner Invite Link</h3>
+                <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Generate Partner Invite Link</h3>
               </div>
               <button
                 onClick={() => setShowInviteModal(false)}
-                className="text-slate-400 hover:text-white p-1"
+                className={`${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'} p-1`}
               >
                 <span className="material-symbols-outlined">close</span>
               </button>
@@ -814,15 +899,17 @@ export default function CreamMasterPage() {
       {/* Expanded Onboard Company Modal */}
       {showAddCompanyModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0e1424] border border-purple-500/30 rounded-3xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+          <div className={`border rounded-3xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-6 ${
+            isDark ? 'bg-[#0e1424] border-purple-500/30 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className={`flex items-center justify-between pb-4 border-b ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
               <div>
-                <h2 className="text-lg font-bold text-white">Direct Onboard Security Company</h2>
-                <p className="text-xs text-slate-400">Configure partner tenant profile, legal registrations, and settlement banking</p>
+                <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Direct Onboard Security Company</h2>
+                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Configure partner tenant profile, legal registrations, and settlement banking</p>
               </div>
               <button
                 onClick={() => setShowAddCompanyModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                className={`${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'} p-1 rounded-lg`}
               >
                 <span className="material-symbols-outlined">close</span>
               </button>

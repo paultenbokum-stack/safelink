@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
-import { useBrandTheme } from '@/lib/brand-context';
+import { useBrandTheme, getBrandPreset } from '@/lib/brand-context';
 import { useTheme } from '@/lib/theme-context';
 import BrandCustomizer from '@/app/components/BrandCustomizer';
 import GodsEyeSurveillance from '@/app/components/GodsEyeSurveillance';
@@ -71,20 +71,172 @@ export const DEMO_SOVEREIGN_REVENUE = {
   company: { id: 'sovereign_intervention', name: 'Sovereign Intervention' },
 };
 
+export function getCompanyDemoData(cid, pName) {
+  if (!cid || cid === 'sovereign_intervention') {
+    return {
+      customers: DEMO_SOVEREIGN_CUSTOMERS,
+      incidents: DEMO_SOVEREIGN_INCIDENTS,
+      revenue: DEMO_SOVEREIGN_REVENUE,
+    };
+  }
+
+  const name = pName || cid.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  const prefix = cid.toUpperCase().slice(0, 3);
+
+  return {
+    customers: {
+      summary: { total: 184, current: 168, '30day': 11, '60day': 4, '90day': 1 },
+      customers: [
+        { id: `${cid}_c1`, name: 'Dr. Johan Van Der Merwe', email: 'johan@vdm-holdings.co.za', phone: '+27 82 459 1001', subscriptionTier: `${name} Armed Shield`, paymentStatus: 'current', lastPaymentDate: '2026-09-01' },
+        { id: `${cid}_c2`, name: 'Apex Logistics Escort Fleet', email: 'fleet@apexlogistics.co.za', phone: '+27 11 884 9200', subscriptionTier: `${name} Tactical Telemetry`, paymentStatus: 'current', lastPaymentDate: '2026-09-05' },
+        { id: `${cid}_c3`, name: 'Sandhurst Residential Estate HOA', email: 'admin@sandhurst-hoa.co.za', phone: '+27 11 784 1122', subscriptionTier: `${name} Estate Armed Grid`, paymentStatus: 'current', lastPaymentDate: '2026-09-01' },
+        { id: `${cid}_c4`, name: 'Clifton Ridge Executive Residence', email: 'security@cliftonridge.co.za', phone: '+27 83 220 4499', subscriptionTier: `${name} Armed Shield`, paymentStatus: 'current', lastPaymentDate: '2026-09-03' },
+        { id: `${cid}_c5`, name: 'Sipho & Lerato Dlamini', email: 'sipho.dlamini@investec.co.za', phone: '+27 72 311 8820', subscriptionTier: 'Family SafeLink Pack', paymentStatus: 'current', lastPaymentDate: '2026-09-02' },
+        { id: `${cid}_c6`, name: 'Kyle Saffy', email: 'kyle@creamtech.co.za', phone: '+27 82 999 1234', subscriptionTier: `${name} Close Protection`, paymentStatus: 'current', lastPaymentDate: '2026-09-01' },
+      ],
+      company: { id: cid, name },
+    },
+    incidents: {
+      incidents: [
+        { id: `${cid}_inc_1`, type: 'panic', status: 'resolved', customerName: 'Dr. Johan Van Der Merwe (Sandhurst Close)', location: 'Sandhurst, Sandton', responseTime: 2.8, createdAt: new Date(Date.now() - 18 * 60 * 1000).toISOString(), resolvedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString() },
+        { id: `${cid}_inc_2`, type: 'vehicle_theft', status: 'resolved', customerName: 'Apex Logistics Escort Fleet (Sentinel GPS)', location: 'N1 Rivonia Offramp, Sandton', responseTime: 3.2, createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(), resolvedAt: new Date(Date.now() - 1.9 * 3600 * 1000).toISOString() },
+        { id: `${cid}_inc_3`, type: 'armed_robbery', status: 'resolved', customerName: 'Clifton Ridge Executive Residence', location: 'Clifton Road, Bryanston', responseTime: 2.5, createdAt: new Date(Date.now() - 8 * 3600 * 1000).toISOString(), resolvedAt: new Date(Date.now() - 7.9 * 3600 * 1000).toISOString() },
+        { id: `${cid}_inc_4`, type: 'medical', status: 'resolved', customerName: 'Sipho & Lerato Dlamini (Sentinel SOS Fob)', location: 'Morningside, Sandton', responseTime: 4.1, createdAt: new Date(Date.now() - 22 * 3600 * 1000).toISOString(), resolvedAt: new Date(Date.now() - 21.8 * 3600 * 1000).toISOString() },
+        { id: `${cid}_inc_5`, type: 'break_in', status: 'resolved', customerName: 'Hyde Park Terrace Security Cluster', location: 'Hyde Park, Sandton', responseTime: 3.4, createdAt: new Date(Date.now() - 36 * 3600 * 1000).toISOString(), resolvedAt: new Date(Date.now() - 35.8 * 3600 * 1000).toISOString() },
+        { id: `${cid}_inc_6`, type: 'panic', status: 'resolved', customerName: 'Inanda Polo Club Member Suite #12', location: 'Inanda, Sandton', responseTime: 2.1, createdAt: new Date(Date.now() - 54 * 3600 * 1000).toISOString(), resolvedAt: new Date(Date.now() - 53.9 * 3600 * 1000).toISOString() },
+      ],
+      summary: {
+        total: 42,
+        byType: [
+          { id: 'panic', label: 'Panic / SOS Fob', icon: 'emergency', color: '#F7BB23', count: 14 },
+          { id: 'armed_robbery', label: 'Armed Response', icon: 'dangerous', color: '#e53e3e', count: 12 },
+          { id: 'break_in', label: 'Break-in / Alarm', icon: 'door_front', color: '#dd6b20', count: 9 },
+          { id: 'medical', label: 'Medical Dispatch', icon: 'local_hospital', color: '#3182ce', count: 4 },
+          { id: 'vehicle_theft', label: 'Vehicle GPS Intercept', icon: 'directions_car', color: '#805ad5', count: 3 },
+        ],
+      },
+      company: { id: cid, name },
+    },
+    revenue: {
+      summary: {
+        totalRevenue: 332700.00,
+        totalPaystackFees: 4990.50,
+        totalCreamShare: 3327.00,
+        totalCompanyShare: 324382.50,
+      },
+      monthly: [
+        { month: '2026-09', count: 142, revenue: 332700.00, paystackFees: 4990.50, creamShare: 3327.00, companyShare: 324382.50 },
+        { month: '2026-08', count: 136, revenue: 318400.00, paystackFees: 4776.00, creamShare: 3184.00, companyShare: 310440.00 },
+        { month: '2026-07', count: 121, revenue: 284200.00, paystackFees: 4263.00, creamShare: 2842.00, companyShare: 277095.00 },
+      ],
+      transactions: [
+        { id: `${cid}_tx_1`, reference: `PSK_${prefix}_991828`, customerName: 'Morningside Security Cluster', items: [{ name: `Annual Armed Tactical Fleet Retainer (${name})`, qty: 1, price: 112000 }], totalAmount: 112000, paystackFee: 1680.00, creamShare: 1103.20, companyShare: 109216.80, createdAt: new Date(Date.now() - 2 * 86400 * 1000).toISOString() },
+        { id: `${cid}_tx_2`, reference: `PSK_${prefix}_991824`, customerName: 'Sandhurst Residential Estate HOA', items: [{ name: `45x Community Armed Protection Plans (${name})`, qty: 45, price: 67500 }], totalAmount: 67500, paystackFee: 1012.50, creamShare: 664.88, companyShare: 65822.62, createdAt: new Date(Date.now() - 5 * 86400 * 1000).toISOString() },
+        { id: `${cid}_tx_3`, reference: `PSK_${prefix}_991829`, customerName: 'Inanda Polo Club Executive Suite', items: [{ name: `Executive Armed VIP Escort Suite (${name})`, qty: 1, price: 24500 }], totalAmount: 24500, paystackFee: 367.50, creamShare: 241.33, companyShare: 23891.17, createdAt: new Date(Date.now() - 7 * 86400 * 1000).toISOString() },
+        { id: `${cid}_tx_4`, reference: `PSK_${prefix}_991823`, customerName: 'Apex Logistics Escort Fleet', items: [{ name: `10x Executive Close Protection Fob Suites (${name})`, qty: 10, price: 14500 }], totalAmount: 14500, paystackFee: 217.50, creamShare: 142.83, companyShare: 14139.67, createdAt: new Date(Date.now() - 11 * 86400 * 1000).toISOString() },
+      ],
+      company: { id: cid, name },
+    },
+  };
+}
+
 export default function CompanyDashboard({ params: paramsPromise }) {
   const resolvedParams = paramsPromise && typeof paramsPromise.then === 'function' ? React.use(paramsPromise) : paramsPromise;
   const companyId = resolvedParams?.companyId;
   const [tab, setTab] = useState('customers');
-  const [data, setData] = useState({
-    customers: DEMO_SOVEREIGN_CUSTOMERS,
-    incidents: DEMO_SOVEREIGN_INCIDENTS,
-    revenue: DEMO_SOVEREIGN_REVENUE,
-  });
-  const [loading, setLoading] = useState(false);
   const { user } = useAuth();
-  const { brand } = useBrandTheme();
+  const { brand, setCompanyId } = useBrandTheme();
   const { theme, toggleTheme } = useTheme();
   const isDark = theme !== 'light';
+
+  const [companyBrand, setCompanyBrand] = useState(() => {
+    if (typeof window !== 'undefined' && companyId) {
+      try {
+        const cached = localStorage.getItem('safelink_brand_' + companyId);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.partnerName) return parsed;
+        }
+      } catch {}
+    }
+    return null;
+  });
+
+  const preset = getBrandPreset(companyId);
+  const effectiveBrand = (companyBrand?.partnerName ? companyBrand : null)
+    || (brand?.companyId === companyId ? brand : null)
+    || preset;
+
+  // Dynamic CI tokens from Look & Feel Branding Portal + Theme-aware palettes
+  const partnerName = effectiveBrand?.partnerName || preset.partnerName;
+  const logoUrl = effectiveBrand?.logoUrl || preset.logoUrl;
+  const accentColor = effectiveBrand?.highlightedButtonBg || preset.highlightedButtonBg || '#D4AF37';
+  const accentTextColor = effectiveBrand?.highlightedButtonText || preset.highlightedButtonText || '#04070E';
+  const headerBgColor = isDark ? (effectiveBrand?.headerBgColor || preset.headerBgColor || '#04070E') : '#FFFFFF';
+  const pageBgColor = isDark ? (effectiveBrand?.pageBgColor || preset.pageBgColor || '#040D16') : '#F8FAFC';
+  const buttonBgColor = isDark ? (effectiveBrand?.buttonBgColor || preset.buttonBgColor || '#0F1A26') : '#FFFFFF';
+
+  const [data, setData] = useState(() => {
+    const initialDemo = getCompanyDemoData(companyId, partnerName);
+    return {
+      customers: initialDemo.customers,
+      incidents: initialDemo.incidents,
+      revenue: initialDemo.revenue,
+    };
+  });
+  const [loading, setLoading] = useState(false);
+
+  // Sync companyId and load branding
+  useEffect(() => {
+    if (!companyId) return;
+    setCompanyId(companyId);
+
+    // Immediate check in localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('safelink_brand_' + companyId);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.partnerName) {
+            setCompanyBrand(parsed);
+          }
+        }
+      } catch {}
+    }
+
+    // Live API fetch
+    fetch(`/api/cream/company/${companyId}/branding`, { cache: 'no-store' })
+      .then(res => res.json())
+      .then(json => {
+        if (json?.branding) {
+          setCompanyBrand(json.branding);
+          try {
+            localStorage.setItem('safelink_brand_' + companyId, JSON.stringify(json.branding));
+          } catch {}
+        }
+      })
+      .catch(err => console.warn('[company-dashboard] Error fetching company branding:', err));
+
+    const handleBrandOverride = (e) => {
+      if (e.detail) {
+        setCompanyBrand(e.detail);
+      }
+    };
+    window.addEventListener('safelink_brand_updated', handleBrandOverride);
+    return () => window.removeEventListener('safelink_brand_updated', handleBrandOverride);
+  }, [companyId, setCompanyId]);
+
+  // Keep demo data in sync with company and partnerName
+  useEffect(() => {
+    if (companyId) {
+      const demo = getCompanyDemoData(companyId, partnerName);
+      setData(prev => ({
+        customers: (prev.customers?.company?.id === companyId) ? prev.customers : demo.customers,
+        incidents: (prev.incidents?.company?.id === companyId) ? prev.incidents : demo.incidents,
+        revenue: (prev.revenue?.company?.id === companyId) ? prev.revenue : demo.revenue,
+      }));
+    }
+  }, [companyId, partnerName]);
 
   // Allow direct deep-linking like ?tab=cctv
   useEffect(() => {
@@ -97,15 +249,6 @@ export default function CompanyDashboard({ params: paramsPromise }) {
     }
   }, []);
 
-  // Dynamic CI tokens from Look & Feel Branding Portal + Theme-aware palettes
-  const partnerName = brand?.partnerName || 'Sovereign Intervention';
-  const logoUrl = brand?.logoUrl || '/sovereign-intervention-logo.png';
-  const accentColor = brand?.highlightedButtonBg || '#D4AF37';
-  const accentTextColor = brand?.highlightedButtonText || '#04070E';
-  const headerBgColor = isDark ? (brand?.headerBgColor || '#04070E') : '#FFFFFF';
-  const pageBgColor = isDark ? (brand?.pageBgColor || '#040D16') : '#F8FAFC';
-  const buttonBgColor = isDark ? (brand?.buttonBgColor || '#0F1A26') : '#FFFFFF';
-
   const fetchTab = useCallback(async (tabName) => {
     if (!companyId) return;
     if (tabName === 'branding' || tabName === 'cctv') {
@@ -114,10 +257,11 @@ export default function CompanyDashboard({ params: paramsPromise }) {
     }
     
     // Always provide resilient demo fallback first
+    const demoPayloads = getCompanyDemoData(companyId, partnerName);
     const fallbackMap = {
-      customers: DEMO_SOVEREIGN_CUSTOMERS,
-      incidents: DEMO_SOVEREIGN_INCIDENTS,
-      revenue: DEMO_SOVEREIGN_REVENUE,
+      customers: demoPayloads.customers,
+      incidents: demoPayloads.incidents,
+      revenue: demoPayloads.revenue,
     };
 
     if (user) {
@@ -141,7 +285,7 @@ export default function CompanyDashboard({ params: paramsPromise }) {
       setData(prev => ({ ...prev, [tabName]: fallbackMap[tabName] }));
     }
     setLoading(false);
-  }, [companyId, user]);
+  }, [companyId, user, partnerName]);
 
   useEffect(() => {
     if (companyId) fetchTab(tab);
@@ -763,12 +907,22 @@ export default function CompanyDashboard({ params: paramsPromise }) {
 
         {/* ── LOOK & FEEL / BRANDING TAB ── */}
         {tab === 'branding' && (
-          <BrandCustomizer companyId={companyId} />
+          <BrandCustomizer
+            companyId={companyId}
+            onSaved={(b) => {
+              setCompanyBrand(b);
+              if (typeof window !== 'undefined') {
+                try {
+                  localStorage.setItem('safelink_brand_' + companyId, JSON.stringify(b));
+                } catch {}
+              }
+            }}
+          />
         )}
 
         {/* ── LIVE CCTV & GOD'S EYE SURVEILLANCE TAB ── */}
         {tab === 'cctv' && (
-          <GodsEyeSurveillance companyId={companyId} brand={brand} />
+          <GodsEyeSurveillance companyId={companyId} brand={effectiveBrand} />
         )}
       </main>
     </div>

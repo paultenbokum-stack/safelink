@@ -104,14 +104,36 @@ export default function CreamMasterPage() {
         const metricsData = await metricsRes.json();
         setMetrics(metricsData);
         if (metricsData.companies?.length) {
-          setCompanies(metricsData.companies);
+          let list = metricsData.companies;
+          if (typeof window !== 'undefined') {
+            try {
+              const saved = JSON.parse(localStorage.getItem('safelink_custom_companies') || '[]');
+              if (Array.isArray(saved) && saved.length > 0) {
+                const existingIds = new Set(list.map(c => c.id));
+                const extras = saved.filter(c => !existingIds.has(c.id));
+                list = [...extras, ...list];
+              }
+            } catch {}
+          }
+          setCompanies(list);
         }
       } else {
         // Fallback to legacy companies list
         const compRes = await managementFetch('/api/cream/companies').catch(() => null);
         if (compRes && compRes.ok) {
           const compData = await compRes.json();
-          setCompanies(compData.companies?.length ? compData.companies : DEMO_COMPANIES);
+          let baseList = compData.companies?.length ? compData.companies : DEMO_COMPANIES;
+          if (typeof window !== 'undefined') {
+            try {
+              const saved = JSON.parse(localStorage.getItem('safelink_custom_companies') || '[]');
+              if (Array.isArray(saved) && saved.length > 0) {
+                const existingIds = new Set(baseList.map(c => c.id));
+                const extras = saved.filter(c => !existingIds.has(c.id));
+                baseList = [...extras, ...baseList];
+              }
+            } catch {}
+          }
+          setCompanies(baseList);
         }
       }
     } catch (e) {
@@ -153,6 +175,36 @@ export default function CreamMasterPage() {
     if (!newCompany.name.trim()) return;
     setSavingCompany(true);
 
+    const compSlug = (newCompany.slug || newCompany.name || `comp_${Date.now()}`)
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, '_');
+
+    const finalBranding = scrapedBranding || newCompany.branding || (compSlug === 'sb_security' ? {
+      companyId: compSlug,
+      partnerName: newCompany.name || 'SB Security',
+      logoUrl: '/presentation/security-brokers-logo.png',
+      highlightedButtonBg: '#F7BB23',
+      highlightedButtonText: '#04070E',
+      buttonTextColor: '#F7BB23',
+    } : null);
+
+    // Cache branding in localStorage immediately for instant hydration
+    if (finalBranding && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('safelink_brand_' + compSlug, JSON.stringify(finalBranding));
+        window.dispatchEvent(new CustomEvent('safelink_brand_updated', { detail: finalBranding }));
+      } catch {}
+    }
+
+    // Seed the branding endpoint directly
+    if (finalBranding) {
+      fetch(`/api/cream/company/${compSlug}/branding`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finalBranding),
+      }).catch(err => console.warn('Could not pre-seed company branding:', err));
+    }
+
     try {
       const res = await managementFetch('/api/cream/companies', {
         method: 'POST',
@@ -161,7 +213,8 @@ export default function CreamMasterPage() {
           action: 'create_company',
           newCompany: {
             ...newCompany,
-            branding: scrapedBranding || newCompany.branding,
+            slug: compSlug,
+            branding: finalBranding,
             address: {
               street: newCompany.street,
               suburb: newCompany.suburb,
@@ -182,6 +235,32 @@ export default function CreamMasterPage() {
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || 'Failed to create company');
+      }
+
+      // Optimistically append new company to local state
+      const createdEntry = {
+        id: compSlug,
+        name: newCompany.name,
+        status: 'active',
+        registrationNumber: newCompany.registrationNumber || 'PSIRA-PENDING',
+        psiraNumber: newCompany.psiraNumber || '',
+        dispatchPhone: newCompany.dispatchPhone || '',
+        contactEmail: newCompany.contactEmail || '',
+        memberCount: 0,
+        deviceCount: 0,
+        accounting: { provider: newCompany.accountingProvider || 'sage', status: 'connected' },
+        cameraSystem: { defaultBrand: newCompany.cameraBrand || 'Hikvision', status: 'connected' },
+        aura: { enabled: true },
+        branding: finalBranding,
+      };
+
+      setCompanies(prev => [createdEntry, ...prev.filter(c => c.id !== compSlug)]);
+      if (typeof window !== 'undefined') {
+        try {
+          const currentCustom = JSON.parse(localStorage.getItem('safelink_custom_companies') || '[]');
+          const updatedCustom = [createdEntry, ...currentCustom.filter(c => c.id !== compSlug)];
+          localStorage.setItem('safelink_custom_companies', JSON.stringify(updatedCustom));
+        } catch {}
       }
 
       setShowAddCompanyModal(false);

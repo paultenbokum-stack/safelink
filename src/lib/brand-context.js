@@ -32,6 +32,49 @@ export const SOVEREIGN_DEFAULT_BRAND = {
   buttonOpacity: 75,
 };
 
+export const SB_SECURITY_DEFAULT_BRAND = {
+  companyId: 'sb_security',
+  partnerName: 'SB Security',
+  shortName: 'SB Security',
+  logoUrl: '/presentation/security-brokers-logo.png',
+  showLogoInHeader: true,
+  headerBgColor: '#04070E',
+  headerBgImage: '',
+  headerTextColor: '#F7BB23',
+  headerTextAuto: false,
+  pageBgColor: '#040D16',
+  pageBgImage: '',
+  pageTextColor: '#F8FAFC',
+  fontFamily: 'modern',
+  highlightedButtonBg: '#F7BB23',
+  highlightedButtonText: '#04070E',
+  highlightedButtonAuto: false,
+  buttonBgColor: '#0F1A26',
+  buttonTextColor: '#F7BB23',
+  buttonOpacity: 75,
+  sourceUrl: 'https://sbsecurity.co.za/',
+};
+
+export function getBrandPreset(targetId) {
+  const cid = String(targetId || '').trim().toLowerCase();
+  if (cid === 'sb_security' || cid === 'security_brokers' || cid === 'sb' || cid.includes('sb_sec') || cid.includes('security_broker')) {
+    return { ...SB_SECURITY_DEFAULT_BRAND, companyId: cid };
+  }
+  if (cid === 'sovereign_intervention' || cid === 'si' || cid.includes('sovereign')) {
+    return { ...SOVEREIGN_DEFAULT_BRAND, companyId: cid };
+  }
+  if (cid) {
+    const formattedName = cid.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    return {
+      ...SOVEREIGN_DEFAULT_BRAND,
+      companyId: cid,
+      partnerName: formattedName,
+      shortName: formattedName.split(' ')[0] || formattedName,
+    };
+  }
+  return SOVEREIGN_DEFAULT_BRAND;
+}
+
 export function BrandProvider({ children }) {
   const [companyId, setCompanyId] = useState('sovereign_intervention');
   const [brand, setBrand] = useState(SOVEREIGN_DEFAULT_BRAND);
@@ -69,8 +112,13 @@ export function BrandProvider({ children }) {
 
   const loadBrand = useCallback(async (targetId) => {
     const cid = String(targetId || 'sovereign_intervention').trim().toLowerCase();
+    const preset = getBrandPreset(cid);
+
+    // Apply optimistic preset immediately so it never flashes incorrect partner branding
+    setBrand(preset);
+    applyCssVariables(preset);
     
-    // Check localStorage cache first for immediate hydration
+    // Check localStorage cache first for immediate customized hydration
     if (typeof window !== 'undefined') {
       try {
         const cached = localStorage.getItem('safelink_brand_' + cid);
@@ -103,23 +151,40 @@ export function BrandProvider({ children }) {
       console.warn('[brand-context] Failed to fetch branding, using fallback:', e);
     }
     
-    // Fallback to default
-    setBrand(SOVEREIGN_DEFAULT_BRAND);
+    // Fallback to the target company's preset (never force Sovereign for a non-sovereign company!)
+    setBrand(preset);
     setIsWhiteLabeled(true);
-    applyCssVariables(SOVEREIGN_DEFAULT_BRAND);
+    applyCssVariables(preset);
   }, [applyCssVariables]);
+
+  const updateCompanyId = useCallback((newId) => {
+    if (!newId) return;
+    const cid = String(newId).trim().toLowerCase();
+    setCompanyId(cid);
+    loadBrand(cid);
+  }, [loadBrand]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Detect company from search params or household
+    // Detect company from search params, pathname, or household
     const params = new URLSearchParams(window.location.search);
-    const rawParam = params.get('companyId') || params.get('partner') || params.get('tenant') || params.get('company');
+    let rawParam = params.get('companyId') || params.get('partner') || params.get('tenant') || params.get('company');
     
+    if (!rawParam) {
+      const path = window.location.pathname;
+      const pathMatch = path.match(/\/(?:cream\/company|company|p)\/([^/?#]+)/);
+      if (pathMatch && pathMatch[1] && pathMatch[1] !== 'new') {
+        rawParam = pathMatch[1];
+      }
+    }
+
     const ALIAS_MAP = {
       si: 'sovereign_intervention',
       sovereign: 'sovereign_intervention',
-      sb: 'security_brokers',
+      sb: 'sb_security',
+      sb_security: 'sb_security',
+      security_brokers: 'sb_security',
       th: 'thompsons_security',
       ms: 'marshals_security',
     };
@@ -140,14 +205,9 @@ export function BrandProvider({ children }) {
       resolvedCompany = 'sovereign_intervention';
     }
 
-    if (resolvedCompany) {
-      setCompanyId(resolvedCompany);
-      loadBrand(resolvedCompany);
-    } else {
-      // Default to sovereign_intervention branding for complete white-label demonstration
-      setCompanyId('sovereign_intervention');
-      loadBrand('sovereign_intervention');
-    }
+    const targetCompany = resolvedCompany || 'sovereign_intervention';
+    setCompanyId(targetCompany);
+    loadBrand(targetCompany);
 
     const handleBrandOverride = (e) => {
       if (e.detail) {
@@ -160,7 +220,7 @@ export function BrandProvider({ children }) {
   }, [loadBrand, applyCssVariables]);
 
   return (
-    <BrandContext.Provider value={{ brand, companyId, setCompanyId, refreshBrand: () => loadBrand(companyId), isWhiteLabeled }}>
+    <BrandContext.Provider value={{ brand, companyId, setCompanyId: updateCompanyId, refreshBrand: () => loadBrand(companyId), isWhiteLabeled }}>
       {children}
     </BrandContext.Provider>
   );

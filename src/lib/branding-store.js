@@ -23,6 +23,52 @@ export const DEFAULT_BRANDINGS = {
     buttonOpacity: 75,
     updatedAt: new Date().toISOString(),
   },
+  sb_security: {
+    companyId: 'sb_security',
+    partnerName: 'SB Security',
+    shortName: 'SB Security',
+    logoUrl: '/presentation/security-brokers-logo.png',
+    showLogoInHeader: true,
+    headerBgColor: '#04070E',
+    headerBgImage: '',
+    headerTextColor: '#F7BB23',
+    headerTextAuto: false,
+    pageBgColor: '#040D16',
+    pageBgImage: '',
+    pageTextColor: '#F8FAFC',
+    fontFamily: 'modern',
+    highlightedButtonBg: '#F7BB23',
+    highlightedButtonText: '#04070E',
+    highlightedButtonAuto: false,
+    buttonBgColor: '#0F1A26',
+    buttonTextColor: '#F7BB23',
+    buttonOpacity: 75,
+    updatedAt: new Date().toISOString(),
+    sourceUrl: 'https://sbsecurity.co.za/',
+  },
+  security_brokers: {
+    companyId: 'security_brokers',
+    partnerName: 'Security Brokers',
+    shortName: 'SB Security',
+    logoUrl: '/presentation/security-brokers-logo.png',
+    showLogoInHeader: true,
+    headerBgColor: '#04070E',
+    headerBgImage: '',
+    headerTextColor: '#F7BB23',
+    headerTextAuto: false,
+    pageBgColor: '#040D16',
+    pageBgImage: '',
+    pageTextColor: '#F8FAFC',
+    fontFamily: 'modern',
+    highlightedButtonBg: '#F7BB23',
+    highlightedButtonText: '#04070E',
+    highlightedButtonAuto: false,
+    buttonBgColor: '#0F1A26',
+    buttonTextColor: '#F7BB23',
+    buttonOpacity: 75,
+    updatedAt: new Date().toISOString(),
+    sourceUrl: 'https://sbsecurity.co.za/',
+  },
   default: {
     companyId: 'default',
     partnerName: 'SafeLink Security',
@@ -60,12 +106,25 @@ export async function getCompanyBranding(companyId) {
     return memoryBrandStore.get(cleanId);
   }
 
+  const resolvePreset = (cid) => {
+    if (DEFAULT_BRANDINGS[cid]) return DEFAULT_BRANDINGS[cid];
+    if (cid === 'sb' || cid === 'sbsecurity' || cid === 'securitybrokers' || cid.includes('sb_sec')) {
+      return DEFAULT_BRANDINGS.sb_security;
+    }
+    if (cid === 'si' || cid === 'sovereign' || cid.includes('sovereign')) {
+      return DEFAULT_BRANDINGS.sovereign_intervention;
+    }
+    return null;
+  };
+
+  const preset = resolvePreset(cleanId);
+
   try {
     const db = getAdminFirestore();
     const doc = await db.collection('security_companies').doc(cleanId).get();
     if (doc.exists && doc.data()?.branding) {
       const merged = {
-        ...(DEFAULT_BRANDINGS[cleanId] || DEFAULT_BRANDINGS.default),
+        ...(preset || DEFAULT_BRANDINGS.default),
         ...doc.data().branding,
         companyId: cleanId,
       };
@@ -76,7 +135,7 @@ export async function getCompanyBranding(companyId) {
     console.warn(`[branding-store] Firestore lookup failed for ${cleanId}, using preset:`, err.message);
   }
 
-  const fallback = DEFAULT_BRANDINGS[cleanId] || {
+  const fallback = preset || {
     ...DEFAULT_BRANDINGS.default,
     companyId: cleanId,
     partnerName: cleanId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),

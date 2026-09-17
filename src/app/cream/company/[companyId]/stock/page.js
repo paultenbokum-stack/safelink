@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
-import { useBrandTheme } from '@/lib/brand-context';
+import { useBrandTheme, getBrandPreset } from '@/lib/brand-context';
 import { useTheme } from '@/lib/theme-context';
 
 const DEFAULT_SENTINEL_PRODUCTS = [
@@ -13,36 +13,97 @@ const DEFAULT_SENTINEL_PRODUCTS = [
   { id: 'sentinel-pet-collar', name: 'Sentinel Pet & K9 Security Collar', range: 'Specialty', category: 'K9 Tracking', costPrice: 380, sellingPrice: 750, desc: 'Lightweight waterproof K9 tracking beacon with virtual geofence', badge: 'K9 Unit', enabled: true, locked: true },
 ];
 
-const DEFAULT_CUSTOM_PRODUCTS = [
-  { id: 'sov_prod_1', name: 'Sovereign Tactical Perimeter Beam Sensor', sku: 'SOV-BEAM-01', category: 'Perimeter Security', costPrice: 1200, sellingPrice: 2450, stockQty: 35, locked: false },
-  { id: 'sov_prod_2', name: 'Sovereign Rapid Response Mobile Panic Receiver', sku: 'SOV-RX-02', category: 'Control Room Hardware', costPrice: 850, sellingPrice: 1650, stockQty: 42, locked: false },
-  { id: 'sov_prod_3', name: 'Sovereign Armoured Vehicle Dashcam & Telematics', sku: 'SOV-DASH-09', category: 'Fleet Hardware', costPrice: 2200, sellingPrice: 3800, stockQty: 18, locked: false },
-];
+export const getCustomProductsForCompany = (cid, pName) => {
+  const name = pName || cid?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Partner';
+  const sku = (cid || 'SEC').toUpperCase().slice(0, 3);
+  return [
+    { id: `${cid}_prod_1`, name: `${name} Tactical Perimeter Beam Sensor`, sku: `${sku}-BEAM-01`, category: 'Perimeter Security', costPrice: 1200, sellingPrice: 2450, stockQty: 35, locked: false },
+    { id: `${cid}_prod_2`, name: `${name} Rapid Response Mobile Panic Receiver`, sku: `${sku}-RX-02`, category: 'Control Room Hardware', costPrice: 850, sellingPrice: 1650, stockQty: 42, locked: false },
+    { id: `${cid}_prod_3`, name: `${name} Armoured Vehicle Dashcam & Telematics`, sku: `${sku}-DASH-09`, category: 'Fleet Hardware', costPrice: 2200, sellingPrice: 3800, stockQty: 18, locked: false },
+  ];
+};
 
 export default function CompanyStockPage({ params: paramsPromise }) {
   const resolvedParams = paramsPromise && typeof paramsPromise.then === 'function' ? React.use(paramsPromise) : paramsPromise;
   const companyId = resolvedParams?.companyId;
   const { user } = useAuth();
-  const { brand } = useBrandTheme();
+  const { brand, setCompanyId } = useBrandTheme();
   const { theme, toggleTheme } = useTheme();
   const isDark = theme !== 'light';
 
+  const [companyBrand, setCompanyBrand] = useState(() => {
+    if (typeof window !== 'undefined' && companyId) {
+      try {
+        const cached = localStorage.getItem('safelink_brand_' + companyId);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.partnerName) return parsed;
+        }
+      } catch {}
+    }
+    return null;
+  });
+
+  const preset = getBrandPreset(companyId);
+  const effectiveBrand = (companyBrand?.partnerName ? companyBrand : null)
+    || (brand?.companyId === companyId ? brand : null)
+    || preset;
+
   // Dynamic branding CI tokens + Theme-aware palettes
-  const partnerName = brand?.partnerName || 'Sovereign Intervention';
-  const logoUrl = brand?.logoUrl || '/sovereign-intervention-logo.png';
-  const accentColor = brand?.highlightedButtonBg || '#D4AF37';
-  const accentTextColor = brand?.highlightedButtonText || '#04070E';
-  const headerBgColor = isDark ? (brand?.headerBgColor || '#04070E') : '#FFFFFF';
-  const pageBgColor = isDark ? (brand?.pageBgColor || '#040D16') : '#F8FAFC';
-  const buttonBgColor = isDark ? (brand?.buttonBgColor || '#0F1A26') : '#FFFFFF';
+  const partnerName = effectiveBrand?.partnerName || preset.partnerName;
+  const logoUrl = effectiveBrand?.logoUrl || preset.logoUrl;
+  const accentColor = effectiveBrand?.highlightedButtonBg || preset.highlightedButtonBg || '#D4AF37';
+  const accentTextColor = effectiveBrand?.highlightedButtonText || preset.highlightedButtonText || '#04070E';
+  const headerBgColor = isDark ? (effectiveBrand?.headerBgColor || preset.headerBgColor || '#04070E') : '#FFFFFF';
+  const pageBgColor = isDark ? (effectiveBrand?.pageBgColor || preset.pageBgColor || '#040D16') : '#F8FAFC';
+  const buttonBgColor = isDark ? (effectiveBrand?.buttonBgColor || preset.buttonBgColor || '#0F1A26') : '#FFFFFF';
 
   const [loading, setLoading] = useState(false);
   const [sentinelProducts, setSentinelProducts] = useState(DEFAULT_SENTINEL_PRODUCTS);
-  const [customProducts, setCustomProducts] = useState(DEFAULT_CUSTOM_PRODUCTS);
+  const [customProducts, setCustomProducts] = useState(() => getCustomProductsForCompany(companyId, partnerName));
   const [sales, setSales] = useState({ sentinelSold: 48, customSold: 22 });
   const [showAddModal, setShowAddModal] = useState(false);
   const [newProduct, setNewProduct] = useState({ name: '', sku: '', description: '', category: 'Security Hardware', costPrice: '', sellingPrice: '', stockQty: '' });
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!companyId) return;
+    setCompanyId(companyId);
+
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('safelink_brand_' + companyId);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.partnerName) setCompanyBrand(parsed);
+        }
+      } catch {}
+    }
+
+    fetch(`/api/cream/company/${companyId}/branding`, { cache: 'no-store' })
+      .then(res => res.json())
+      .then(json => {
+        if (json?.branding) {
+          setCompanyBrand(json.branding);
+          try {
+            localStorage.setItem('safelink_brand_' + companyId, JSON.stringify(json.branding));
+          } catch {}
+        }
+      })
+      .catch(err => console.warn('[company-stock] Error fetching company branding:', err));
+
+    const handleBrandOverride = (e) => {
+      if (e.detail) setCompanyBrand(e.detail);
+    };
+    window.addEventListener('safelink_brand_updated', handleBrandOverride);
+    return () => window.removeEventListener('safelink_brand_updated', handleBrandOverride);
+  }, [companyId, setCompanyId]);
+
+  useEffect(() => {
+    if (companyId) {
+      setCustomProducts(getCustomProductsForCompany(companyId, partnerName));
+    }
+  }, [companyId, partnerName]);
 
   const fetchStock = useCallback(async () => {
     if (!companyId) return;
@@ -426,7 +487,7 @@ export default function CompanyStockPage({ params: paramsPromise }) {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Sovereign Tactical Perimeter Beam"
+                    placeholder={`e.g. ${partnerName} Tactical Perimeter Beam`}
                     value={newProduct.name}
                     onChange={e => setNewProduct(prev => ({ ...prev, name: e.target.value }))}
                     className={`w-full p-2.5 rounded-xl border outline-none ${isDark ? 'bg-black/50 border-white/10 text-white focus:border-amber-400' : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-amber-500'}`}

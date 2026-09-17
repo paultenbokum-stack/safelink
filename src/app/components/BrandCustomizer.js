@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { SOVEREIGN_DEFAULT_BRAND, useBrandTheme } from '@/lib/brand-context';
+import { SOVEREIGN_DEFAULT_BRAND, useBrandTheme, getBrandPreset } from '@/lib/brand-context';
 
 const PRESET_HEADER_IMAGES = [
   { id: 'none', label: 'None (Solid Color)', url: '' },
@@ -143,6 +143,9 @@ export default function BrandCustomizer({ companyId = 'sovereign_intervention', 
       // Notify any live client views in the same browser window
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('safelink_brand_updated', { detail: branding }));
+        try {
+          localStorage.setItem('safelink_brand_' + companyId, JSON.stringify(branding));
+        } catch {}
       }
       refreshBrand?.();
       onSaved?.(branding);
@@ -156,11 +159,14 @@ export default function BrandCustomizer({ companyId = 'sovereign_intervention', 
   };
 
   const handleReset = () => {
-    if (confirm('Reset to Sovereign Intervention standard brand defaults?')) {
-      const resetBrand = { ...SOVEREIGN_DEFAULT_BRAND, companyId };
-      setBranding(resetBrand);
+    const preset = getBrandPreset(companyId);
+    if (confirm(`Reset to ${preset.partnerName} standard brand defaults?`)) {
+      setBranding(preset);
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('safelink_brand_updated', { detail: resetBrand }));
+        window.dispatchEvent(new CustomEvent('safelink_brand_updated', { detail: preset }));
+        try {
+          localStorage.setItem('safelink_brand_' + companyId, JSON.stringify(preset));
+        } catch {}
       }
     }
   };

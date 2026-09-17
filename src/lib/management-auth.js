@@ -1,8 +1,8 @@
 import { authenticateFirebaseRequest } from '@/lib/firebase-admin';
 import { NextResponse } from 'next/server';
 
-const BUILTIN_ADMIN_UIDS = ['WtPfmIUEJCOooQDDtarxhsYrdq23', 'RYJ1bLcqY4Ty17Jrmrzd3mm9VG42'];
-const BUILTIN_ADMIN_EMAILS = ['hello@guestwave.co', 'kyle@creamtech.co.za', 'clansaffy@gmail.com'];
+const BUILTIN_ADMIN_UIDS = ['WtPfmIUEJCOooQDDtarxhsYrdq23', 'RYJ1bLcqY4Ty17Jrmrzd3mm9VG42', '3XgeX8ITFIQfbodBZX9TfOxEqt73'];
+const BUILTIN_ADMIN_EMAILS = ['hello@guestwave.co', 'kyle@creamtech.co.za', 'clansaffy@gmail.com', 'rocky@sovereignintervention.co.za'];
 
 // Management access is provisioned on the server, never from a tenant ID in a request.
 export function isManagementAdmin(user) {

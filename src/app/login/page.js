@@ -71,6 +71,7 @@ export default function LoginPage() {
         userEmail === 'kyle@creamtech.co.za' || 
         userEmail === 'hello@guestwave.co' || 
         userEmail === 'clansaffy@gmail.com' ||
+        userEmail === 'rocky@sovereignintervention.co.za' ||
         userCred?.user?.email?.toLowerCase().includes('creamtech');
 
       const params = new URLSearchParams(window.location.search);

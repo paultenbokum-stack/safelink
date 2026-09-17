@@ -62,7 +62,7 @@ export async function authenticateFirebaseRequest(request, { allowUnverified = f
   // Real Firebase ID token verification
   try {
     const decoded = await getAuth(adminApp).verifyIdToken(idToken);
-    const isKnownAdmin = decoded.admin === true || ['WtPfmIUEJCOooQDDtarxhsYrdq23', 'RYJ1bLcqY4Ty17Jrmrzd3mm9VG42'].includes(decoded.uid) || ['hello@guestwave.co', 'kyle@creamtech.co.za', 'clansaffy@gmail.com'].includes(decoded.email?.toLowerCase());
+    const isKnownAdmin = decoded.admin === true || ['WtPfmIUEJCOooQDDtarxhsYrdq23', 'RYJ1bLcqY4Ty17Jrmrzd3mm9VG42', '3XgeX8ITFIQfbodBZX9TfOxEqt73'].includes(decoded.uid) || ['hello@guestwave.co', 'kyle@creamtech.co.za', 'clansaffy@gmail.com', 'rocky@sovereignintervention.co.za'].includes(decoded.email?.toLowerCase());
     if (!decoded.uid || (!allowUnverified && !decoded.email_verified && !decoded.phone_number && decoded.familyMember !== true && !isKnownAdmin)) {
       throw new Error('UNAUTHENTICATED');
     }

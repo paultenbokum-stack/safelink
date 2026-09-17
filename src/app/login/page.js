@@ -25,7 +25,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
 
   // Partner ID / PIN state
-  const [partnerId, setPartnerId] = useState('SI-000001');
+  const isSbSecurity = companyId === 'sb_security' || companyId === 'sb';
+  const defaultPartnerPrefix = isSbSecurity ? 'SB' : (companyId && companyId !== 'sovereign_intervention' ? companyId.slice(0, 2).toUpperCase() : 'SI');
+  const [partnerId, setPartnerId] = useState(isSbSecurity ? 'SB-000001' : 'SI-000001');
   const [partnerPin, setPartnerPin] = useState('');
 
   const [loading, setLoading] = useState(false);
@@ -42,6 +44,12 @@ export default function LoginPage() {
       setMode('company');
     }
   }, []);
+
+  // Update default partner ID when companyId changes
+  useEffect(() => {
+    const isSb = companyId === 'sb_security' || companyId === 'sb';
+    setPartnerId(isSb ? 'SB-000001' : (companyId && companyId !== 'sovereign_intervention' ? `${companyId.slice(0, 2).toUpperCase()}-000001` : 'SI-000001'));
+  }, [companyId]);
 
   // Brand tokens from Look & Feel branding portal
   const partnerName = brand?.partnerName || 'Sovereign Intervention';
@@ -378,7 +386,7 @@ export default function LoginPage() {
                     <input
                       id="partner-id"
                       type="text"
-                      placeholder="e.g. SI-000001"
+                      placeholder={`e.g. ${defaultPartnerPrefix}-000001`}
                       value={partnerId}
                       onChange={(e) => setPartnerId(e.target.value.toUpperCase())}
                       autoCapitalize="characters"
@@ -388,7 +396,7 @@ export default function LoginPage() {
                     />
                   </div>
                   <p className="text-[11px] text-on-surface-variant pl-1">
-                    Prefix SI = Sovereign Intervention (Demo PIN: 1234)
+                    Prefix {defaultPartnerPrefix} = {partnerName} (Demo PIN: 1234)
                   </p>
                 </div>
 
@@ -453,7 +461,7 @@ export default function LoginPage() {
             <InvestorIntro />
 
             <Link
-              href="/signup"
+              href={companyId ? `/signup?company=${companyId}` : '/signup'}
               className="block text-center rounded-xl border border-secondary/50 bg-secondary/10 text-secondary py-3 font-bold text-xs transition-colors hover:bg-secondary/20"
             >
               New to {partnerName}? Create your account →

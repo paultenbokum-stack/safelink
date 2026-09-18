@@ -54,9 +54,17 @@ export class PartnerAdapter {
  * TrackSolid calls use the original IMEI server-side; client only ever sees the hash.
  */
 export function hashImei(imei) {
-  const salt = process.env.NEXT_PUBLIC_IMEI_SALT || 'safelink-imei-salt';
+  // IMEI_SALT must be a server-only secret — never use NEXT_PUBLIC_ for HMAC keys.
+  const salt = process.env.IMEI_SALT;
+  if (!salt) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('[partner-adapter] IMEI_SALT environment variable is not set. IMEI hashing is unavailable.');
+    }
+    // Development-only fallback — will never reach production.
+    console.warn('[partner-adapter] IMEI_SALT not set; using insecure development fallback.');
+  }
   return crypto
-    .createHmac('sha256', salt)
+    .createHmac('sha256', salt || 'safelink-imei-dev-only-salt')
     .update(String(imei).trim())
     .digest('hex')
     .substring(0, 16); // 16-char reference — unguessable, non-reversible

@@ -46,29 +46,8 @@ export const DEFAULT_BRANDINGS = {
     updatedAt: new Date().toISOString(),
     sourceUrl: 'https://sbsecurity.co.za/',
   },
-  security_brokers: {
-    companyId: 'security_brokers',
-    partnerName: 'Security Brokers',
-    shortName: 'SB Security',
-    logoUrl: '/presentation/security-brokers-logo.png',
-    showLogoInHeader: true,
-    headerBgColor: '#04070E',
-    headerBgImage: '',
-    headerTextColor: '#F7BB23',
-    headerTextAuto: false,
-    pageBgColor: '#040D16',
-    pageBgImage: '',
-    pageTextColor: '#F8FAFC',
-    fontFamily: 'modern',
-    highlightedButtonBg: '#F7BB23',
-    highlightedButtonText: '#04070E',
-    highlightedButtonAuto: false,
-    buttonBgColor: '#0F1A26',
-    buttonTextColor: '#F7BB23',
-    buttonOpacity: 75,
-    updatedAt: new Date().toISOString(),
-    sourceUrl: 'https://sbsecurity.co.za/',
-  },
+  // Note: 'security_brokers' is an alias for 'sb_security' — see resolvePreset() below.
+  // Only one canonical entry exists to prevent divergence.
   default: {
     companyId: 'default',
     partnerName: 'SafeLink Security',
@@ -89,28 +68,29 @@ export const DEFAULT_BRANDINGS = {
     buttonBgColor: '#121E2C',
     buttonTextColor: '#00E5FF',
     buttonOpacity: 70,
-    updatedAt: new Date().toISOString(),
   },
 };
 
-// Global in-memory cache to support demo mutations across serverless executions
-const memoryBrandStore = new Map();
+// NOTE: No module-level cache. Serverless instances are short-lived and shared;
+// a Map() here can bleed between requests for different tenants on a warm instance.
+// Firestore is the source of truth for branding — read it on every request.
 
 /**
  * Fetch branding configuration for a specific security company.
  */
 export async function getCompanyBranding(companyId) {
   const cleanId = String(companyId || '').trim().toLowerCase();
-  
-  if (memoryBrandStore.has(cleanId)) {
-    return memoryBrandStore.get(cleanId);
-  }
 
   const resolvePreset = (cid) => {
     if (DEFAULT_BRANDINGS[cid]) return DEFAULT_BRANDINGS[cid];
-    if (cid === 'sb' || cid === 'sbsecurity' || cid === 'securitybrokers' || cid.includes('sb_sec')) {
+    // Canonical aliases for sb_security — all map to the same brand preset.
+    if (
+      cid === 'sb' || cid === 'sbsecurity' || cid === 'securitybrokers' ||
+      cid === 'security_brokers' || cid.startsWith('sb_sec') || cid.includes('security_broker')
+    ) {
       return DEFAULT_BRANDINGS.sb_security;
     }
+    // Canonical aliases for sovereign_intervention.
     if (cid === 'si' || cid === 'sovereign' || cid.includes('sovereign')) {
       return DEFAULT_BRANDINGS.sovereign_intervention;
     }
@@ -123,26 +103,21 @@ export async function getCompanyBranding(companyId) {
     const db = getAdminFirestore();
     const doc = await db.collection('security_companies').doc(cleanId).get();
     if (doc.exists && doc.data()?.branding) {
-      const merged = {
+      return {
         ...(preset || DEFAULT_BRANDINGS.default),
         ...doc.data().branding,
         companyId: cleanId,
       };
-      memoryBrandStore.set(cleanId, merged);
-      return merged;
     }
   } catch (err) {
     console.warn(`[branding-store] Firestore lookup failed for ${cleanId}, using preset:`, err.message);
   }
 
-  const fallback = preset || {
+  return preset || {
     ...DEFAULT_BRANDINGS.default,
     companyId: cleanId,
     partnerName: cleanId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
   };
-
-  memoryBrandStore.set(cleanId, fallback);
-  return fallback;
 }
 
 /**
@@ -156,10 +131,8 @@ export async function saveCompanyBranding(companyId, brandingData) {
     ...current,
     ...brandingData,
     companyId: cleanId,
-    updatedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(), // always set at save time, not at module load
   };
-
-  memoryBrandStore.set(cleanId, updated);
 
   try {
     const db = getAdminFirestore();
@@ -171,7 +144,7 @@ export async function saveCompanyBranding(companyId, brandingData) {
       { merge: true }
     );
   } catch (err) {
-    console.warn(`[branding-store] Firestore persistence failed for ${cleanId} (cached in memory):`, err.message);
+    console.warn(`[branding-store] Firestore persistence failed for ${cleanId}:`, err.message);
   }
 
   return updated;

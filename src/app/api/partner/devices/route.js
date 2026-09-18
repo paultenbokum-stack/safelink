@@ -46,13 +46,15 @@ export async function GET(request) {
     let savedNicknames = {};
     try {
       const db = getAdminFirestore();
-      const labelsDoc = await db
-        .collection('device_labels')
-        .doc(session.clientRef)
-        .get();
-      if (labelsDoc.exists) {
-        savedNicknames = labelsDoc.data() || {};
-      }
+    // Namespace labels by partnerId+clientRef to prevent cross-partner collisions.
+    const labelDocId = `${session.partnerId}_${session.clientRef}`;
+    const labelsDoc = await db
+      .collection('device_labels')
+      .doc(labelDocId)
+      .get();
+    if (labelsDoc.exists) {
+      savedNicknames = labelsDoc.data() || {};
+    }
     } catch (e) {
       // Non-fatal — nicknames from adapter used as fallback
       console.warn('[partner/devices] Could not load labels:', e.message);
@@ -144,7 +146,9 @@ export async function PATCH(request) {
     }
 
     const db = getAdminFirestore();
-    await db.collection('device_labels').doc(session.clientRef).set(
+    // Namespace by partnerId+clientRef — mirrors the read path above.
+    const labelDocId = `${session.partnerId}_${session.clientRef}`;
+    await db.collection('device_labels').doc(labelDocId).set(
       { [hashedImei]: nickname.trim().substring(0, 50) },
       { merge: true }
     );

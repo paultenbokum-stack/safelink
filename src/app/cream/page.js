@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useManagementFetch } from '@/lib/use-management-fetch';
 import PartnerIntegrations from '@/app/components/PartnerIntegrations';
 import { DEMO_COMPANIES } from '@/lib/demo-companies';
@@ -20,6 +21,16 @@ export default function CreamMasterPage() {
   const [companies, setCompanies] = useState(DEMO_COMPANIES);
   const [loading, setLoading] = useState(true);
   const [selectedTenant, setSelectedTenant] = useState('demo_coastal');
+  const [archivedCompanyIds, setArchivedCompanyIds] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = JSON.parse(localStorage.getItem('safelink_archived_companies') || '[]');
+        if (Array.isArray(stored)) return stored;
+      } catch {}
+    }
+    return [];
+  });
+  const [companyFilter, setCompanyFilter] = useState('active'); // 'active' | 'all' | 'archived'
 
   // Modals
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
@@ -185,6 +196,55 @@ export default function CreamMasterPage() {
     }
   };
 
+  const isCompanyArchived = useCallback((comp) => {
+    if (!comp) return false;
+    return comp.isArchived === true || comp.status === 'archived' || archivedCompanyIds.includes(comp.id);
+  }, [archivedCompanyIds]);
+
+  const handleToggleArchive = async (companyId, e) => {
+    if (e) e.stopPropagation();
+    const comp = companies.find(c => c.id === companyId);
+    const currentlyArchived = isCompanyArchived(comp);
+    const nextArchived = !currentlyArchived;
+
+    const nextArchivedIds = nextArchived
+      ? Array.from(new Set([...archivedCompanyIds, companyId]))
+      : archivedCompanyIds.filter(id => id !== companyId);
+
+    setArchivedCompanyIds(nextArchivedIds);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('safelink_archived_companies', JSON.stringify(nextArchivedIds));
+      } catch {}
+    }
+
+    setCompanies(prev => prev.map(c => {
+      if (c.id === companyId) {
+        return {
+          ...c,
+          isArchived: nextArchived,
+          status: nextArchived ? 'archived' : 'active',
+        };
+      }
+      return c;
+    }));
+
+    try {
+      await managementFetch('/api/cream/companies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: nextArchived ? 'archive_company' : 'unarchive_company',
+          companyId,
+          isArchived: nextArchived,
+          status: nextArchived ? 'archived' : 'active',
+        }),
+      });
+    } catch (err) {
+      console.warn('Could not update archive status on server:', err);
+    }
+  };
+
   const handleCreateCompany = async (e) => {
     e.preventDefault();
     if (!newCompany.name.trim()) return;
@@ -338,27 +398,46 @@ export default function CreamMasterPage() {
     }
   };
 
+  const activeCompanies = companies.filter(c => !isCompanyArchived(c));
+  const activeCompaniesCount = activeCompanies.length;
+  const archivedCompaniesCount = companies.filter(c => isCompanyArchived(c)).length;
+  const allCompaniesCount = companies.length;
+
+  const filteredCompanies = companies.filter(c => {
+    const archived = isCompanyArchived(c);
+    if (companyFilter === 'active') return !archived;
+    if (companyFilter === 'archived') return archived;
+    return true; // 'all'
+  });
+
   const totals = metrics?.totals || {
-    totalCustomers: companies.reduce((s, c) => s + (c.totalCustomers || c.memberCount || 0), 0),
-    activeCustomers: companies.reduce((s, c) => s + (c.activeCustomers || c.memberCount || 0), 0),
-    inactiveCustomers: companies.reduce((s, c) => s + (c.inactiveCustomers || 0), 0),
-    totalIncidents: companies.reduce((s, c) => s + (c.totalIncidents || 18), 0),
-    monthlyIncidents: companies.reduce((s, c) => s + (c.monthlyIncidents || 6), 0),
-    totalSentinelSold: companies.reduce((s, c) => s + (c.totalSentinelSold || c.deviceCount || 0), 0),
-    monthlySentinelSold: companies.reduce((s, c) => s + (c.monthlySentinelSold || Math.round((c.deviceCount || 10) * 0.3)), 0),
-    monthlyOtherHW: companies.reduce((s, c) => s + (c.monthlyOtherHW || 2), 0),
-    monthlyRevenue: companies.reduce((s, c) => s + (c.monthlyRevenue || 45000), 0),
-    creamRevenue: companies.reduce((s, c) => s + (c.monthlyRevenue || 45000) * 0.01, 0),
+    totalCustomers: activeCompanies.reduce((s, c) => s + (c.totalCustomers || c.memberCount || 0), 0),
+    activeCustomers: activeCompanies.reduce((s, c) => s + (c.activeCustomers || c.memberCount || 0), 0),
+    inactiveCustomers: activeCompanies.reduce((s, c) => s + (c.inactiveCustomers || 0), 0),
+    totalIncidents: activeCompanies.reduce((s, c) => s + (c.totalIncidents || 18), 0),
+    monthlyIncidents: activeCompanies.reduce((s, c) => s + (c.monthlyIncidents || 6), 0),
+    totalSentinelSold: activeCompanies.reduce((s, c) => s + (c.totalSentinelSold || c.deviceCount || 0), 0),
+    monthlySentinelSold: activeCompanies.reduce((s, c) => s + (c.monthlySentinelSold || Math.round((c.deviceCount || 10) * 0.3)), 0),
+    monthlyOtherHW: activeCompanies.reduce((s, c) => s + (c.monthlyOtherHW || 2), 0),
+    monthlyRevenue: activeCompanies.reduce((s, c) => s + (c.monthlyRevenue || 45000), 0),
+    creamRevenue: activeCompanies.reduce((s, c) => s + (c.monthlyRevenue || 45000) * 0.01, 0),
   };
 
   return (
     <div className={`${isDark ? 'bg-[#03070f] text-white' : 'bg-[#F8FAFC] text-slate-900'} min-h-screen flex flex-col font-sans transition-colors duration-200 selection:bg-purple-500/30 selection:text-purple-300`}>
       {managementError && <p role="alert" className="p-4 text-error">{managementError}</p>}
       {/* Executive Top Banner */}
-      <header className={`${isDark ? 'bg-gradient-to-r from-[#0d091a] via-[#100c24] to-[#0d091a] border-purple-500/20 shadow-2xl' : 'bg-white border-slate-200 shadow-sm'} border-b px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-30 transition-all`}>
-        <div className="flex items-center gap-4">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 to-amber-500 flex items-center justify-center text-white shadow-[0_0_20px_rgba(168,85,247,0.4)]">
-            <span className="material-symbols-outlined text-2xl font-bold">diamond</span>
+      <header className={`${isDark ? 'bg-gradient-to-r from-[#0d091a] via-[#100c24] to-[#0d091a] border-purple-500/20 shadow-2xl' : 'bg-white border-slate-200 shadow-sm'} border-b px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-30 transition-all`}>
+        <div className="flex items-center gap-3.5">
+          <div className="relative w-11 h-11 rounded-full overflow-hidden shrink-0 shadow-[0_0_20px_rgba(168,85,247,0.35)] ring-2 ring-purple-500/40 bg-black flex items-center justify-center">
+            <Image
+              src="/cream-logo.png"
+              alt="CREAM Logo"
+              width={44}
+              height={44}
+              className="w-full h-full object-cover"
+              priority
+            />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -458,8 +537,8 @@ export default function CreamMasterPage() {
         </div>
       </header>
 
-      {/* Main Workspace */}
-      <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-8">
+      {/* Main Workspace — Full Width */}
+      <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 w-full space-y-8">
         {/* Executive Summary Metrics Strip */}
         <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <div className={`rounded-2xl p-4 border transition-all ${isDark ? 'bg-[#080d19] border-white/10 shadow' : 'bg-white border-slate-200 shadow-sm'}`}>
@@ -545,6 +624,69 @@ export default function CreamMasterPage() {
                 Multi-tenant performance, customer payment statuses, incident response, and hardware turnover.
               </p>
             </div>
+
+            {/* Filter Tabs: Active, All, Archived */}
+            <div className={`flex items-center p-1 rounded-xl border text-xs font-semibold ${
+              isDark ? 'bg-[#0d1527] border-white/10' : 'bg-slate-100 border-slate-200'
+            }`}>
+              <button
+                type="button"
+                onClick={() => setCompanyFilter('active')}
+                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                  companyFilter === 'active'
+                    ? (isDark ? 'bg-purple-600 text-white shadow-md font-bold' : 'bg-white text-slate-900 shadow font-bold')
+                    : (isDark ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900')
+                }`}
+              >
+                <span>Active</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                  companyFilter === 'active'
+                    ? 'bg-white/20 text-white'
+                    : (isDark ? 'bg-white/5 text-slate-400' : 'bg-slate-200 text-slate-700')
+                }`}>
+                  {activeCompaniesCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCompanyFilter('all')}
+                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                  companyFilter === 'all'
+                    ? (isDark ? 'bg-purple-600 text-white shadow-md font-bold' : 'bg-white text-slate-900 shadow font-bold')
+                    : (isDark ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900')
+                }`}
+              >
+                <span>All</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                  companyFilter === 'all'
+                    ? 'bg-white/20 text-white'
+                    : (isDark ? 'bg-white/5 text-slate-400' : 'bg-slate-200 text-slate-700')
+                }`}>
+                  {allCompaniesCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCompanyFilter('archived')}
+                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                  companyFilter === 'archived'
+                    ? (isDark ? 'bg-amber-600 text-white shadow-md font-bold' : 'bg-amber-500 text-white shadow font-bold')
+                    : (isDark ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900')
+                }`}
+              >
+                <span className="material-symbols-outlined text-xs">archive</span>
+                <span>Archived</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                  companyFilter === 'archived'
+                    ? 'bg-white/20 text-white'
+                    : (isDark ? 'bg-white/5 text-slate-400' : 'bg-slate-200 text-slate-700')
+                }`}>
+                  {archivedCompaniesCount}
+                </span>
+              </button>
+            </div>
           </div>
 
           {/* Enhanced Companies Table */}
@@ -561,199 +703,273 @@ export default function CreamMasterPage() {
                     <th className="p-4 text-right">Revenue (Month)</th>
                     <th className="p-4 text-center">Paystack Subaccount</th>
                     <th className="p-4 text-center">Status</th>
-                    <th className="p-4 text-right">Drill Down</th>
+                    <th className="p-4 text-right">Actions & Drill Down</th>
                   </tr>
                 </thead>
                 <tbody className={isDark ? 'divide-y divide-white/5' : 'divide-y divide-slate-100'}>
-                  {companies.map((comp) => {
-                    const totalCust = comp.totalCustomers ?? comp.memberCount ?? 0;
-                    const actCust = comp.activeCustomers ?? comp.memberCount ?? 0;
-                    const inactCust = comp.inactiveCustomers ?? 0;
-                    const totInc = comp.totalIncidents ?? 14;
-                    const moInc = comp.monthlyIncidents ?? 4;
-                    const totSent = comp.totalSentinelSold ?? comp.deviceCount ?? 0;
-                    const moSent = comp.monthlySentinelSold ?? Math.round((comp.deviceCount || 10) * 0.3);
-                    const moOther = comp.monthlyOtherHW ?? 1;
-                    const moRev = comp.monthlyRevenue ?? 35000;
-
-                    return (
-                      <tr
-                        key={comp.id}
-                        className={`transition-colors ${
-                          isDark ? 'hover:bg-white/5' : 'hover:bg-slate-50'
-                        } ${selectedTenant === comp.id ? (isDark ? 'bg-purple-900/10' : 'bg-purple-50/50') : ''}`}
-                      >
-                        {/* Company Name */}
-                        <td className="p-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold ${
-                              isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-100 text-purple-700'
-                            }`}>
-                              {comp.name?.substring(0, 1)}
-                            </div>
-                            <div>
-                              <strong className={`text-sm block ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                                {comp.name} {comp.isDemo && <span className={`font-normal text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>[Demo]</span>}
-                              </strong>
-                              <span className={`text-[11px] font-mono ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>
-                                PSIRA: {comp.registrationNumber || comp.psiraNumber || 'PSIRA-2024/001'}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Customers (Total / Active / Inactive) */}
-                        <td className="p-4 text-center font-mono">
-                          <Link
-                            href={`/cream/company/${comp.id}`}
-                            className="inline-block hover:underline"
-                            title="Click to view customer details & payment arrears"
-                          >
-                            <span className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{totalCust}</span>
-                            <span className="text-slate-400 text-[11px] block">
-                              <span className="text-emerald-500 font-semibold">{actCust} act</span> •{' '}
-                              <span className="text-rose-500">{inactCust} inact</span>
+                  {filteredCompanies.length === 0 ? (
+                    <tr>
+                      <td colSpan="9" className="p-12 text-center">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+                            isDark ? 'bg-white/5 text-slate-400' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            <span className="material-symbols-outlined text-2xl">
+                              {companyFilter === 'archived' ? 'inventory_2' : 'search_off'}
                             </span>
-                          </Link>
-                        </td>
-
-                        {/* Incidents (Month / Total) */}
-                        <td className="p-4 text-center font-mono">
-                          <Link
-                            href={`/cream/company/${comp.id}`}
-                            className="inline-block hover:underline"
-                            title="Click to view incident types and logs"
-                          >
-                            <span className={`font-bold text-sm ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>{moInc}</span>
-                            <span className={`text-[11px] block ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{totInc} all-time</span>
-                          </Link>
-                        </td>
-
-                        {/* Sentinel Devices Sold */}
-                        <td className="p-4 text-center font-mono">
-                          <Link
-                            href={`/cream/company/${comp.id}/stock`}
-                            className="inline-block hover:underline"
-                            title="Click to manage stock & view device orders"
-                          >
-                            <span className={`font-bold text-sm ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>{moSent > 0 ? `+${moSent}` : moSent}</span>
-                            <span className={`text-[11px] block ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{totSent} total</span>
-                          </Link>
-                        </td>
-
-                        {/* Other HW Sold */}
-                        <td className="p-4 text-center font-mono">
-                          <span className={`font-bold ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>{moOther}</span>
-                          <span className={`text-[11px] block ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>units</span>
-                        </td>
-
-                        {/* Monthly Revenue */}
-                        <td className="p-4 text-right font-mono">
-                          <div className={`font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{formatZAR(moRev)}</div>
-                          <div className={`text-[10px] ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>
-                            CREAM: {formatZAR(moRev * 0.01)}
                           </div>
-                        </td>
-
-                        {/* Paystack Subaccount */}
-                        <td className="p-4 text-center">
-                          {comp.paystackSubaccountCode ? (
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono border ${
-                              isDark ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            }`}>
-                              {comp.paystackSubaccountCode}
-                            </span>
-                          ) : (
-                            <span className={`text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Pending Bank</span>
+                          <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                            {companyFilter === 'archived' ? 'No Archived Companies' : 'No Companies Found'}
+                          </p>
+                          <p className={`text-xs max-w-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                            {companyFilter === 'archived'
+                              ? 'Companies you archive will be stored here and hidden from the active view.'
+                              : 'No companies match the current filter criteria.'}
+                          </p>
+                          {companyFilter !== 'all' && (
+                            <button
+                              type="button"
+                              onClick={() => setCompanyFilter('all')}
+                              className="mt-2 text-xs font-bold text-purple-400 hover:text-purple-300 underline cursor-pointer"
+                            >
+                              Show all companies
+                            </button>
                           )}
-                        </td>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredCompanies.map((comp) => {
+                      const totalCust = comp.totalCustomers ?? comp.memberCount ?? 0;
+                      const actCust = comp.activeCustomers ?? comp.memberCount ?? 0;
+                      const inactCust = comp.inactiveCustomers ?? 0;
+                      const totInc = comp.totalIncidents ?? 14;
+                      const moInc = comp.monthlyIncidents ?? 4;
+                      const totSent = comp.totalSentinelSold ?? comp.deviceCount ?? 0;
+                      const moSent = comp.monthlySentinelSold ?? Math.round((comp.deviceCount || 10) * 0.3);
+                      const moOther = comp.monthlyOtherHW ?? 1;
+                      const moRev = comp.monthlyRevenue ?? 35000;
+                      const archived = isCompanyArchived(comp);
 
-                        {/* Status */}
-                        <td className="p-4 text-center">
-                          <button
-                            onClick={() => handleToggleStatus(comp.id, comp.status)}
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase transition-all ${
-                              comp.status === 'active'
-                                ? (isDark ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100')
-                                : comp.status === 'pending'
-                                ? (isDark ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20' : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100')
-                                : (isDark ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20' : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100')
-                            }`}
-                          >
-                            {comp.status === 'pending' ? 'Pending Review' : comp.status || 'Active'}
-                          </button>
-                        </td>
+                      return (
+                        <tr
+                          key={comp.id}
+                          className={`transition-colors ${
+                            isDark ? 'hover:bg-white/5' : 'hover:bg-slate-50'
+                          } ${archived ? (isDark ? 'opacity-60 hover:opacity-100 bg-black/20' : 'opacity-60 hover:opacity-100 bg-slate-50/70') : ''} ${selectedTenant === comp.id ? (isDark ? 'bg-purple-900/10' : 'bg-purple-50/50') : ''}`}
+                        >
+                          {/* Company Name */}
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold ${
+                                isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-100 text-purple-700'
+                              }`}>
+                                {comp.name?.substring(0, 1)}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <strong className={`text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                                    {comp.name}
+                                  </strong>
+                                  {comp.isDemo && (
+                                    <span className={`font-normal text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>[Demo]</span>
+                                  )}
+                                  {archived && (
+                                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                                      Archived
+                                    </span>
+                                  )}
+                                </div>
+                                <span className={`text-[11px] font-mono ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>
+                                  PSIRA: {comp.registrationNumber || comp.psiraNumber || 'PSIRA-2024/001'}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
 
-                        {/* Actions / Drill-down */}
-                        <td className="p-4 text-right space-x-1.5 whitespace-nowrap">
-                          {/* Inline Pitch Deck Button */}
-                          <Link
-                            href={`/p/${comp.id.replace(/_/g, '-')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`px-2.5 py-1.5 rounded-lg border font-semibold text-xs inline-flex items-center gap-1 transition-all ${
-                              isDark
-                                ? 'bg-amber-500/15 hover:bg-amber-500/25 border-amber-400/40 text-amber-300 shadow'
-                                : 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800 shadow-sm'
-                            }`}
-                            title={`Open White-Label Pitch Deck for ${comp.name}`}
-                          >
-                            <span className="material-symbols-outlined text-sm">slideshow</span>
-                            Pitch Deck
-                          </Link>
+                          {/* Customers (Total / Active / Inactive) */}
+                          <td className="p-4 text-center font-mono">
+                            <Link
+                              href={`/cream/company/${comp.id}`}
+                              className="inline-block hover:underline"
+                              title="Click to view customer details & payment arrears"
+                            >
+                              <span className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{totalCust}</span>
+                              <span className="text-slate-400 text-[11px] block">
+                                <span className="text-emerald-500 font-semibold">{actCust} act</span> •{' '}
+                                <span className="text-rose-500">{inactCust} inact</span>
+                              </span>
+                            </Link>
+                          </td>
 
-                          <Link
-                            href={`/cream/company/${comp.id}`}
-                            className={`px-2.5 py-1.5 rounded-lg border font-semibold text-xs inline-flex items-center gap-1 transition-all ${
-                              isDark
-                                ? 'bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/30 text-purple-300'
-                                : 'bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700'
-                            }`}
-                            title="Drill down into customers, payments, incidents, and revenue"
-                          >
-                            <span className="material-symbols-outlined text-sm">query_stats</span>
-                            Manage
-                          </Link>
+                          {/* Incidents (Month / Total) */}
+                          <td className="p-4 text-center font-mono">
+                            <Link
+                              href={`/cream/company/${comp.id}`}
+                              className="inline-block hover:underline"
+                              title="Click to view incident types and logs"
+                            >
+                              <span className={`font-bold text-sm ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>{moInc}</span>
+                              <span className={`text-[11px] block ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{totInc} all-time</span>
+                            </Link>
+                          </td>
 
-                          <Link
-                            href={`/cream/company/${comp.id}/branding`}
-                            className={`px-2.5 py-1.5 rounded-lg border font-semibold text-xs inline-flex items-center gap-1 transition-all ${
-                              isDark
-                                ? 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-300'
-                                : 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-800'
-                            }`}
-                            title="Configure white-label look and feel, colors, and website CI"
-                          >
-                            <span className="material-symbols-outlined text-sm">palette</span>
-                            Look & Feel
-                          </Link>
+                          {/* Sentinel Devices Sold */}
+                          <td className="p-4 text-center font-mono">
+                            <Link
+                              href={`/cream/company/${comp.id}/stock`}
+                              className="inline-block hover:underline"
+                              title="Click to manage stock & view device orders"
+                            >
+                              <span className={`font-bold text-sm ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>{moSent > 0 ? `+${moSent}` : moSent}</span>
+                              <span className={`text-[11px] block ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{totSent} total</span>
+                            </Link>
+                          </td>
 
-                          <Link
-                            href={`/cream/company/${comp.id}/stock`}
-                            className={`px-2.5 py-1.5 rounded-lg border font-semibold text-xs inline-flex items-center gap-1 transition-all ${
-                              isDark
-                                ? 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
-                                : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
-                            }`}
-                            title="Manage Sentinel toggles and custom security hardware"
-                          >
-                            <span className="material-symbols-outlined text-sm">inventory_2</span>
-                            Stock
-                          </Link>
+                          {/* Other HW Sold */}
+                          <td className="p-4 text-center font-mono">
+                            <span className={`font-bold ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>{moOther}</span>
+                            <span className={`text-[11px] block ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>units</span>
+                          </td>
 
-                          <Link
-                            href={comp.isDemo ? "#demo-company" : `/control-room?companyId=${comp.id}`}
-                            className={`p-1.5 rounded-lg inline-block align-middle transition-colors ${
-                              isDark ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                            }`}
-                            title="Launch Dispatch Control Room"
-                          >
-                            <span className="material-symbols-outlined text-sm">open_in_browser</span>
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          {/* Monthly Revenue */}
+                          <td className="p-4 text-right font-mono">
+                            <div className={`font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{formatZAR(moRev)}</div>
+                            <div className={`text-[10px] ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>
+                              CREAM: {formatZAR(moRev * 0.01)}
+                            </div>
+                          </td>
+
+                          {/* Paystack Subaccount */}
+                          <td className="p-4 text-center">
+                            {comp.paystackSubaccountCode ? (
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono border ${
+                                isDark ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              }`}>
+                                {comp.paystackSubaccountCode}
+                              </span>
+                            ) : (
+                              <span className={`text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Pending Bank</span>
+                            )}
+                          </td>
+
+                          {/* Status */}
+                          <td className="p-4 text-center">
+                            {archived ? (
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border inline-flex items-center gap-1 ${
+                                isDark ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-slate-100 text-slate-600 border-slate-300'
+                              }`}>
+                                <span className="material-symbols-outlined text-[11px]">archive</span>
+                                Archived
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleToggleStatus(comp.id, comp.status)}
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase transition-all ${
+                                  comp.status === 'active'
+                                    ? (isDark ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100')
+                                    : comp.status === 'pending'
+                                    ? (isDark ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20' : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100')
+                                    : (isDark ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20' : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100')
+                                }`}
+                              >
+                                {comp.status === 'pending' ? 'Pending Review' : comp.status || 'Active'}
+                              </button>
+                            )}
+                          </td>
+
+                          {/* Actions / Drill-down */}
+                          <td className="p-4 text-right space-x-1.5 whitespace-nowrap">
+                            {/* Inline Pitch Deck Button */}
+                            <Link
+                              href={`/p/${comp.id.replace(/_/g, '-')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`px-2.5 py-1.5 rounded-lg border font-semibold text-xs inline-flex items-center gap-1 transition-all ${
+                                isDark
+                                  ? 'bg-amber-500/15 hover:bg-amber-500/25 border-amber-400/40 text-amber-300 shadow'
+                                  : 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800 shadow-sm'
+                              }`}
+                              title={`Open White-Label Pitch Deck for ${comp.name}`}
+                            >
+                              <span className="material-symbols-outlined text-sm">slideshow</span>
+                              Pitch Deck
+                            </Link>
+
+                            <Link
+                              href={`/cream/company/${comp.id}`}
+                              className={`px-2.5 py-1.5 rounded-lg border font-semibold text-xs inline-flex items-center gap-1 transition-all ${
+                                isDark
+                                  ? 'bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/30 text-purple-300'
+                                  : 'bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700'
+                              }`}
+                              title="Drill down into customers, payments, incidents, and revenue"
+                            >
+                              <span className="material-symbols-outlined text-sm">query_stats</span>
+                              Manage
+                            </Link>
+
+                            <Link
+                              href={`/cream/company/${comp.id}/branding`}
+                              className={`px-2.5 py-1.5 rounded-lg border font-semibold text-xs inline-flex items-center gap-1 transition-all ${
+                                isDark
+                                  ? 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-300'
+                                  : 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-800'
+                              }`}
+                              title="Configure white-label look and feel, colors, and website CI"
+                            >
+                              <span className="material-symbols-outlined text-sm">palette</span>
+                              Look & Feel
+                            </Link>
+
+                            <Link
+                              href={`/cream/company/${comp.id}/stock`}
+                              className={`px-2.5 py-1.5 rounded-lg border font-semibold text-xs inline-flex items-center gap-1 transition-all ${
+                                isDark
+                                  ? 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
+                                  : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                              }`}
+                              title="Manage Sentinel toggles and custom security hardware"
+                            >
+                              <span className="material-symbols-outlined text-sm">inventory_2</span>
+                              Stock
+                            </Link>
+
+                            {/* Archive / Restore Button */}
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleArchive(comp.id, e)}
+                              className={`px-2.5 py-1.5 rounded-lg border font-semibold text-xs inline-flex items-center gap-1 transition-all cursor-pointer ${
+                                archived
+                                  ? (isDark
+                                      ? 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-400/50 text-amber-300 shadow'
+                                      : 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800 shadow-sm')
+                                  : (isDark
+                                      ? 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-400 hover:text-slate-200'
+                                      : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600')
+                              }`}
+                              title={archived ? `Restore ${comp.name}` : `Archive ${comp.name}`}
+                            >
+                              <span className="material-symbols-outlined text-sm">
+                                {archived ? 'unarchive' : 'archive'}
+                              </span>
+                              <span>{archived ? 'Restore' : 'Archive'}</span>
+                            </button>
+
+                            <Link
+                              href={comp.isDemo ? "#demo-company" : `/control-room?companyId=${comp.id}`}
+                              className={`p-1.5 rounded-lg inline-block align-middle transition-colors ${
+                                isDark ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                              }`}
+                              title="Launch Dispatch Control Room"
+                            >
+                              <span className="material-symbols-outlined text-sm">open_in_browser</span>
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

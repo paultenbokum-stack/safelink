@@ -38,14 +38,27 @@ export async function POST(request) {
   if (accessError) return accessError;
   try {
     const body = await request.json();
-    const { incidentId, status, notes } = body;
+    const { incidentId, status, notes, companyId } = body;
 
     if (!incidentId || !status) {
       return NextResponse.json({ error: 'Missing incidentId or status' }, { status: 400 });
     }
 
+    if (!companyId) {
+      return NextResponse.json({ error: 'companyId is required to verify ownership' }, { status: 400 });
+    }
+
     const firestore = getAdminFirestore();
     const incidentRef = firestore.collection('incidents').doc(incidentId);
+
+    // Verify the incident belongs to the requesting company before mutating.
+    const incidentSnap = await incidentRef.get();
+    if (!incidentSnap.exists) {
+      return NextResponse.json({ error: 'Incident not found.' }, { status: 404 });
+    }
+    if (incidentSnap.data().companyId !== companyId) {
+      return NextResponse.json({ error: 'Access denied: incident does not belong to this company.' }, { status: 403 });
+    }
 
     const updates = {
       status,

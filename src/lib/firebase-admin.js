@@ -1,5 +1,6 @@
 import 'server-only';
 import { authorizeInvitedMember } from './family-invites';
+import { isManagementAdmin } from './management-auth';
 
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
@@ -62,7 +63,8 @@ export async function authenticateFirebaseRequest(request, { allowUnverified = f
   // Real Firebase ID token verification
   try {
     const decoded = await getAuth(adminApp).verifyIdToken(idToken);
-    const isKnownAdmin = decoded.admin === true || ['WtPfmIUEJCOooQDDtarxhsYrdq23', 'RYJ1bLcqY4Ty17Jrmrzd3mm9VG42', '3XgeX8ITFIQfbodBZX9TfOxEqt73'].includes(decoded.uid) || ['hello@guestwave.co', 'kyle@creamtech.co.za', 'clansaffy@gmail.com', 'rocky@sovereignintervention.co.za'].includes(decoded.email?.toLowerCase());
+    // Use the single source of truth for admin membership from management-auth.
+    const isKnownAdmin = isManagementAdmin(decoded);
     if (!decoded.uid || (!allowUnverified && !decoded.email_verified && !decoded.phone_number && decoded.familyMember !== true && !isKnownAdmin)) {
       throw new Error('UNAUTHENTICATED');
     }
@@ -155,6 +157,20 @@ function safeTransactionId(value) {
   return null;
 }
 
+/**
+ * Derive a short referral code prefix from the security company ID.
+ * Ensures no single company's brand bleeds into another tenant's order records.
+ */
+function referralPrefix(companyId) {
+  if (!companyId) return 'SL'; // SafeLink platform default
+  const id = String(companyId).toUpperCase().replace(/[^A-Z0-9]/g, '_');
+  if (id.includes('SOVEREIGN') || id.startsWith('SI_') || id === 'SI') return 'SI';
+  if (id.includes('SECURITY_BROKER') || id.startsWith('SB_') || id === 'SB') return 'SB';
+  // Derive from the first run of capital letters in the ID (e.g. "coastal_shield" → "CS")
+  const letters = id.replace(/_/g, ' ').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 3);
+  return letters || 'SL';
+}
+
 export async function saveVerifiedPaidOrder({ paymentIntent, transaction: paystackTransaction }) {
   const firestore = getAdminFirestore();
   const { uid, reference } = paymentIntent;
@@ -190,7 +206,7 @@ export async function saveVerifiedPaidOrder({ paymentIntent, transaction: paysta
       householdId: uid,
       status: 'pending',
       paymentStatus: 'paid',
-      referralCode: `SBSec-${reference.slice(-10).toUpperCase()}`,
+      referralCode: `${referralPrefix(paymentIntent.companyId)}-${reference.slice(-10).toUpperCase()}`,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });

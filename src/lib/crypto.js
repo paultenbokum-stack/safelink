@@ -2,7 +2,11 @@
  * AES-256-GCM IMEI encryption — POPIA compliance.
  *
  * The encryption key is derived from:
- *   NEXT_PUBLIC_IMEI_SALT  (app-wide secret, set in .env.local)
+ *   NEXT_PUBLIC_IMEI_ENCRYPTION_KEY  (client-side AES key derivation input, set in .env.local)
+ *                                     NOTE: This is deliberately NEXT_PUBLIC_ because AES-256-GCM
+ *                                     key derivation happens in the browser via crypto.subtle.
+ *                                     Keep this distinct from the server-only IMEI_SALT used for
+ *                                     HMAC hashing in partner-adapter.js.
  *   uid                    (user-specific — different key per household)
  *
  * This means:
@@ -13,7 +17,7 @@
  * Storage format (base64 JSON):  { iv, data }
  */
 
-const SALT = process.env.NEXT_PUBLIC_IMEI_SALT || 'safelink-default-imei-salt-change-me';
+const SALT = process.env.NEXT_PUBLIC_IMEI_ENCRYPTION_KEY || process.env.NEXT_PUBLIC_IMEI_SALT || 'safelink-default-imei-salt-change-me';
 
 async function deriveKey(uid) {
   const enc = new TextEncoder();

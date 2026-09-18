@@ -95,7 +95,9 @@ export async function createOrder(uid, orderData) {
     ...orderData,
     uid,
     status: 'pending',
-    referralCode: `SBSec-${Date.now().toString(36).toUpperCase()}`,
+    // Referral codes are generated server-side with the correct tenant prefix.
+    // This client path uses a safe generic prefix as a fallback only.
+    referralCode: `SL-${Date.now().toString(36).toUpperCase()}`,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });

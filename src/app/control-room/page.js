@@ -124,14 +124,37 @@ export default function ControlRoomPage() {
     apiKey: '',
   });
 
-  // Check URL params on initial load
+  // Resolve companyId: URL param > Firebase custom claims > household cache > default
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const sp = new URLSearchParams(window.location.search);
-      const qCompany = sp.get('companyId');
-      if (qCompany) setCompanyId(qCompany);
+    if (typeof window === 'undefined') return;
+
+    const sp = new URLSearchParams(window.location.search);
+    const qCompany = sp.get('companyId');
+    if (qCompany) {
+      setCompanyId(qCompany);
+      return;
     }
-  }, []);
+
+    // Check Firebase custom claims on the current user token.
+    if (user?.getIdTokenResult) {
+      user.getIdTokenResult().then(({ claims }) => {
+        if (claims.companyId) {
+          setCompanyId(claims.companyId);
+          return;
+        }
+        // Fall back to household's linked security company.
+        try {
+          const h = JSON.parse(localStorage.getItem('active_household') || '{}');
+          if (h.securityCompanyId) setCompanyId(h.securityCompanyId);
+        } catch { /* keep safelink_default */ }
+      }).catch(() => {
+        try {
+          const h = JSON.parse(localStorage.getItem('active_household') || '{}');
+          if (h.securityCompanyId) setCompanyId(h.securityCompanyId);
+        } catch { /* keep safelink_default */ }
+      });
+    }
+  }, [user]);
 
   // Fetch all companies for tenant switcher
   useEffect(() => {
@@ -387,7 +410,8 @@ export default function ControlRoomPage() {
       await managementFetch('/api/control-room/incidents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ incidentId, status }),
+        // Include companyId so the server can verify incident ownership.
+        body: JSON.stringify({ incidentId, status, companyId }),
       });
       fetchData();
     } catch (e) {

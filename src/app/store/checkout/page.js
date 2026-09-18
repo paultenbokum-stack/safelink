@@ -161,7 +161,7 @@ function CheckoutContent() {
   if (step === 4 && orderId) {
     return (
       <div className="checkout-page">
-        <ConfirmationScreen orderId={orderId} total={confirmedTotal ?? total} onDone={() => router.push('/orders')} />
+        <ConfirmationScreen orderId={orderId} total={confirmedTotal ?? total} household={household} onDone={() => router.push('/orders')} />
         <CheckoutStyles />
       </div>
     );
@@ -271,7 +271,18 @@ function CheckoutContent() {
   );
 }
 
-function ConfirmationScreen({ orderId, total, onDone }) {
+/** Derive a referral code prefix from the security company ID — mirrors server-side logic. */
+function referralPrefix(companyId) {
+  if (!companyId) return 'SL';
+  const id = String(companyId).toUpperCase().replace(/[^A-Z0-9]/g, '_');
+  if (id.includes('SOVEREIGN') || id.startsWith('SI_') || id === 'SI') return 'SI';
+  if (id.includes('SECURITY_BROKER') || id.startsWith('SB_') || id === 'SB') return 'SB';
+  const letters = id.replace(/_/g, ' ').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 3);
+  return letters || 'SL';
+}
+
+function ConfirmationScreen({ orderId, total, household, onDone }) {
+  const prefix = referralPrefix(household?.securityCompanyId);
   return (
     <div className="confirmation">
       <div className="confirm-icon">✅</div>
@@ -280,7 +291,7 @@ function ConfirmationScreen({ orderId, total, onDone }) {
 
       <div className="confirm-card">
         <div className="confirm-row"><span>Order ID</span><span className="confirm-val">#{orderId.slice(0, 8).toUpperCase()}</span></div>
-        <div className="confirm-row"><span>Referral Code</span><span className="confirm-val">SBSec-{orderId.slice(-10).toUpperCase()}</span></div>
+        <div className="confirm-row"><span>Referral Code</span><span className="confirm-val">{prefix}-{orderId.slice(-10).toUpperCase()}</span></div>
         <div className="confirm-row"><span>Amount Paid</span><span className="confirm-val">{formatZAR(total)}</span></div>
         <div className="confirm-row"><span>Delivery</span><span className="confirm-val">5–7 business days</span></div>
       </div>

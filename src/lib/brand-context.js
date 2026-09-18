@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { auth } from './firebase';
 
 const BrandContext = createContext({
   brand: null,
@@ -134,7 +135,14 @@ export function BrandProvider({ children }) {
     }
 
     try {
-      const res = await fetch(`/api/cream/company/${cid}/branding`, { cache: 'no-store' });
+      // Branding endpoint requires auth — skip fetch if user is not signed in.
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('unauthenticated');
+      const token = await currentUser.getIdToken();
+      const res = await fetch(`/api/cream/company/${cid}/branding`, {
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.branding) {
@@ -148,7 +156,9 @@ export function BrandProvider({ children }) {
         }
       }
     } catch (e) {
-      console.warn('[brand-context] Failed to fetch branding, using fallback:', e);
+      if (e.message !== 'unauthenticated') {
+        console.warn('[brand-context] Failed to fetch branding, using fallback:', e);
+      }
     }
     
     // Fallback to the target company's preset (never force Sovereign for a non-sovereign company!)

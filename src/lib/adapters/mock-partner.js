@@ -86,6 +86,12 @@ export class MockSecurityBrokersAdapter extends PartnerAdapter {
    */
   async verifyClient(clientId, pin) {
     const normalised = clientId.toUpperCase().trim();
+
+    // Enforce namespace isolation — this adapter only serves SB-* accounts.
+    if (!normalised.startsWith('SB-')) {
+      return { valid: false, error: 'Account not found. Please contact Security Brokers.' };
+    }
+
     const client = MOCK_CLIENTS[normalised];
 
     if (!client) {
@@ -155,10 +161,17 @@ export class MockSovereignInterventionAdapter extends PartnerAdapter {
 
   async verifyClient(clientId, pin) {
     const normalised = clientId.toUpperCase().trim();
+
+    // Enforce namespace isolation — this adapter only serves SI-* accounts.
+    if (!normalised.startsWith('SI-')) {
+      return { valid: false, error: 'Account not found. Please contact Sovereign Intervention.' };
+    }
+
     const client = MOCK_CLIENTS[normalised];
 
     if (!client) {
-      if (normalised.startsWith('SI-') && String(pin).trim() === '1234') {
+      // Demo fallback: any unknown SI-* with the default PIN gets a generic VIP profile.
+      if (String(pin).trim() === '1234') {
         return {
           valid: true,
           clientRef: normalised,
@@ -169,7 +182,7 @@ export class MockSovereignInterventionAdapter extends PartnerAdapter {
             {
               hashedImei: hashImei('123456789012345'),
               rawImei: '123456789012345',
-              nickname: "Sovereign Rapid Response Sentinel",
+              nickname: 'Sovereign Rapid Response Sentinel',
               type: 'BLE_TAG',
             },
           ],

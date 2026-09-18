@@ -24,12 +24,14 @@ export async function GET(request) {
       const legacyDemo = ['PSIRA-2024/99182', 'PSIRA-2023/55410', 'PSIRA-1998/00124'].includes(c.registrationNumber);
       const isDemo = c.isDemo === true || legacyDemo;
       const existing = companyMap.get(doc.id);
+      const isArchived = c.isArchived === true || c.status === 'archived' || existing?.isArchived === true;
       companyMap.set(doc.id, {
         ...(existing || {}),
         id: doc.id,
         name: c.name || existing?.name,
         isDemo: existing ? true : isDemo,
-        status: c.status || existing?.status || 'active',
+        status: isArchived ? 'archived' : (c.status || existing?.status || 'active'),
+        isArchived,
         memberCount: c.memberCount || existing?.memberCount || 0,
         deviceCount: c.deviceCount || existing?.deviceCount || 0,
         registrationNumber: c.registrationNumber || existing?.registrationNumber || '',
@@ -50,22 +52,25 @@ export async function GET(request) {
 
 /**
  * POST /api/cream/companies
- * CREAM Master Route: Onboard new security company or toggle status (active / suspended).
+ * CREAM Master Route: Onboard new security company, toggle status, or archive/unarchive.
  */
 export async function POST(request) {
   const accessError = await managementAccessError(request);
   if (accessError) return accessError;
   try {
     const body = await request.json();
-    const { action, companyId, status, newCompany } = body;
+    const { action, companyId, status, isArchived: explicitIsArchived, newCompany } = body;
     const firestore = getAdminFirestore();
 
-    if (action === 'toggle_status') {
-      await firestore.collection('security_companies').doc(companyId).update({
-        status,
+    if (action === 'toggle_status' || action === 'archive_company' || action === 'unarchive_company') {
+      const nextStatus = action === 'archive_company' ? 'archived' : (action === 'unarchive_company' ? 'active' : (status || 'active'));
+      const isArchived = action === 'archive_company' || explicitIsArchived === true || nextStatus === 'archived';
+      await firestore.collection('security_companies').doc(companyId).set({
+        status: nextStatus,
+        isArchived,
         updatedAt: FieldValue.serverTimestamp(),
-      });
-      return NextResponse.json({ success: true, message: `Company status updated to ${status}` });
+      }, { merge: true });
+      return NextResponse.json({ success: true, message: `Company status updated to ${nextStatus}`, status: nextStatus, isArchived });
     }
 
     if (action === 'create_company') {

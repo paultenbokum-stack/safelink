@@ -1,7 +1,7 @@
 import { managementAccessError } from '@/lib/management-auth';
 import { NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase-admin';
-import { DEMO_COMPANIES } from '@/lib/demo-companies';
+import { DEMO_COMPANIES, isDummyCompany } from '@/lib/demo-companies';
 import { FieldValue } from 'firebase-admin/firestore';
 import { saveCompanyBranding } from '@/lib/branding-store';
 
@@ -17,19 +17,24 @@ export async function GET(request) {
     const snap = await firestore.collection('security_companies').get();
 
     const companyMap = new Map();
-    DEMO_COMPANIES.forEach(c => companyMap.set(c.id, { ...c }));
+    DEMO_COMPANIES.forEach(c => {
+      if (!isDummyCompany(c)) companyMap.set(c.id, { ...c });
+    });
 
     snap.docs.forEach(doc => {
       const c = doc.data();
-      const legacyDemo = ['PSIRA-2024/99182', 'PSIRA-2023/55410', 'PSIRA-1998/00124'].includes(c.registrationNumber);
-      const isDemo = c.isDemo === true || legacyDemo;
+      if (isDummyCompany({ id: doc.id, ...c })) {
+        // Asynchronously purge dummy doc from Firestore
+        doc.ref.delete().catch(() => {});
+        return;
+      }
       const existing = companyMap.get(doc.id);
       const isArchived = c.isArchived === true || c.status === 'archived' || existing?.isArchived === true;
       companyMap.set(doc.id, {
         ...(existing || {}),
         id: doc.id,
         name: c.name || existing?.name,
-        isDemo: existing ? true : isDemo,
+        isDemo: false,
         status: isArchived ? 'archived' : (c.status || existing?.status || 'active'),
         isArchived,
         memberCount: c.memberCount || existing?.memberCount || 0,
@@ -43,7 +48,8 @@ export async function GET(request) {
       });
     });
 
-    return NextResponse.json({ companies: Array.from(companyMap.values()) });
+    const companies = Array.from(companyMap.values()).filter(c => !isDummyCompany(c));
+    return NextResponse.json({ companies });
   } catch (err) {
     console.error('[api/cream/companies] Error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

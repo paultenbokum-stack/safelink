@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useManagementFetch } from '@/lib/use-management-fetch';
 import PartnerIntegrations from '@/app/components/PartnerIntegrations';
-import { DEMO_COMPANIES } from '@/lib/demo-companies';
+import { DEMO_COMPANIES, isDummyCompany } from '@/lib/demo-companies';
 import { SA_BANKS } from '@/lib/banks';
 import { formatZAR } from '@/lib/products';
 import { useAuth } from '@/lib/auth-context';
@@ -18,9 +18,9 @@ export default function CreamMasterPage() {
   const managementFetch = useManagementFetch(setManagementError);
   const { user } = useAuth();
   const [metrics, setMetrics] = useState(null);
-  const [companies, setCompanies] = useState(DEMO_COMPANIES);
+  const [companies, setCompanies] = useState(() => DEMO_COMPANIES.filter(c => !isDummyCompany(c)));
   const [loading, setLoading] = useState(true);
-  const [selectedTenant, setSelectedTenant] = useState('demo_coastal');
+  const [selectedTenant, setSelectedTenant] = useState('sovereign_intervention');
   const [archivedCompanyIds, setArchivedCompanyIds] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -118,11 +118,12 @@ export default function CreamMasterPage() {
         const metricsData = await metricsRes.json();
         setMetrics(metricsData);
         if (metricsData.companies?.length) {
-          let list = metricsData.companies;
+          let list = metricsData.companies.filter(c => !isDummyCompany(c));
           if (typeof window !== 'undefined') {
             try {
-              const saved = JSON.parse(localStorage.getItem('safelink_custom_companies') || '[]');
-              if (Array.isArray(saved) && saved.length > 0) {
+              const saved = (JSON.parse(localStorage.getItem('safelink_custom_companies') || '[]') || []).filter(c => !isDummyCompany(c));
+              localStorage.setItem('safelink_custom_companies', JSON.stringify(saved));
+              if (saved.length > 0) {
                 const existingIds = new Set(list.map(c => c.id));
                 const extras = saved.filter(c => !existingIds.has(c.id));
                 list = [...extras, ...list];
@@ -130,10 +131,12 @@ export default function CreamMasterPage() {
             } catch {}
           }
           const companyMap = new Map();
-          DEMO_COMPANIES.forEach(c => companyMap.set(c.id, { ...c }));
+          DEMO_COMPANIES.filter(c => !isDummyCompany(c)).forEach(c => companyMap.set(c.id, { ...c }));
           list.forEach(c => {
-            const existing = companyMap.get(c.id);
-            companyMap.set(c.id, { ...(existing || {}), ...c });
+            if (!isDummyCompany(c)) {
+              const existing = companyMap.get(c.id);
+              companyMap.set(c.id, { ...(existing || {}), ...c });
+            }
           });
           setCompanies(Array.from(companyMap.values()));
         }
@@ -142,11 +145,12 @@ export default function CreamMasterPage() {
         const compRes = await managementFetch('/api/cream/companies').catch(() => null);
         if (compRes && compRes.ok) {
           const compData = await compRes.json();
-          let baseList = compData.companies?.length ? compData.companies : DEMO_COMPANIES;
+          let baseList = (compData.companies?.length ? compData.companies : DEMO_COMPANIES).filter(c => !isDummyCompany(c));
           if (typeof window !== 'undefined') {
             try {
-              const saved = JSON.parse(localStorage.getItem('safelink_custom_companies') || '[]');
-              if (Array.isArray(saved) && saved.length > 0) {
+              const saved = (JSON.parse(localStorage.getItem('safelink_custom_companies') || '[]') || []).filter(c => !isDummyCompany(c));
+              localStorage.setItem('safelink_custom_companies', JSON.stringify(saved));
+              if (saved.length > 0) {
                 const existingIds = new Set(baseList.map(c => c.id));
                 const extras = saved.filter(c => !existingIds.has(c.id));
                 baseList = [...extras, ...baseList];
@@ -154,10 +158,12 @@ export default function CreamMasterPage() {
             } catch {}
           }
           const companyMap = new Map();
-          DEMO_COMPANIES.forEach(c => companyMap.set(c.id, { ...c }));
+          DEMO_COMPANIES.filter(c => !isDummyCompany(c)).forEach(c => companyMap.set(c.id, { ...c }));
           baseList.forEach(c => {
-            const existing = companyMap.get(c.id);
-            companyMap.set(c.id, { ...(existing || {}), ...c });
+            if (!isDummyCompany(c)) {
+              const existing = companyMap.get(c.id);
+              companyMap.set(c.id, { ...(existing || {}), ...c });
+            }
           });
           setCompanies(Array.from(companyMap.values()));
         }

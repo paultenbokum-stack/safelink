@@ -24,17 +24,20 @@ export async function GET(request) {
     const companiesSnap = await db.collection('security_companies').where('status', 'in', ['active', 'suspended', 'pending', 'not_configured']).get();
     const firestoreCompanies = companiesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-    const { DEMO_COMPANIES } = await import('@/lib/demo-companies');
+    const { DEMO_COMPANIES, isDummyCompany } = await import('@/lib/demo-companies');
     const companyMap = new Map();
     DEMO_COMPANIES.forEach(c => {
-      companyMap.set(c.id, {
-        ...c,
-        psiraNumber: c.psiraNumber || c.registrationNumber || '',
-        paystackSubaccountCode: c.id === 'sovereign_intervention' ? 'ACCT_sov99281' : null,
-      });
+      if (!isDummyCompany(c)) {
+        companyMap.set(c.id, {
+          ...c,
+          psiraNumber: c.psiraNumber || c.registrationNumber || '',
+          paystackSubaccountCode: c.id === 'sovereign_intervention' ? 'ACCT_sov99281' : null,
+        });
+      }
     });
 
     firestoreCompanies.forEach(c => {
+      if (isDummyCompany(c)) return;
       if (companyMap.has(c.id)) {
         const existing = companyMap.get(c.id);
         companyMap.set(c.id, {
@@ -52,7 +55,7 @@ export async function GET(request) {
       }
     });
 
-    const companies = Array.from(companyMap.values());
+    const companies = Array.from(companyMap.values()).filter(c => !isDummyCompany(c));
 
     // Aggregate customers
     const householdsSnap = await db.collection('households').get();
